@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.pyc
+env/
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+#secret
+.env
+.env.*
+!.env.example
+*.pem
+credentials*
+
+#Data and result(Actual results are saved on S3)
+data/raw/
+data/cache/
+data/*.csv
+!data/sample_*.csv
+models/
+results/
+*.npz
+*.pth
+
+# Build
+infra/cdk.out/
+infra/node_modules/
+web/node_modules/
+web/dist/
+web/.env.local
+
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
