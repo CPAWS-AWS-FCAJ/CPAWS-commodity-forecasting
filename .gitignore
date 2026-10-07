@@ -17,6 +17,7 @@ credentials*
 #Data and result(Actual results are saved on S3)
 data/raw/
 data/cache/
+data/lake/
 data/*.csv
 !data/sample_*.csv
 models/
