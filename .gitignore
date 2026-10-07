@@ -35,3 +35,7 @@ web/.env.local
 .DS_Store
 .idea/
 .vscode/
+
+#README of each folders
+README.md
+!/README.md
