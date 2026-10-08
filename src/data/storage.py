@@ -1,0 +1,94 @@
+"""Lưu trữ cùng layout cho local (data/lake/) và S3 (s3://cpaws-<env>-lake/).
+
+  raw/<source>/dt=YYYY-MM-DD/<file>                 phản hồi gốc
+  clean/prices/dt=YYYY-MM-DD/prices.parquet         bản chụp toàn bộ lịch sử (dạng dài)
+  clean/prices/dt=YYYY-MM-DD/rejected.parquet       các dòng bị loại kèm flag
+  clean/prices/dt=YYYY-MM-DD/quality.json
+  clean/reference_prices/dt=YYYY-MM-DD/reference.parquet
+  clean/display_factors/dt=YYYY-MM-DD/display_factors.parquet
+Ghi đè theo khóa: chạy lại cùng ngày ghi đè đúng các file đó.
+"""
+
+from __future__ import annotations
+
+import io
+import json
+import re
+from pathlib import Path
+
+import pandas as pd
+
+_DT = re.compile(r"dt=(\d{4}-\d{2}-\d{2})")
+
+
+class LocalStorage:
+    def __init__(self, root: str | Path):
+        self.root = Path(root)
+
+    def write_bytes(self, key: str, data: bytes) -> str:
+        p = self.root / key
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(data)
+        return str(p)
+
+    def read_bytes(self, key: str) -> bytes:
+        return (self.root / key).read_bytes()
+
+    def exists(self, key: str) -> bool:
+        return (self.root / key).exists()
+
+    def list_dirs(self, prefix: str) -> list[str]:
+        p = self.root / prefix
+        return sorted(x.name for x in p.iterdir() if x.is_dir()) if p.exists() else []
+
+
+class S3Storage:
+    """Bucket do stack CpawsData tạo (không tạo bucket ở đây)."""
+
+    def __init__(self, bucket: str, client=None):
+        import boto3
+
+        self.bucket = bucket
+        self.s3 = client or boto3.client("s3")
+
+    def write_bytes(self, key: str, data: bytes) -> str:
+        self.s3.put_object(Bucket=self.bucket, Key=key, Body=data)
+        return f"s3://{self.bucket}/{key}"
+
+    def read_bytes(self, key: str) -> bytes:
+        return self.s3.get_object(Bucket=self.bucket, Key=key)["Body"].read()
+
+    def exists(self, key: str) -> bool:
+        r = self.s3.list_objects_v2(Bucket=self.bucket, Prefix=key, MaxKeys=1)
+        return any(o["Key"] == key for o in r.get("Contents", []))
+
+    def list_dirs(self, prefix: str) -> list[str]:
+        pages = self.s3.get_paginator("list_objects_v2").paginate(
+            Bucket=self.bucket, Prefix=prefix.rstrip("/") + "/", Delimiter="/"
+        )
+        return sorted(
+            cp["Prefix"].rstrip("/").split("/")[-1]
+            for pg in pages
+            for cp in pg.get("CommonPrefixes", [])
+        )
+
+
+def write_parquet(st, key: str, df: pd.DataFrame) -> str:
+    buf = io.BytesIO()
+    df.to_parquet(buf, index=False)
+    return st.write_bytes(key, buf.getvalue())
+
+
+def read_parquet(st, key: str) -> pd.DataFrame:
+    return pd.read_parquet(io.BytesIO(st.read_bytes(key)))
+
+
+def write_json(st, key: str, obj: dict) -> str:
+    return st.write_bytes(key, json.dumps(obj, indent=2, ensure_ascii=False, default=str).encode())
+
+
+def latest_dt(st, prefix: str, on_or_before: str | None = None) -> str | None:
+    dts = [m.group(1) for d in st.list_dirs(prefix) if (m := _DT.fullmatch(d))]
+    if on_or_before:
+        dts = [d for d in dts if d <= on_or_before]
+    return max(dts) if dts else None
