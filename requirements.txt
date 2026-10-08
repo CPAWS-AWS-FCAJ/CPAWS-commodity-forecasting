@@ -13,3 +13,8 @@ python-dotenv>=1.0
 pytest>=8.0
 ruff>=0.6
 pre-commit>=3.7
+
+# Data pipeline giá (ADR-0005)
+yfinance==1.7.0
+pyarrow==25.0.1
+pandas_market_calendars==5.5.0
