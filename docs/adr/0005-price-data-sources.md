@@ -55,14 +55,16 @@ Hệ quả:
 | Brent | **BZ=F** qua yfinance | Return ngày so với CL=F (cùng giờ chốt), đánh dấu phần dư > 8%; RBRTE chỉ so mức giá (chênh lệch trung vị theo năm) |
 | USD/VND | **VND=X** qua yfinance | — |
 
-Không có nguồn dự phòng. Nếu yfinance lỗi, pipeline ghi lỗi vào `fetch_log`, giữ dữ liệu cũ và chạy tiếp với các tài sản khác. Lớp adapter (`src/data/sources/`) cho phép thay nguồn mà không phải sửa phần clean và quality.
+Không có nguồn dự phòng. Nếu nguồn của một tài sản chính (vàng, bạc, WTI, Brent, USD/VND) lỗi hoặc trả rỗng, pipeline vẫn tải các tài sản còn lại để ghi log đủ, nhưng **không ghi bản clean mới** (bản clean trước vẫn là bản mới nhất), ghi `logs/ingest/dt=.../fetch_log.json`, log dòng `ERROR INGEST_SOURCE_FAILED` và thoát mã 1 để Lambda kích CloudWatch alarm. Nguồn tham chiếu (EIA, GC=F, SI=F, NBP) lỗi chỉ log `WARNING INGEST_REFERENCE_FAILED`, pipeline vẫn ghi clean với bản tham chiếu cũ (cập nhật 09/10/2026). Lớp adapter (`src/data/sources/`) cho phép thay nguồn mà không phải sửa phần clean và quality.
 
 Các quy tắc đi kèm:
 - **GC=F và SI=F không dùng làm nguồn.** Chúng chỉ dùng để tính hệ số hiển thị: giá vàng USD/oz = GLD × trung vị 20 phiên gần nhất của (GC=F/GLD). Bạc tính tương tự với SI=F/SLV nhưng gắn nhãn `reliability=low`. Hệ số này **không đưa vào train**.
 - **EIA chỉ dùng qua API v2**, bỏ đường XLS. Dòng rơi vào ngày nghỉ của thị trường gắn `flag=suspect_holiday_row`. Lỗi đã biết của EIA (RWTC 25/09 và 28/09/2026) gắn `known_source_error` và bị loại khỏi đối chiếu.
 - **VND=X:**
   - Loại các dòng ngoài khoảng 20.000–30.000 với `flag=bad_value`, không sửa bằng giá Open.
-  - Loại spike một ngày với `flag=bad_value|spike`: giá vọt quá 2% rồi quay về gần mức cũ ngay phiên sau. Lần chạy 08/10/2026 loại 10 ngày.
+  - Loại spike với `flag=bad_value|spike`: giá vọt quá 2% so với phiên được giữ gần nhất, rồi trong tối đa 3 phiên (`SPIKE_MAX_SESSIONS`) quay về trong ±1% quanh mức cũ → loại cả đoạn. Ngày trong `KNOWN_EVENTS` không bị xét. Spike tính lại trên toàn bộ lịch sử mỗi lần chạy. Lần chạy 08/10/2026 (quy tắc một phiên) loại 10 ngày; lần chạy 09/10/2026 (quy tắc theo đoạn) loại 12 ngày, thêm đoạn 03/04 và 06/04/2015.
+  - USD/VND chỉ dùng hiển thị, không làm đặc trưng.
+  - **Tỷ giá hiển thị** (`clean/display_fx/`): nếu trong 3 phiên gần nhất có cú vọt > 2% mà quy tắc spike chưa xét xong, hiển thị giá phiên trước cú vọt với `flag=pending_confirm`; các lần chạy sau hoặc loại đoạn đó (spike) hoặc, sau 3 phiên không quay về, hiển thị giá mới. `prices.parquet` không bị ảnh hưởng.
   - Giá đứng chỉ đánh dấu (`stale`), không loại.
 - **Ngưỡng `jump` theo tài sản (chỉ đánh dấu):** vàng 8%, bạc 10%, dầu 15%, USD/VND 2%. Các ngày có biến động thật đã kiểm chứng nằm trong `config.KNOWN_EVENTS` và không bị đánh dấu.
 - **Lịch phiên** (`pandas_market_calendars`):
