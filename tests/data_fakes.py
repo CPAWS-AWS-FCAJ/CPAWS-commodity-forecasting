@@ -69,10 +69,13 @@ class FakeYF:
         end: str = "2020-05-29",
         fail: set[str] | None = None,
         spikes: dict[str, str] | None = None,
+        empty: set[str] | None = None,
     ):
         self.end = end
         self.fail = fail or set()
-        self.spikes = spikes or {}  # {symbol: ngày}: nhân Close ngày đó lên 5% (spike một ngày)
+        self.empty = empty or set()  # mã trả về bảng rỗng (yfinance khi bị chặn hoặc đổi mã)
+        # {symbol: ngày hoặc list ngày}: nhân Close các ngày đó lên 5% (spike một hay nhiều phiên)
+        self.spikes = spikes or {}
         self.calls: list[tuple[str, str]] = []
 
     def __call__(self, symbol, start, end=None):
@@ -80,8 +83,12 @@ class FakeYF:
         if symbol in self.fail:
             raise ConnectionError("blocked")
         df = synthetic_bars(symbol, "2020-03-02", self.end)
+        if symbol in self.empty:
+            return df.iloc[0:0]
         if symbol in self.spikes:
-            df.loc[df.index.tz_localize(None) == pd.Timestamp(self.spikes[symbol]), "Close"] *= 1.05
+            days = self.spikes[symbol]
+            days = [days] if isinstance(days, str) else days
+            df.loc[df.index.tz_localize(None).isin(pd.DatetimeIndex(days)), "Close"] *= 1.05
         return df[df.index.tz_localize(None) >= pd.Timestamp(start)]
 
 

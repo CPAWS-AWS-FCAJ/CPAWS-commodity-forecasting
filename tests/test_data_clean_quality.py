@@ -174,6 +174,71 @@ def test_spike_mask_needs_revert_and_rejects_only_flagged_assets():
     assert len(kept) == len(prices) - 1
 
 
+def test_spike_segment_up_to_three_sessions():
+    d = pd.bdate_range("2019-03-04", periods=8)
+    base = 23200
+    up = 23800  # +2,55%
+    # vọt 2 phiên rồi quay về → loại cả 2 phiên
+    s2 = pd.Series([base, base, up, up + 10, base + 20, base, base, base], index=d)
+    assert quality.spike_mask(s2, 0.02).tolist() == [0, 0, 1, 1, 0, 0, 0, 0]
+    # vọt 3 phiên rồi quay về → loại cả 3
+    s3 = pd.Series([base, base, up, up, up, base, base, base], index=d)
+    assert quality.spike_mask(s3, 0.02).sum() == 3
+    # vọt 4 phiên rồi mới quay về → quá SPIKE_MAX_SESSIONS, không loại
+    s4 = pd.Series([base, base, up, up, up, up, base, base], index=d)
+    assert not quality.spike_mask(s4, 0.02).any()
+    # chỉ quay về một phần (vẫn lệch >= 1% so với mức cũ) suốt 3 phiên → không loại
+    part = base * 1.012
+    s5 = pd.Series([base, base, up, part, part, part, part, part], index=d)
+    assert not quality.spike_mask(s5, 0.02).any()
+
+
+def test_spike_mask_on_past_does_not_change_when_future_beyond_window_is_appended():
+    d = pd.bdate_range("2019-03-04", periods=12)
+    p = [23200, 23200, 23800, 23800, 23210, 23200, 23200, 23200, 23200, 23200, 23900, 23900]
+    full = quality.spike_mask(pd.Series(p, index=d), 0.02)
+    part = quality.spike_mask(pd.Series(p[:8], index=d[:8]), 0.02)
+    assert full[:8].tolist() == part.tolist()
+
+
+def test_spike_exempts_known_events():
+    d = pd.DatetimeIndex(["2015-08-11", "2015-08-12", "2015-08-13", "2015-08-14"])
+    s = pd.Series([21700, 22300, 21720, 21710], index=d)  # giả: 12/8/2015 nằm trong KNOWN_EVENTS
+    assert quality.spike_mask(s, 0.02).any()
+    assert not quality.spike_mask(s, 0.02, exempt=quality._known("usd_vnd")).any()
+
+
+def test_restore_spikes_moves_spike_rows_back_only():
+    d = pd.bdate_range("2019-03-04", periods=3)
+    prices = _long("usd_vnd", d[:2], [23200, 23210])
+    rej = _long("usd_vnd", d[2:], [23900])
+    rej["flag"] = "bad_value|spike"
+    other = rej.assign(price=3210.0, flag="bad_value")
+    p, r = quality.restore_spikes(prices, pd.concat([rej, other], ignore_index=True))
+    assert len(p) == 3 and p["flag"].eq("").all()
+    assert list(r["flag"]) == ["bad_value"]
+
+
+def test_display_fx_pending_then_confirmed():
+    d = pd.bdate_range("2019-03-04", periods=8)
+    p = [23200, 23210, 23205, 23215, 23800]  # phiên mới nhất vọt 2,5%
+    fx = quality.display_fx(_long("usd_vnd", d[:5], p)).iloc[0]
+    assert fx["flag"] == "pending_confirm" and fx["rate"] == 23215
+    assert fx["rate_date"] == d[3] and fx["pending_date"] == d[4] and fx["as_of_date"] == d[4]
+    # 2 phiên sau vẫn ở mức mới: chưa đủ SPIKE_MAX_SESSIONS → vẫn chờ
+    fx = quality.display_fx(_long("usd_vnd", d[:7], p + [23810, 23805])).iloc[0]
+    assert fx["flag"] == "pending_confirm" and fx["rate"] == 23215
+    # 3 phiên sau không quay về → coi là thay đổi thật
+    fx = quality.display_fx(_long("usd_vnd", d, p + [23810, 23805, 23800])).iloc[0]
+    assert fx["flag"] == "" and fx["rate"] == 23800 and pd.isna(fx["pending_date"])
+
+
+def test_display_fx_normal_day_uses_latest():
+    d = pd.bdate_range("2019-03-04", periods=4)
+    fx = quality.display_fx(_long("usd_vnd", d, [23200, 23210, 23205, 23215])).iloc[0]
+    assert fx["flag"] == "" and fx["rate"] == 23215 and fx["rate_date"] == d[-1]
+
+
 def test_jump_flag_respects_known_events():
     d = ["2013-04-11", "2013-04-12", "2013-04-15", "2013-04-16", "2013-04-17"]
     prices = _long("gold", d, [150, 149, 135, 136, 120], "yfinance")
