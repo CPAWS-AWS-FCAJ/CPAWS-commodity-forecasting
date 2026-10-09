@@ -13,6 +13,7 @@ python-dotenv>=1.0
 pytest>=8.0
 ruff>=0.6
 pre-commit>=3.7
+matplotlib>=3.8          # scripts/eda_prices.py, hình cho báo cáo và slide
 
 # Data pipeline giá (ADR-0005)
 yfinance==1.7.0
