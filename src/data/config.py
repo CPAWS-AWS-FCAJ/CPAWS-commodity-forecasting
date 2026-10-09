@@ -29,7 +29,8 @@ class AssetSpec:
     valid_range: tuple[float, float] | None = None
     jump_threshold: float = 0.15  # |log return 1 ngày| vượt ngưỡng → flag "jump" (chỉ đánh dấu)
     roll_rule: str | None = None  # "CL" | "BZ" cho hợp đồng tương lai
-    # Loại spike một ngày (vọt > ngưỡng jump rồi quay về ngay phiên sau), flag "bad_value|spike"
+    # Loại spike (vọt > ngưỡng jump rồi quay về gần mức cũ trong <= SPIKE_MAX_SESSIONS phiên),
+    # cả đoạn gắn flag "bad_value|spike"
     reject_spikes: bool = False
     extra: dict = field(default_factory=dict)
 
@@ -89,6 +90,9 @@ PUBLISHED_AT_RULES: dict[str, tuple[int, int]] = {
 XCHECK_WTI_LEVEL = 0.03  # |CL=F / RWTC - 1| > 3% → "xcheck_level" trên wti
 XCHECK_BRENT_RESID = 0.08  # |r(BZ=F) - r(CL=F)| > 8% → "xcheck_resid" trên brent
 STALE_RUN = 3  # giá y hệt ≥ 3 phiên liên tiếp → "stale" (chỉ đánh dấu)
+# Spike: sau phiên vọt, giá phải quay về trong ±ngưỡng/2 quanh giá trước khi vọt trong tối đa
+# SPIKE_MAX_SESSIONS phiên. Cũng là số phiên lớp hiển thị tỷ giá giữ "pending_confirm".
+SPIKE_MAX_SESSIONS = 3
 DISPLAY_FACTOR_WINDOW = 20  # giá vàng USD/oz = GLD × trung vị 20 phiên (GC=F / GLD), chỉ hiển thị
 NBP_FIRST_DATE = "2013-01-02"
 NBP_MONTHLY_TOL = 0.01

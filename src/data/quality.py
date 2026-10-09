@@ -6,6 +6,9 @@ Cờ theo chuỗi (chỉ đánh dấu, tính lại trên toàn bộ lịch sử 
   roll         phiên đầu tiên sau ngày đáo hạn hợp đồng (CL, BZ); không dùng chuỗi back-adjusted
   xcheck_level wti: |CL=F / RWTC - 1| > 3%
   xcheck_resid brent: |r(BZ=F) - r(CL=F)| > 8% (cùng giờ chốt 14:30 ET)
+Loại spike (tài sản có reject_spikes, hiện chỉ USD/VND): vọt > ngưỡng rồi quay về gần mức cũ trong
+tối đa SPIKE_MAX_SESSIONS phiên → cả đoạn sang rejected với "bad_value|spike". display_fx giữ tỷ giá
+hiển thị ở phiên trước cú vọt chưa xét xong ("pending_confirm"), không sửa prices.
 RBRTE chỉ đối chiếu mức giá (chênh lệch trung vị theo năm). NBP chỉ đối chiếu mức giá và trung bình
 tháng của vàng (chốt giá trưa Warsaw nên không so return ngày).
 """
@@ -22,6 +25,7 @@ from .config import (
     DISPLAY_FACTOR_WINDOW,
     KNOWN_EVENTS,
     NBP_MONTHLY_TOL,
+    SPIKE_MAX_SESSIONS,
     STALE_RUN,
     XCHECK_BRENT_RESID,
     XCHECK_WTI_LEVEL,
@@ -39,6 +43,10 @@ def _series(df: pd.DataFrame, asset: str, exclude: set[str] | None = None) -> pd
     return pd.Series(d["price"].to_numpy(), index=pd.DatetimeIndex(d["date"])).sort_index()
 
 
+def _known(asset: str) -> frozenset:
+    return frozenset(pd.Timestamp(x) for x in KNOWN_EVENTS.get(asset, set()))
+
+
 def _logret(s: pd.Series) -> pd.Series:
     s = s[s > 0]
     return np.log(s).diff().dropna()
@@ -52,18 +60,61 @@ def stale_mask(s: pd.Series, run: int = STALE_RUN) -> pd.Series:
     return count >= run
 
 
-def spike_mask(s: pd.Series, threshold: float) -> pd.Series:
-    """Spike một ngày: |r[t]| > ngưỡng, |r[t+1]| > ngưỡng, ngược dấu, và giá t+1 quay về gần giá t-1
-    (|ln(P[t+1]/P[t-1])| < ngưỡng/2). Cần phiên t+1 nên phiên mới nhất chưa xét được; mỗi lần chạy
-    tải lại 5 phiên gần nhất nên spike ở phiên cuối sẽ bị loại ở lần chạy sau. Đây là làm sạch dữ
-    liệu nguồn, không phải đặc trưng."""
+def _jump_starts(s: pd.Series, threshold: float, exempt=frozenset()) -> np.ndarray:
+    """Vị trí i (>= 1) có |ln(P[i]/P[i-1])| > ngưỡng, trừ ngày trong exempt."""
+    lp = np.log(s.to_numpy(dtype=float))
+    big = np.abs(np.diff(lp)) > threshold
+    idx = np.where(big)[0] + 1
+    return np.array([i for i in idx if pd.Timestamp(s.index[i]) not in exempt], dtype=int)
+
+
+def spike_mask(
+    s: pd.Series,
+    threshold: float,
+    max_sessions: int = SPIKE_MAX_SESSIONS,
+    exempt=frozenset(),
+) -> pd.Series:
+    """Spike theo đoạn: phiên t vọt |ln(P[t]/P[t-1])| > ngưỡng, rồi trong tối đa max_sessions phiên
+    sau đó có phiên t+k quay về gần giá cũ (|ln(P[t+k]/P[t-1])| < ngưỡng/2) → loại cả đoạn t..t+k-1.
+    Cần tới max_sessions phiên sau t nên các phiên cuối chưa xét xong (lớp hiển thị giữ
+    "pending_confirm", xem display_fx); mỗi lần chạy tính lại trên toàn bộ lịch sử. Đây là làm sạch
+    lỗi nguồn (dùng phiên sau t), không phải đặc trưng; USD/VND không vào mô hình."""
     s = s[s > 0]
-    lp = np.log(s)
-    r = lp.diff()
-    r_next = r.shift(-1)
-    back = (lp.shift(-1) - lp.shift(1)).abs()
-    m = (r.abs() > threshold) & (r_next.abs() > threshold) & (np.sign(r) != np.sign(r_next))
-    return (m & (back < threshold / 2)).fillna(False)
+    lp = np.log(s.to_numpy(dtype=float))
+    n = len(lp)
+    mask = np.zeros(n, dtype=bool)
+    last, i = 0, 1  # last: phiên được giữ gần nhất (mốc "mức cũ")
+    while i < n:
+        if abs(lp[i] - lp[last]) > threshold and pd.Timestamp(s.index[i]) not in exempt:
+            back = next(
+                (
+                    j
+                    for j in range(i + 1, min(i + max_sessions, n - 1) + 1)
+                    if abs(lp[j] - lp[last]) < threshold / 2
+                ),
+                None,
+            )
+            if back is not None:
+                mask[i:back] = True
+                i = back  # phiên quay về được so lại với cùng mốc, không bị coi là cú vọt mới
+                continue
+        last, i = i, i + 1
+    return pd.Series(mask, index=s.index)
+
+
+def restore_spikes(
+    prices: pd.DataFrame, rejected: pd.DataFrame
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Đưa các dòng spike đã loại ở lần chạy trước về prices để tính lại spike trên toàn bộ lịch sử
+    (kết quả chỉ phụ thuộc dữ liệu, không phụ thuộc thứ tự các lần chạy)."""
+    if rejected.empty:
+        return prices, rejected
+    is_spike = rejected["flag"].map(lambda f: "spike" in split_flags(f)).astype(bool)
+    back = rejected.loc[is_spike].copy()
+    back["flag"] = [join_flags(split_flags(f) & ROW_FLAGS) for f in back["flag"]]
+    prices = pd.concat([prices, back], ignore_index=True)
+    prices = prices.sort_values(["date", "asset"], kind="stable").reset_index(drop=True)
+    return prices, rejected.loc[~is_spike].reset_index(drop=True)
 
 
 def reject_spikes(prices: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -75,8 +126,9 @@ def reject_spikes(prices: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
         d = prices[prices["asset"] == asset].sort_values("date")
         if len(d) < 3:
             continue
-        s = pd.Series(d["price"].to_numpy(), index=d.index)
-        m = spike_mask(s, spec.jump_threshold).reindex(d.index, fill_value=False)
+        s = pd.Series(d["price"].to_numpy(), index=pd.DatetimeIndex(d["date"]))
+        m = spike_mask(s, spec.jump_threshold, exempt=_known(asset))
+        m = pd.Series(m.reindex(s.index, fill_value=False).to_numpy(), index=d.index)
         drop.loc[m[m].index] = True
     spikes = prices.loc[drop].copy()
     spikes["flag"] = [
@@ -167,6 +219,55 @@ def display_factors(prices: pd.DataFrame, refs: pd.DataFrame) -> pd.DataFrame:
     if not rows:
         return pd.DataFrame(columns=["date", "asset", "factor", "reference", "reliability", "unit"])
     return pd.concat(rows, ignore_index=True)
+
+
+DISPLAY_FX_COLUMNS = [
+    "asset",
+    "as_of_date",
+    "rate_date",
+    "rate",
+    "unit",
+    "published_at",
+    "flag",
+    "pending_date",
+    "pending_rate",
+]
+
+
+def display_fx(prices: pd.DataFrame, asset: str = "usd_vnd") -> pd.DataFrame:
+    """Tỷ giá dùng cho hiển thị (một dòng); không sửa prices.parquet.
+
+    Nếu trong SPIKE_MAX_SESSIONS phiên gần nhất có phiên vọt > ngưỡng jump mà quy tắc spike chưa
+    xét xong (chưa đủ phiên sau đó để biết giá có quay về không) → hiển thị giá phiên trước cú vọt,
+    flag "pending_confirm". Lần chạy sau: nếu là spike thì dòng đó bị loại khỏi prices; nếu đã qua
+    SPIKE_MAX_SESSIONS phiên mà không quay về thì coi là thay đổi thật và hiển thị giá mới nhất."""
+    spec = ASSETS[asset]
+    d = prices[prices["asset"] == asset].sort_values("date")
+    d = d[d["price"] > 0]
+    if d.empty:
+        return pd.DataFrame(columns=DISPLAY_FX_COLUMNS)
+    s = pd.Series(d["price"].to_numpy(), index=pd.DatetimeIndex(d["date"]))
+    n = len(s)
+    starts = _jump_starts(s, spec.jump_threshold, _known(asset)) if n > 1 else np.array([], int)
+    undecided = [i for i in starts if n - 1 - i < SPIKE_MAX_SESSIONS]
+    use = undecided[0] - 1 if undecided else n - 1
+    row = d.iloc[use]
+    return pd.DataFrame(
+        [
+            {
+                "asset": asset,
+                "as_of_date": s.index[-1],
+                "rate_date": s.index[use],
+                "rate": float(s.iloc[use]),
+                "unit": spec.unit,
+                "published_at": row["published_at"],
+                "flag": "pending_confirm" if undecided else "",
+                "pending_date": s.index[undecided[0]] if undecided else pd.NaT,
+                "pending_rate": float(s.iloc[undecided[0]]) if undecided else float("nan"),
+            }
+        ],
+        columns=DISPLAY_FX_COLUMNS,
+    )
 
 
 # ---------- báo cáo ----------
@@ -334,6 +435,7 @@ def build_report(
     refs: pd.DataFrame,
     factors: pd.DataFrame,
     nbp: pd.Series | None,
+    fx: pd.DataFrame | None = None,
 ) -> dict:
     ref_rep = {}
     for ref in sorted(refs["asset"].unique()):
@@ -361,4 +463,19 @@ def build_report(
         "nbp": nbp_report(prices, factors, nbp),
         "references": ref_rep,
         "display_factors_latest": latest_factor,
+        "display_fx": (
+            {
+                k: (
+                    None
+                    if not isinstance(v, str) and pd.isna(v)
+                    else str(pd.Timestamp(v).date())
+                    if k.endswith("_date")
+                    else v
+                )
+                for k, v in fx.iloc[0].items()
+                if k != "published_at"
+            }
+            if fx is not None and len(fx)
+            else {}
+        ),
     }

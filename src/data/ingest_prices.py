@@ -4,12 +4,19 @@ Chạy:
   python -m src.data.ingest_prices --start 2012-01-01 --dest local   # tải toàn bộ lịch sử
   python -m src.data.ingest_prices --dest local                     # tăng dần: tải lại 5 phiên gần nhất
 Key: EIA_API_KEY (.env khi chạy local; Lambda đọc từ nơi lưu secret). yfinance không cần key.
-Lỗi một nguồn không dừng cả pipeline: ghi vào fetch_log trong quality.json và chạy tiếp.
+
+Xử lý lỗi nguồn:
+- Nguồn của tài sản chính (ASSETS) lỗi hoặc trả rỗng: vẫn tải hết các tài sản để log đủ, nhưng
+  KHÔNG ghi clean/ (bản clean trước giữ nguyên), ghi logs/ingest/dt=.../fetch_log.json, log dòng
+  ERROR có mã INGEST_SOURCE_FAILED (cho CloudWatch metric filter) và thoát mã 1.
+- Nguồn tham chiếu (EIA, GC=F, SI=F, NBP) lỗi: log WARNING INGEST_REFERENCE_FAILED, vẫn ghi clean
+  (giữ bản tham chiếu cũ), thoát mã 0.
 """
 
 from __future__ import annotations
 
 import argparse
+import logging
 import os
 from dataclasses import dataclass, field
 
@@ -23,6 +30,10 @@ from .sources import FetchResult, SourceError
 PRICES = "clean/prices"
 REFS = "clean/reference_prices"
 FACTORS = "clean/display_factors"
+DISPLAY_FX = "clean/display_fx"
+LOGS = "logs/ingest"
+
+log_ = logging.getLogger("cpaws.ingest")
 
 
 @dataclass
@@ -34,19 +45,50 @@ class RunResult:
     factors: pd.DataFrame
     report: dict
     written: list[str] = field(default_factory=list)
+    ok: bool = True
+    fx: pd.DataFrame | None = None
 
 
-def _fetch(sources: dict, spec: AssetSpec, start: str, log: list) -> FetchResult | None:
-    """Tải từ nguồn của tài sản; lỗi được ghi vào log và trả về None (không dừng pipeline)."""
+def _fail(log: list, spec: AssetSpec, status: str, error: str, primary: bool) -> None:
+    ref = spec.primary
+    entry = {"asset": spec.asset, "source": ref.source, "symbol": ref.symbol, "status": status}
+    if error:
+        entry["error"] = error
+    log.append(entry)
+    code, level = (
+        ("INGEST_SOURCE_FAILED", logging.ERROR)
+        if primary
+        else ("INGEST_REFERENCE_FAILED", logging.WARNING)
+    )
+    log_.log(
+        level,
+        "%s asset=%s source=%s symbol=%s status=%s error=%s",
+        code,
+        spec.asset,
+        ref.source,
+        ref.symbol,
+        status,
+        error,
+    )
+
+
+def _fetch(
+    sources: dict, spec: AssetSpec, start: str, log: list, primary: bool
+) -> FetchResult | None:
+    """Tải từ nguồn của tài sản; lỗi hoặc rỗng được ghi vào log và trả về None."""
     ref = spec.primary
     src = sources.get(ref.source)
     if src is None:
-        log.append({"asset": spec.asset, "source": ref.source, "status": "source_unavailable"})
+        _fail(log, spec, "source_unavailable", "", primary)
         return None
     try:
         res = src.fetch(ref.symbol, start)
-    except SourceError as e:
-        log.append({"asset": spec.asset, "source": ref.source, "status": "error", "error": str(e)})
+    except Exception as e:  # noqa: BLE001 - mọi lỗi adapter phải vào log, không hỏng bản clean
+        msg = str(e) if isinstance(e, SourceError) else f"{type(e).__name__}: {e}"
+        _fail(log, spec, "error", msg, primary)
+        return None
+    if res.bars is None or res.bars.empty:
+        _fail(log, spec, "empty", "no bars returned", primary)
         return None
     log.append(
         {
@@ -63,12 +105,12 @@ def _fetch(sources: dict, spec: AssetSpec, start: str, log: list) -> FetchResult
 
 def _load_prev(st, run_dt: str) -> dict[str, pd.DataFrame | None]:
     out: dict[str, pd.DataFrame | None] = {"prices": None, "rejected": None, "references": None}
-    dt = storage.latest_dt(st, PRICES, run_dt)
+    dt = storage.latest_dt(st, PRICES, run_dt, must_have="prices.parquet")
     if dt:
         out["prices"] = storage.read_parquet(st, f"{PRICES}/dt={dt}/prices.parquet")
         if st.exists(f"{PRICES}/dt={dt}/rejected.parquet"):
             out["rejected"] = storage.read_parquet(st, f"{PRICES}/dt={dt}/rejected.parquet")
-    rdt = storage.latest_dt(st, REFS, run_dt)
+    rdt = storage.latest_dt(st, REFS, run_dt, must_have="reference.parquet")
     if rdt:
         out["references"] = storage.read_parquet(st, f"{REFS}/dt={rdt}/reference.parquet")
     return out
@@ -85,17 +127,18 @@ def _incremental_start(prev: pd.DataFrame | None) -> str:
     return str(pd.Timestamp(min(starts)).date())
 
 
-def _collect(specs: dict[str, AssetSpec], sources, start, now, st, run_dt, log, written):
-    acc, rej = [], []
+def _collect(specs: dict[str, AssetSpec], sources, start, now, st, run_dt, log, written, primary):
+    acc, rej, failed = [], [], []
     for spec in specs.values():
-        res = _fetch(sources, spec, start, log)
+        res = _fetch(sources, spec, start, log, primary)
         if res is None:
+            failed.append(spec.asset)
             continue
         written.append(st.write_bytes(f"raw/{res.source}/dt={run_dt}/{res.raw_name}", res.raw))
         a, r = clean.bars_to_long(res.bars, spec, res.source, now)
         acc.append(a)
         rej.append(r)
-    return acc, rej
+    return acc, rej, failed
 
 
 def _concat(frames: list[pd.DataFrame]) -> pd.DataFrame:
@@ -122,22 +165,37 @@ def run(
     log: list[dict] = []
     written: list[str] = []
 
-    acc, rej = _collect(ASSETS, sources, start, now, st, run_dt, log, written)
+    acc, rej, failed = _collect(ASSETS, sources, start, now, st, run_dt, log, written, True)
+    if failed:
+        # Không ghi clean/: bản clean trước vẫn là bản mới nhất cho các bước sau
+        report = {
+            "status": "failed",
+            "failed_assets": failed,
+            "run": {"run_at_utc": now.isoformat(timespec="seconds"), "start": start},
+            "fetch_log": log,
+        }
+        written.append(storage.write_json(st, f"{LOGS}/dt={run_dt}/fetch_log.json", report))
+        log_.error("INGEST_ABORTED clean snapshot not written; failed_assets=%s", ",".join(failed))
+        empty = clean.empty_frame()
+        return RunResult(run_dt, empty, empty, empty, pd.DataFrame(), report, written, ok=False)
+
     new_acc, new_rej = _concat(acc), _concat(rej)
     keys = pd.concat([new_acc[clean.KEY], new_rej[clean.KEY]], ignore_index=True)
     prices = clean.merge_snapshot(prev["prices"], new_acc, keys)
     rejected = clean.merge_snapshot(prev["rejected"], new_rej, keys)
-    # Spike một ngày (VND=X): chuyển sang rejected, tính lại trên toàn bộ lịch sử mỗi lần chạy
+    # Spike (VND=X): đưa spike cũ về rồi tính lại trên toàn bộ lịch sử mỗi lần chạy
+    prices, rejected = quality.restore_spikes(prices, rejected)
     prices, spikes = quality.reject_spikes(prices)
     rejected = clean.merge_snapshot(rejected, spikes, spikes[clean.KEY])
 
-    racc, rrej = _collect(REFERENCES, sources, start, now, st, run_dt, log, written)
+    racc, rrej, _ = _collect(REFERENCES, sources, start, now, st, run_dt, log, written, False)
     new_ref = _concat(racc)
     ref_keys = pd.concat([new_ref[clean.KEY], _concat(rrej)[clean.KEY]], ignore_index=True)
     refs = clean.merge_snapshot(prev["references"], new_ref, ref_keys)
 
     prices = quality.apply_series_flags(prices, refs)
     factors = quality.display_factors(prices, refs)
+    fx = quality.display_fx(prices)
 
     nbp = None
     if nbp_source is not None:
@@ -157,8 +215,10 @@ def run(
         except (SourceError, requests.RequestException, ValueError, KeyError) as e:
             # nguồn đối chiếu lỗi không dừng pipeline
             log.append({"asset": "nbp_gold", "source": "nbp", "status": "error", "error": str(e)})
+            log_.warning("INGEST_REFERENCE_FAILED asset=nbp_gold source=nbp error=%s", e)
 
-    report = quality.build_report(prices, rejected, refs, factors, nbp)
+    report = quality.build_report(prices, rejected, refs, factors, nbp, fx)
+    report["status"] = "ok"
     report["run"] = {
         "run_at_utc": now.isoformat(timespec="seconds"),
         "start": start,
@@ -171,9 +231,10 @@ def run(
         storage.write_parquet(st, f"{PRICES}/{base}/rejected.parquet", rejected),
         storage.write_parquet(st, f"{REFS}/{base}/reference.parquet", refs),
         storage.write_parquet(st, f"{FACTORS}/{base}/display_factors.parquet", factors),
+        storage.write_parquet(st, f"{DISPLAY_FX}/{base}/display_fx.parquet", fx),
         storage.write_json(st, f"{PRICES}/{base}/quality.json", report),
     ]
-    return RunResult(run_dt, prices, rejected, refs, factors, report, written)
+    return RunResult(run_dt, prices, rejected, refs, factors, report, written, fx=fx)
 
 
 def build_sources() -> tuple[dict, object]:
@@ -189,6 +250,8 @@ def build_sources() -> tuple[dict, object]:
 
 
 def summarize(report: dict) -> str:
+    if report.get("status") == "failed":
+        return f"FAILED: {report['failed_assets']}\nfetch_log: {report['fetch_log']}"
     lines = ["asset     rows   first       last        flags / rejected"]
     for a, r in report["assets"].items():
         lines.append(
@@ -198,10 +261,17 @@ def summarize(report: dict) -> str:
     errors = [x for x in report["run"]["fetch_log"] if x["status"] != "ok"]
     if errors:
         lines.append(f"fetch problems: {errors}")
+    fx = report.get("display_fx") or {}
+    if fx:
+        lines.append(
+            f"display_fx: {fx['rate']:.0f} ({fx['rate_date']}) flag={fx['flag'] or '-'}"
+            + (f" pending {fx['pending_rate']:.0f} ({fx['pending_date']})" if fx["flag"] else "")
+        )
     return "\n".join(lines)
 
 
-def main(argv: list[str] | None = None) -> None:
+def main(argv: list[str] | None = None) -> int:
+    """Trả về mã thoát: 0 = đã ghi clean, 1 = nguồn chính lỗi, không ghi clean."""
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--start", default=None, help="YYYY-MM-DD; bỏ trống = tải lại 5 phiên gần nhất")
     ap.add_argument("--dest", choices=["local", "s3"], default="local")
@@ -211,6 +281,7 @@ def main(argv: list[str] | None = None) -> None:
 
     from dotenv import load_dotenv
 
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     load_dotenv()
     from .config import lake_bucket
 
@@ -222,8 +293,9 @@ def main(argv: list[str] | None = None) -> None:
     sources, nbp = build_sources()
     res = run(st, sources, start=args.start, nbp_source=None if args.no_nbp else nbp)
     print(summarize(res.report))
-    print(f"\nwritten {len(res.written)} files; quality: {res.written[-1]}")
+    print(f"\nwritten {len(res.written)} files; last: {res.written[-1] if res.written else '-'}")
+    return 0 if res.ok else 1
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

@@ -6,6 +6,8 @@
   clean/prices/dt=YYYY-MM-DD/quality.json
   clean/reference_prices/dt=YYYY-MM-DD/reference.parquet
   clean/display_factors/dt=YYYY-MM-DD/display_factors.parquet
+  clean/display_fx/dt=YYYY-MM-DD/display_fx.parquet  tỷ giá cho hiển thị (có thể pending_confirm)
+  logs/ingest/dt=YYYY-MM-DD/fetch_log.json           chỉ khi nguồn chính lỗi (không ghi clean/)
 Ghi đè theo khóa: chạy lại cùng ngày ghi đè đúng các file đó.
 """
 
@@ -87,8 +89,17 @@ def write_json(st, key: str, obj: dict) -> str:
     return st.write_bytes(key, json.dumps(obj, indent=2, ensure_ascii=False, default=str).encode())
 
 
-def latest_dt(st, prefix: str, on_or_before: str | None = None) -> str | None:
-    dts = [m.group(1) for d in st.list_dirs(prefix) if (m := _DT.fullmatch(d))]
-    if on_or_before:
-        dts = [d for d in dts if d <= on_or_before]
-    return max(dts) if dts else None
+def latest_dt(
+    st, prefix: str, on_or_before: str | None = None, must_have: str | None = None
+) -> str | None:
+    """dt mới nhất (<= on_or_before); nếu có must_have thì bỏ qua thư mục thiếu file đó."""
+    dts = sorted(
+        (m.group(1) for d in st.list_dirs(prefix) if (m := _DT.fullmatch(d))), reverse=True
+    )
+    for d in dts:
+        if on_or_before and d > on_or_before:
+            continue
+        if must_have and not st.exists(f"{prefix}/dt={d}/{must_have}"):
+            continue
+        return d
+    return None
