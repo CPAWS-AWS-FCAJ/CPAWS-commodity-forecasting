@@ -7,7 +7,6 @@
   clean/reference_prices/dt=YYYY-MM-DD/reference.parquet
   clean/display_factors/dt=YYYY-MM-DD/display_factors.parquet
   clean/display_fx/dt=YYYY-MM-DD/display_fx.parquet  tỷ giá cho hiển thị (có thể pending_confirm)
-  logs/ingest/dt=YYYY-MM-DD/fetch_log.json           chỉ khi nguồn chính lỗi (không ghi clean/)
 Ghi đè theo khóa: chạy lại cùng ngày ghi đè đúng các file đó.
 """
 

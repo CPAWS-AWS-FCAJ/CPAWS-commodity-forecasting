@@ -51,11 +51,17 @@ Hệ quả:
 |---|---|---|
 | Vàng | **GLD** qua yfinance | NBP: mức giá và trung bình tháng |
 | Bạc | **SLV** qua yfinance | — |
-| WTI | **CL=F** qua yfinance | RWTC (EIA API v2): mức giá, đánh dấu lệch > 3% |
+| WTI | **CL=F** qua yfinance | RWTC (EIA API v2): tỷ số CL=F/RWTC, đánh dấu khi lệch > 3% so với trung vị trượt 60 phiên trước đó |
 | Brent | **BZ=F** qua yfinance | Return ngày so với CL=F (cùng giờ chốt), đánh dấu phần dư > 8%; RBRTE chỉ so mức giá (chênh lệch trung vị theo năm) |
 | USD/VND | **VND=X** qua yfinance | — |
 
-Không có nguồn dự phòng. Nếu nguồn của một tài sản chính (vàng, bạc, WTI, Brent, USD/VND) lỗi hoặc trả rỗng, pipeline vẫn tải các tài sản còn lại để ghi log đủ, nhưng **không ghi bản clean mới** (bản clean trước vẫn là bản mới nhất), ghi `logs/ingest/dt=.../fetch_log.json`, log dòng `ERROR INGEST_SOURCE_FAILED` và thoát mã 1 để Lambda kích CloudWatch alarm. Nguồn tham chiếu (EIA, GC=F, SI=F, NBP) lỗi chỉ log `WARNING INGEST_REFERENCE_FAILED`, pipeline vẫn ghi clean với bản tham chiếu cũ (cập nhật 09/10/2026). Lớp adapter (`src/data/sources/`) cho phép thay nguồn mà không phải sửa phần clean và quality.
+Không có nguồn dự phòng. Lỗi nguồn xử lý **theo từng tài sản** (cập nhật 10/10/2026):
+- Nguồn của một tài sản chính (vàng, bạc, WTI, Brent, USD/VND) lỗi hoặc trả rỗng: tài sản đó giữ dữ liệu clean của lần trước, dòng cuối gắn `flag=stale_source`; `quality.json` có `stale_sources[asset]` với ngày dữ liệu cuối và lỗi. Các tài sản khác vẫn cập nhật, bản clean mới vẫn được ghi. Pipeline log dòng `ERROR INGEST_SOURCE_FAILED` và thoát mã 1 để Lambda kích CloudWatch alarm.
+- Lần chạy thành công sau đó tải lại từ phiên thứ 5 tính từ cuối của tài sản cũ nhất, nên khoảng trống được bù và `stale_source` tự mất.
+- Nếu USD/VND lỗi, tỷ giá hiển thị cũng mang `stale_source`.
+- Nguồn tham chiếu (EIA, GC=F, SI=F, NBP) lỗi chỉ log `WARNING INGEST_REFERENCE_FAILED`, giữ bản tham chiếu cũ, thoát mã 0.
+
+Lớp adapter (`src/data/sources/`) cho phép thay nguồn mà không phải sửa phần clean và quality.
 
 Các quy tắc đi kèm:
 - **GC=F và SI=F không dùng làm nguồn.** Chúng chỉ dùng để tính hệ số hiển thị: giá vàng USD/oz = GLD × trung vị 20 phiên gần nhất của (GC=F/GLD). Bạc tính tương tự với SI=F/SLV nhưng gắn nhãn `reliability=low`. Hệ số này **không đưa vào train**.
@@ -76,6 +82,8 @@ Các quy tắc đi kèm:
 - **`published_at`** là hằng số cấu hình theo nguồn (`config.PUBLISHED_AT_RULES`):
   - Tạm thời: 12:00 UTC ngày date+1 cho yfinance; 12:00 UTC ngày date+7 cho EIA.
   - Sẽ sửa sau khi đo xong độ trễ chốt thanh của yfinance (`probe_metals_fx.py --bars-only`).
+  - **Giờ chạy khớp `published_at`** (chốt 10/10/2026): Lambda ingest chạy 12:15 UTC từ thứ Ba đến thứ Bảy (`config.INGEST_SCHEDULE_EXPRESSION` = `cron(15 12 ? * TUE-SAT *)`, múi giờ UTC); predict chạy nối tiếp sau ingest. Khi rút `published_at` thì rút giờ chạy cùng lúc (có test kiểm tra hai giá trị khớp nhau).
+- **`xcheck_level` (WTI)** so tỷ số CL=F/RWTC với trung vị trượt 60 phiên chung trước đó (nhân quả, không gồm t), không so với 1,0. Lý do: từ 2024, CL=F thấp hơn RWTC có hệ thống (trung vị theo năm −1,1% năm 2024, −1,0% năm 2025, −1,5% năm 2026), khiến quy tắc cũ đánh dấu hàng loạt mỗi khi chênh lệch này nới thêm. Trên bản clean 09/10/2026, tổng số ngày bị đánh dấu giảm từ 94 xuống 50; 2014–2020 không đổi, 2022 từ 8 xuống 2, 2024 từ 1 xuống 0, 2026 từ 47 xuống 10.
 
 ## Bằng chứng (probe 07–08/10/2026)
 

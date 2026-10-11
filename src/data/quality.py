@@ -4,7 +4,7 @@ Cờ theo chuỗi (chỉ đánh dấu, tính lại trên toàn bộ lịch sử 
   stale        phiên thứ >= STALE_RUN liên tiếp có giá y hệt (nhân quả: chỉ nhìn lùi)
   jump         |log return 1 ngày| > ngưỡng của tài sản, trừ ngày trong KNOWN_EVENTS
   roll         phiên đầu tiên sau ngày đáo hạn hợp đồng (CL, BZ); không dùng chuỗi back-adjusted
-  xcheck_level wti: |CL=F / RWTC - 1| > 3%
+  xcheck_level wti: CL=F / RWTC lệch > 3% so với trung vị trượt 60 phiên trước đó (nhân quả)
   xcheck_resid brent: |r(BZ=F) - r(CL=F)| > 8% (cùng giờ chốt 14:30 ET)
 Loại spike (tài sản có reject_spikes, hiện chỉ USD/VND): vọt > ngưỡng rồi quay về gần mức cũ trong
 tối đa SPIKE_MAX_SESSIONS phiên → cả đoạn sang rejected với "bad_value|spike". display_fx giữ tỷ giá
@@ -29,6 +29,8 @@ from .config import (
     STALE_RUN,
     XCHECK_BRENT_RESID,
     XCHECK_WTI_LEVEL,
+    XCHECK_WTI_MIN_PERIODS,
+    XCHECK_WTI_WINDOW,
 )
 
 SERIES_FLAGS = {"stale", "jump", "roll", "xcheck_level", "xcheck_resid"}
@@ -158,14 +160,27 @@ def series_flags(prices: pd.DataFrame, refs: pd.DataFrame) -> dict[str, dict[pd.
         if spec.roll_rule:
             add(asset, calendars.roll_days(spec.roll_rule, s.index), "roll")
 
-    wti, rwtc = _series(prices, "wti"), _series(refs, "rwtc", EXCLUDE_REF)
-    j = pd.concat({"f": wti, "s": rwtc}, axis=1, join="inner").dropna()
-    j = j[(j > 0).all(axis=1)]
-    add("wti", j.index[((j["f"] / j["s"] - 1).abs() > XCHECK_WTI_LEVEL).to_numpy()], "xcheck_level")
+    dev = wti_level_deviation(prices, refs)
+    add("wti", dev.index[(dev.abs() > XCHECK_WTI_LEVEL).to_numpy()], "xcheck_level")
 
     res = _brent_resid(prices)
     add("brent", res.index[(res.abs() > XCHECK_BRENT_RESID).to_numpy()], "xcheck_resid")
     return out
+
+
+def _wti_rwtc_ratio(prices: pd.DataFrame, refs: pd.DataFrame) -> pd.Series:
+    wti, rwtc = _series(prices, "wti"), _series(refs, "rwtc", EXCLUDE_REF)
+    j = pd.concat({"f": wti, "s": rwtc}, axis=1, join="inner").dropna()
+    j = j[(j > 0).all(axis=1)]
+    return j["f"] / j["s"]
+
+
+def wti_level_deviation(prices: pd.DataFrame, refs: pd.DataFrame) -> pd.Series:
+    """Độ lệch của CL=F/RWTC so với trung vị trượt XCHECK_WTI_WINDOW phiên chung trước đó (chỉ
+    nhìn lùi, không gồm t); thiếu lịch sử thì so với 1,0."""
+    ratio = _wti_rwtc_ratio(prices, refs)
+    base = ratio.shift(1).rolling(XCHECK_WTI_WINDOW, min_periods=XCHECK_WTI_MIN_PERIODS).median()
+    return ratio / base.fillna(1.0) - 1
 
 
 def _brent_wti_returns(prices: pd.DataFrame) -> pd.DataFrame:
@@ -191,6 +206,29 @@ def apply_series_flags(prices: pd.DataFrame, refs: pd.DataFrame) -> pd.DataFrame
         new_flags.append(join_flags(keep | sf.get(a, {}).get(pd.Timestamp(d), set())))
     out["flag"] = new_flags
     return out
+
+
+def mark_stale_sources(
+    prices: pd.DataFrame, failed: list[str], fetch_log: list[dict]
+) -> tuple[pd.DataFrame, dict]:
+    """Gắn "stale_source" vào dòng cuối của từng tài sản có nguồn lỗi (giữ dữ liệu lần trước).
+    Trả về (prices, {asset: {last_date, status, error}}); last_date = None nếu chưa có dữ liệu."""
+    out = prices.copy()
+    info: dict[str, dict] = {}
+    for asset in failed:
+        entry = next((x for x in fetch_log if x.get("asset") == asset), {})
+        d = out[out["asset"] == asset]
+        last = None
+        if len(d):
+            i = d["date"].idxmax()
+            out.loc[i, "flag"] = join_flags(split_flags(out.loc[i, "flag"]) | {"stale_source"})
+            last = str(pd.Timestamp(out.loc[i, "date"]).date())
+        info[asset] = {
+            "last_date": last,
+            "status": entry.get("status", "error"),
+            "error": entry.get("error", ""),
+        }
+    return out, info
 
 
 def display_factors(prices: pd.DataFrame, refs: pd.DataFrame) -> pd.DataFrame:
@@ -252,6 +290,9 @@ def display_fx(prices: pd.DataFrame, asset: str = "usd_vnd") -> pd.DataFrame:
     undecided = [i for i in starts if n - 1 - i < SPIKE_MAX_SESSIONS]
     use = undecided[0] - 1 if undecided else n - 1
     row = d.iloc[use]
+    flags = {"pending_confirm"} if undecided else set()
+    if "stale_source" in split_flags(d.iloc[-1]["flag"]):
+        flags.add("stale_source")  # nguồn lỗi ở lần chạy này: tỷ giá là của lần trước
     return pd.DataFrame(
         [
             {
@@ -261,7 +302,7 @@ def display_fx(prices: pd.DataFrame, asset: str = "usd_vnd") -> pd.DataFrame:
                 "rate": float(s.iloc[use]),
                 "unit": spec.unit,
                 "published_at": row["published_at"],
-                "flag": "pending_confirm" if undecided else "",
+                "flag": join_flags(flags),
                 "pending_date": s.index[undecided[0]] if undecided else pd.NaT,
                 "pending_rate": float(s.iloc[undecided[0]]) if undecided else float("nan"),
             }
@@ -339,16 +380,16 @@ def asset_report(prices: pd.DataFrame, rejected: pd.DataFrame, asset: str) -> di
 
 def xcheck_report(prices: pd.DataFrame, refs: pd.DataFrame) -> dict:
     out: dict = {}
-    wti, rwtc = _series(prices, "wti"), _series(refs, "rwtc", EXCLUDE_REF)
-    j = pd.concat({"f": wti, "s": rwtc}, axis=1, join="inner").dropna()
-    j = j[(j > 0).all(axis=1)]
-    if len(j):
-        pct = (j["f"] / j["s"] - 1) * 100
+    ratio = _wti_rwtc_ratio(prices, refs)
+    if len(ratio):
+        pct = (ratio - 1) * 100
+        dev = wti_level_deviation(prices, refs).abs() > XCHECK_WTI_LEVEL
         out["wti_vs_rwtc_level"] = {
-            "n_common": len(j),
+            "n_common": len(ratio),
             "median_pct": round(float(pct.median()), 3),
             "abs_median_pct": round(float(pct.abs().median()), 3),
-            "days_gt_3pct": int((pct.abs() > XCHECK_WTI_LEVEL * 100).sum()),
+            "days_gt_3pct_vs_1": int((pct.abs() > XCHECK_WTI_LEVEL * 100).sum()),
+            "days_flagged_vs_rolling_median": int(dev.sum()),
             "median_pct_by_year": {
                 k: round(float(v), 2) for k, v in _by_year(pct, np.median).items()
             },
