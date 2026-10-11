@@ -8,8 +8,6 @@ ASSET = "gold"  # GLD, bản clean mới nhất
 DATA_END = "2019-12-31"  # cắt chuỗi ngay khi đọc
 SAMPLE_START = "2014-01-01"  # ngày gốc lấy mẫu trong 2014–2019
 SEED = 42  # = CeemdanConfig.seed mặc định
-SEQ_LEN = 60  # mặc định của CeemdanConfig
-N_IMFS = 10  # mặc định của CeemdanConfig
 
 # (window, trials): lưới yêu cầu + cấu hình mặc định của decomposition.py để tham chiếu
 GRID = [(252, 50), (252, 100), (504, 50), (504, 100), (512, 20)]

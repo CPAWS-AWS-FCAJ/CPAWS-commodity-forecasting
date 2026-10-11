@@ -9,15 +9,14 @@ Chỉ đọc giá GLD tới DATA_END (2019); ngày gốc lấy mẫu trong 2014�
 được đếm từ lịch phiên (không đọc dữ liệu 2020 → nay).
 
 Hai chế độ của PyEMD:
-- inner=default: CEEMDAN(trials=...) như trong decompose_window; PyEMD 1.10 mặc định parallel=True,
-  mỗi lần gọi tự mở Pool(os.cpu_count()).
-- inner=off: thay CEEMDAN bằng CEEMDAN(parallel=False) (chỉ trong thí nghiệm này, qua biến môi
-  trường để tiến trình con của Pool cũng nhận). Kết quả số phải giống hệt inner=default.
+- inner=default: CEEMDAN với parallel mặc định của PyEMD 1.10 (True): mỗi lần gọi tự mở
+  Pool(os.cpu_count()). Đây là hành vi của decompose_window trước ADR-0007.
+- inner=off: CEEMDAN(parallel=False), hành vi hiện tại của decompose_window.
+Chế độ đặt qua biến môi trường để tiến trình con của Pool cũng nhận.
 """
 
 from __future__ import annotations
 
-import functools
 import json
 import os
 import platform
@@ -38,14 +37,20 @@ from src.data import calendars, storage
 from src.data.config import ASSETS
 from src.forecast import decomposition as D
 
-_ORIG_CEEMDAN = D.CEEMDAN
+_ORIG_MAKE = D._make_ceemdan
+
+
+def _make_inner_default(cfg: D.CeemdanConfig):
+    return D.CEEMDAN(trials=cfg.trials, epsilon=cfg.epsilon)  # parallel mặc định của PyEMD
+
+
 _ENV = "CPAWS_CEEMDAN_INNER"
 
 
 def _apply_inner_mode() -> None:
     """Chạy ở tiến trình chính và ở mỗi tiến trình con (spawn import lại module này)."""
     off = os.environ.get(_ENV, "default") == "off"
-    D.CEEMDAN = functools.partial(_ORIG_CEEMDAN, parallel=False) if off else _ORIG_CEEMDAN
+    D._make_ceemdan = _ORIG_MAKE if off else _make_inner_default
 
 
 _apply_inner_mode()
@@ -81,16 +86,21 @@ def sample_origins(dates: pd.DatetimeIndex, window: int, n: int, salt: int = 0) 
 
 
 def cfg_of(window: int, trials: int) -> D.CeemdanConfig:
-    return D.CeemdanConfig(
-        window=window, trials=trials, seq_len=C.SEQ_LEN, n_imfs=C.N_IMFS, seed=C.SEED
+    return D.CeemdanConfig(window=window, trials=trials, seed=C.SEED)
+
+
+def n_components(out: list) -> np.ndarray:
+    """Số thành phần (IMF + residue) của mỗi cửa sổ."""
+    return np.array([w.n_imf + 1 for w in out])
+
+
+def same(a: list, b: list) -> bool:
+    return len(a) == len(b) and all(
+        x.n_imf == y.n_imf
+        and np.array_equal(x.imfs, y.imfs)
+        and np.array_equal(x.residue, y.residue)
+        for x, y in zip(a, b, strict=True)
     )
-
-
-def n_components(out: np.ndarray) -> np.ndarray:
-    """Số thành phần thật (IMF + residue) của mỗi cửa sổ = số cột không phải toàn 0 ở cuối
-    (_fix_width đệm 0 bên phải)."""
-    nonzero = np.any(out != 0, axis=1)  # (n_windows, n_imfs)
-    return np.array([int(np.max(np.where(r)[0])) + 1 if r.any() else 0 for r in nonzero])
 
 
 # ---------- đo ----------
@@ -102,7 +112,7 @@ def time_sequential(s, origins, cfg) -> tuple[list[float], np.ndarray]:
         t0 = time.perf_counter()
         outs.append(D.causal_imf_windows(s, np.array([t]), cfg)[0])
         times.append(time.perf_counter() - t0)
-    return times, np.stack(outs)
+    return times, outs
 
 
 def time_parallel(s, origins, cfg, processes) -> tuple[float, np.ndarray]:
@@ -186,9 +196,9 @@ def run(lake: Path, run_dt: str) -> dict:
         cfg = cfg_of(w, tr)
         o = seq_out[(w, tr)][0][: C.N_SEQ_INNER]
         times, out = time_sequential(s, o, cfg)
-        same = bool(np.array_equal(out, seq_out[(w, tr)][1][: C.N_SEQ_INNER]))
+        same_ = same(out, seq_out[(w, tr)][1][: C.N_SEQ_INNER])
         res["sequential"].append(
-            {"window": w, "trials": tr, "inner": "default", **stats_s(times), "same_as_off": same}
+            {"window": w, "trials": tr, "inner": "default", **stats_s(times), "same_as_off": same_}
         )
         print(f"seq inner=default w={w} trials={tr}: median {np.median(times):.2f}s", flush=True)
 
@@ -201,7 +211,7 @@ def run(lake: Path, run_dt: str) -> dict:
         o = np.unique(np.concatenate([seq_out[(w, tr)][0], sample_origins(dates, w, C.N_PAR, 1)]))
         wall, out = time_parallel(s, o, cfg, procs)
         idx = np.searchsorted(o, seq_out[(w, tr)][0])
-        same = bool(np.array_equal(out[idx], seq_out[(w, tr)][1]))
+        same_ = same([out[i] for i in idx], seq_out[(w, tr)][1])
         comp_counts.setdefault((w, tr), []).extend(np.delete(n_components(out), idx).tolist())
         res["parallel"].append(
             {
@@ -212,7 +222,7 @@ def run(lake: Path, run_dt: str) -> dict:
                 "n_windows": len(o),
                 "wall_s": round(wall, 2),
                 "s_per_window": round(wall / len(o), 3),
-                "same_as_sequential": same,
+                "same_as_sequential": same_,
             }
         )
         print(f"par p={procs} w={w} trials={tr}: {wall / len(o):.3f}s/window", flush=True)
@@ -230,7 +240,7 @@ def run(lake: Path, run_dt: str) -> dict:
     w, tr = 504, 100
     o, first = seq_out[(w, tr)]
     _, again = time_sequential(s, o[:4], cfg_of(w, tr))
-    res["checks"]["same_seed_rerun_identical"] = bool(np.array_equal(again, first[:4]))
+    res["checks"]["same_seed_rerun_identical"] = same(again, first[:4])
 
     # 6) Nhân quả: cắt chuỗi ngay sau t cho cùng IMF như chuỗi có thêm dữ liệu sau t (tới 2019)
     causal = []
@@ -238,7 +248,7 @@ def run(lake: Path, run_dt: str) -> dict:
         o, full = seq_out[(w, tr)]
         for k, t in enumerate(o[:6]):
             cut = D.causal_imf_windows(s[: t + 1], np.array([t]), cfg_of(w, tr))[0]
-            causal.append(bool(np.array_equal(cut, full[k])))
+            causal.append(same([cut], [full[k]]))
     res["checks"]["future_append_does_not_change_imfs"] = {"n": len(causal), "all": all(causal)}
 
     # 7) Số thành phần (IMF + residue) theo cửa sổ
