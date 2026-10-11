@@ -155,6 +155,29 @@ def test_stale_source_clears_and_gap_is_backfilled_on_next_success(tmp_path):
     assert set(cal) <= set(b["date"])  # khoảng trống 29/5–4/6 được bù
 
 
+def test_source_down_longer_than_refetch_window_then_backfilled(tmp_path):
+    st = storage.LocalStorage(tmp_path)
+    ingest_prices.run(st, _sources(), start="2020-03-02", now=NOW)  # brent tới 28/5
+    # BZ=F lỗi 7 lần chạy hằng ngày liên tiếp (> REFETCH_SESSIONS = 5)
+    run_days = pd.bdate_range("2020-06-01", "2020-06-09")
+    for d in run_days:
+        end = str((d - pd.offsets.BDay()).date())
+        src = {"yfinance": YFinanceSource(FakeYF(end=end, fail={"BZ=F"})), "eia": FakeEIA(end)}
+        res = ingest_prices.run(st, src, now=pd.Timestamp(f"{d.date()} 12:15", tz="UTC"))
+        assert not res.ok and res.report["stale_sources"]["brent"]["last_date"] == "2020-05-28"
+    gold = res.prices.loc[res.prices["asset"] == "gold", "date"]
+    assert gold.max() == pd.Timestamp("2020-06-08")  # tài sản khác vẫn cập nhật mỗi ngày
+    ok_day = pd.Timestamp("2020-06-10 12:15", tz="UTC")
+    src = {"yfinance": YFinanceSource(FakeYF(end="2020-06-09")), "eia": FakeEIA("2020-06-09")}
+    res = ingest_prices.run(st, src, now=ok_day)
+    assert res.ok and res.report["stale_sources"] == {}
+    b = res.prices[res.prices["asset"] == "brent"]
+    cal = calendars.sessions("CME", "2020-05-28", "2020-06-09")
+    assert set(cal) <= set(b["date"])  # bù đủ 8 phiên bị thiếu
+    assert not any("stale_source" in split_flags(f) for f in b["flag"])
+    assert res.report["run"]["start"] <= "2020-05-21"  # tải lại từ phiên thứ 5 của tài sản cũ nhất
+
+
 def test_stale_vnd_marks_display_fx(tmp_path):
     st = storage.LocalStorage(tmp_path)
     ingest_prices.run(st, _sources(), start="2020-03-02", now=NOW)
