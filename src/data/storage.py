@@ -44,28 +44,33 @@ class LocalStorage:
 
 
 class S3Storage:
-    """Bucket do stack CpawsData tạo (không tạo bucket ở đây)."""
+    """Bucket do stack CpawsData tạo (không tạo bucket ở đây). root: tiền tố key ("" hoặc "x/")."""
 
-    def __init__(self, bucket: str, client=None):
+    def __init__(self, bucket: str, client=None, root: str = ""):
         import boto3
 
         self.bucket = bucket
+        self.root = root
         self.s3 = client or boto3.client("s3")
 
+    def _k(self, key: str) -> str:
+        return f"{self.root}{key}"
+
     def write_bytes(self, key: str, data: bytes) -> str:
-        self.s3.put_object(Bucket=self.bucket, Key=key, Body=data)
-        return f"s3://{self.bucket}/{key}"
+        self.s3.put_object(Bucket=self.bucket, Key=self._k(key), Body=data)
+        return f"s3://{self.bucket}/{self._k(key)}"
 
     def read_bytes(self, key: str) -> bytes:
-        return self.s3.get_object(Bucket=self.bucket, Key=key)["Body"].read()
+        return self.s3.get_object(Bucket=self.bucket, Key=self._k(key))["Body"].read()
 
     def exists(self, key: str) -> bool:
-        r = self.s3.list_objects_v2(Bucket=self.bucket, Prefix=key, MaxKeys=1)
-        return any(o["Key"] == key for o in r.get("Contents", []))
+        k = self._k(key)
+        r = self.s3.list_objects_v2(Bucket=self.bucket, Prefix=k, MaxKeys=1)
+        return any(o["Key"] == k for o in r.get("Contents", []))
 
     def list_dirs(self, prefix: str) -> list[str]:
         pages = self.s3.get_paginator("list_objects_v2").paginate(
-            Bucket=self.bucket, Prefix=prefix.rstrip("/") + "/", Delimiter="/"
+            Bucket=self.bucket, Prefix=self._k(prefix.rstrip("/") + "/"), Delimiter="/"
         )
         return sorted(
             cp["Prefix"].rstrip("/").split("/")[-1]

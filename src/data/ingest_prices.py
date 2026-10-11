@@ -3,7 +3,8 @@
 Chạy:
   python -m src.data.ingest_prices --start 2012-01-01 --dest local   # tải toàn bộ lịch sử
   python -m src.data.ingest_prices --dest local                     # tăng dần: tải lại 5 phiên gần nhất
-Key: EIA_API_KEY (.env khi chạy local; Lambda đọc từ nơi lưu secret). yfinance không cần key.
+Key EIA: secret_store.get_eia_api_key() (.env khi chạy local; Lambda đọc từ nơi lưu secret). yfinance
+không cần key. Bucket/tiền tố S3: biến môi trường LAKE_BUCKET, LAKE_PREFIX (config.lake_bucket).
 
 Xử lý lỗi nguồn (theo từng tài sản):
 - Nguồn của một tài sản chính (ASSETS) lỗi hoặc trả rỗng: tài sản đó giữ dữ liệu clean của lần
@@ -20,7 +21,6 @@ from __future__ import annotations
 
 import argparse
 import logging
-import os
 from dataclasses import dataclass, field
 
 import pandas as pd
@@ -236,15 +236,62 @@ def run(
 
 
 def build_sources() -> tuple[dict, object]:
-    """Tạo adapter từ biến môi trường; thiếu EIA_API_KEY thì bỏ đối chiếu EIA."""
+    """Tạo adapter; không lấy được EIA key thì bỏ đối chiếu EIA (chỉ là nguồn tham chiếu)."""
+    from .secret_store import SecretUnavailable, get_eia_api_key
     from .sources.eia import EIASource
     from .sources.nbp import NBPSource
     from .sources.yfinance_src import YFinanceSource
 
     sources: dict = {"yfinance": YFinanceSource()}
-    if os.getenv("EIA_API_KEY", "").strip():
-        sources["eia"] = EIASource(os.environ["EIA_API_KEY"].strip())
+    try:
+        sources["eia"] = EIASource(get_eia_api_key())
+    except SecretUnavailable as e:
+        log_.warning("INGEST_REFERENCE_FAILED source=eia skipped: %s", e)  # không in key
     return sources, NBPSource()
+
+
+def make_storage(dest: str, lake_dir: str = "data/lake"):
+    """local: thư mục lake_dir; s3: bucket config.lake_bucket(), tiền tố config.lake_prefix()."""
+    if dest == "local":
+        return storage.LocalStorage(lake_dir)
+    if dest == "s3":
+        from .config import lake_bucket, lake_prefix
+
+        return storage.S3Storage(lake_bucket(), root=lake_prefix())
+    raise ValueError(f"unknown dest {dest}")
+
+
+def run_ingest(
+    dest: str = "local",
+    lake_dir: str = "data/lake",
+    start: str | None = None,
+    use_nbp: bool = True,
+) -> RunResult:
+    """Điểm vào chung cho CLI và Lambda (src/data/lambda_ingest.py)."""
+    st = make_storage(dest, lake_dir)
+    sources, nbp = build_sources()
+    return run(st, sources, start=start, nbp_source=nbp if use_nbp else None)
+
+
+def dry_run(sources: dict, now: pd.Timestamp | None = None, sessions: int = 10) -> dict:
+    """Chỉ tải các mã chính (ASSETS) cho `sessions` phiên gần nhất, không ghi gì.
+    Trả về {symbol: {rows, first_date, last_date, error}} để kiểm tra nguồn có chặn IP không."""
+    now = pd.Timestamp.now(tz="UTC") if now is None else pd.Timestamp(now)
+    start = str((now - pd.Timedelta(days=sessions * 2 + 7)).date())
+    out: dict[str, dict] = {}
+    for spec in ASSETS.values():
+        ref = spec.primary
+        try:
+            bars = sources[ref.source].fetch(ref.symbol, start).bars.tail(sessions)
+            out[ref.symbol] = {
+                "rows": len(bars),
+                "first_date": str(bars.index.min().date()) if len(bars) else None,
+                "last_date": str(bars.index.max().date()) if len(bars) else None,
+                "error": None,
+            }
+        except Exception as e:  # noqa: BLE001 - báo lỗi từng mã, không dừng
+            out[ref.symbol] = {"rows": 0, "first_date": None, "last_date": None, "error": str(e)}
+    return out
 
 
 def summarize(report: dict) -> str:
@@ -283,15 +330,7 @@ def main(argv: list[str] | None = None) -> int:
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     load_dotenv()
-    from .config import lake_bucket
-
-    st = (
-        storage.LocalStorage(args.lake_dir)
-        if args.dest == "local"
-        else storage.S3Storage(lake_bucket())
-    )
-    sources, nbp = build_sources()
-    res = run(st, sources, start=args.start, nbp_source=None if args.no_nbp else nbp)
+    res = run_ingest(args.dest, args.lake_dir, start=args.start, use_nbp=not args.no_nbp)
     print(summarize(res.report))
     print(f"\nwritten {len(res.written)} files; last: {res.written[-1] if res.written else '-'}")
     return 0 if res.ok else 1

@@ -159,5 +159,12 @@ ALLOWED_NEGATIVE: set[tuple[str, str]] = {("wti", "2020-04-20")}
 
 
 def lake_bucket(env: str | None = None) -> str:
-    """Tên bucket theo quy ước cpaws-<env>-lake (skill aws-serverless-platform)."""
-    return f"cpaws-{env or os.getenv('CPAWS_ENV', 'dev')}-lake"
+    """Bucket lake: biến môi trường LAKE_BUCKET nếu có (Lambda đặt qua CDK), nếu không thì theo quy
+    ước cpaws-<env>-lake (skill aws-serverless-platform), env lấy từ CPAWS_ENV (mặc định dev)."""
+    return os.getenv("LAKE_BUCKET") or f"cpaws-{env or os.getenv('CPAWS_ENV', 'dev')}-lake"
+
+
+def lake_prefix() -> str:
+    """Tiền tố key trong bucket (LAKE_PREFIX, mặc định rỗng = gốc bucket)."""
+    p = os.getenv("LAKE_PREFIX", "").strip("/")
+    return f"{p}/" if p else ""
