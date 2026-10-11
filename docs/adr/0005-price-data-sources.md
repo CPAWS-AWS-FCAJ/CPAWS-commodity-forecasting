@@ -72,6 +72,11 @@ Các quy tắc đi kèm:
   - USD/VND chỉ dùng hiển thị, không làm đặc trưng.
   - **Tỷ giá hiển thị** (`clean/display_fx/`): nếu trong 3 phiên gần nhất có cú vọt > 2% mà quy tắc spike chưa xét xong, hiển thị giá phiên trước cú vọt với `flag=pending_confirm`; các lần chạy sau hoặc loại đoạn đó (spike) hoặc, sau 3 phiên không quay về, hiển thị giá mới. `prices.parquet` không bị ảnh hưởng.
   - Giá đứng chỉ đánh dấu (`stale`), không loại.
+- **Cờ `xcheck_*` (`xcheck_level`, `xcheck_resid`) chỉ để đánh dấu chất lượng** (bổ sung 11/10/2026): không dùng làm đặc trưng mô hình, và không dùng để lọc dòng trong backtest, train hay inference. Lý do:
+  - `xcheck_level` dựa trên RWTC, mà RWTC có `published_at` = date+7. Tại thời điểm dự báo, cờ này chưa thể biết, nên dùng nó là rò rỉ dữ liệu tương lai.
+  - `xcheck_resid` là cờ chẩn đoán chất lượng Brent.
+
+  Hai cờ này chỉ xuất hiện trong `quality.json` và báo cáo chất lượng dữ liệu.
 - **Ngưỡng `jump` theo tài sản (chỉ đánh dấu):** vàng 8%, bạc 10%, dầu 15%, USD/VND 2%. Các ngày có biến động thật đã kiểm chứng nằm trong `config.KNOWN_EVENTS` và không bị đánh dấu.
 - **Lịch phiên** (`pandas_market_calendars`):
   - Hợp đồng tương lai dùng lịch CME. Ngày có settlement là ngày hợp lệ của CMEGlobex_EnergyAndMetals, trừ các ngày Globex chỉ mở rút ngắn mà NYSE nghỉ.
