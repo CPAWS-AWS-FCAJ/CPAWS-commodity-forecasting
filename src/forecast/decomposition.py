@@ -11,6 +11,7 @@ mismatch: in production only the right edge of the series exists.
 
 The same function must be used for backtesting, weekly retraining and daily inference.
 """
+
 from __future__ import annotations
 
 import os
@@ -23,12 +24,12 @@ from PyEMD import CEEMDAN
 
 @dataclass(frozen=True)
 class CeemdanConfig:
-    window: int = 512          # points used for each decomposition (must be >= seq_len)
-    seq_len: int = 60          # rows of IMFs handed to the model per origin
-    n_imfs: int = 10           # fixed number of IMF columns (padded / truncated), incl. residue
-    num_high: int = 3          # first num_high columns = high-frequency branch
-    trials: int = 20           # CEEMDAN ensemble size
-    seed: int = 42             # base seed; the origin index is added so results are reproducible
+    window: int = 512  # points used for each decomposition (must be >= seq_len)
+    seq_len: int = 60  # rows of IMFs handed to the model per origin
+    n_imfs: int = 10  # fixed number of IMF columns (padded / truncated), incl. residue
+    num_high: int = 3  # first num_high columns = high-frequency branch
+    trials: int = 20  # CEEMDAN ensemble size
+    seed: int = 42  # base seed; the origin index is added so results are reproducible
 
 
 def _fix_width(imfs: np.ndarray, n_imfs: int) -> np.ndarray:
@@ -45,13 +46,13 @@ def decompose_window(window_values: np.ndarray, cfg: CeemdanConfig, origin: int)
     c = CEEMDAN(trials=cfg.trials)
     c.noise_seed(cfg.seed + int(origin))
     imfs = c(np.asarray(window_values, dtype=float), max_imf=cfg.n_imfs - 1)
-    return _fix_width(imfs, cfg.n_imfs)[-cfg.seq_len:]
+    return _fix_width(imfs, cfg.n_imfs)[-cfg.seq_len :]
 
 
 def _job(args):
     series, origin, cfg = args
     start = origin - cfg.window + 1
-    return decompose_window(series[start: origin + 1], cfg, origin)
+    return decompose_window(series[start : origin + 1], cfg, origin)
 
 
 DEFAULT_CONFIG = CeemdanConfig()  # frozen nên dùng chung làm mặc định an toàn

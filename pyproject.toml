@@ -5,6 +5,7 @@ requires-python = ">=3.11"
 
 [tool.ruff]
 line-length = 100
+lint.extend-select = ["E402"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

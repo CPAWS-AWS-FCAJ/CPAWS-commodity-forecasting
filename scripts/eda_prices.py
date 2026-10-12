@@ -38,10 +38,10 @@ from statsmodels.tsa.stattools import acf
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from src.data import calendars, storage
-from src.data.clean import split_flags
-from src.data.config import ASSETS
-from src.forecast.returns import horizon_log_returns
+from src.data import calendars, storage  # noqa: E402
+from src.data.clean import split_flags  # noqa: E402
+from src.data.config import ASSETS  # noqa: E402
+from src.forecast.returns import horizon_log_returns  # noqa: E402
 
 MODEL_ASSETS = ["gold", "silver", "brent", "wti"]
 HORIZONS = [1, 3, 7]

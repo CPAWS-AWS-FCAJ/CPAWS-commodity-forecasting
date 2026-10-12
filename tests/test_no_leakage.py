@@ -1,4 +1,5 @@
 """Guards against look-ahead leakage. These tests must stay green; CI runs them on every PR."""
+
 import numpy as np
 import pytest
 

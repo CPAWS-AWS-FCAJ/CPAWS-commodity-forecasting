@@ -1,5 +1,6 @@
 """Chỉ số đánh giá cho dự đoán return của CPAWS. Mọi thí nghiệm báo cáo cạnh mốc naive
 (return = 0, tức giá ngày mai = hôm nay). Không có MAPE trên giá: chỉ số đó cho "độ chính xác 99%" ảo."""
+
 from __future__ import annotations
 
 import math
@@ -67,7 +68,7 @@ def past_rolling_std(changes, window: int = 30) -> np.ndarray:
     changes = np.asarray(changes, dtype=float)
     out = np.full(len(changes), np.nan)
     for i in range(window, len(changes)):
-        out[i] = np.std(changes[i - window: i], ddof=1)
+        out[i] = np.std(changes[i - window : i], ddof=1)
     return out
 
 
@@ -97,7 +98,10 @@ def spike_scores(true_spike, pred_spike) -> dict:
         "precision": tp / (tp + fp) if tp + fp else float("nan"),
         "recall": tp / (tp + fn) if tp + fn else float("nan"),
         "false_alarm_rate": fp / (fp + tn) if fp + tn else float("nan"),
-        "tp": tp, "fp": fp, "fn": fn, "tn": tn,
+        "tp": tp,
+        "fp": fp,
+        "fn": fn,
+        "tn": tn,
     }
 
 
