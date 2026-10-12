@@ -29,7 +29,9 @@ def test_target_does_not_change_when_future_appended():
 
 
 def test_quantiles_to_prices_example():
-    out = returns.quantiles_to_prices(2000, {0.1: math.log(0.979), 0.5: math.log(1.003), 0.9: math.log(1.026)})
+    out = returns.quantiles_to_prices(
+        2000, {0.1: math.log(0.979), 0.5: math.log(1.003), 0.9: math.log(1.026)}
+    )
     assert out[0.1] == pytest.approx(1958)
     assert out[0.9] == pytest.approx(2052)
     assert out[0.1] < out[0.5] < out[0.9]
