@@ -10,7 +10,8 @@ Dòng bị LOẠI (ghi sang bảng rejected, không vào prices):
   theo giờ New York: thanh chưa chốt).
 Cờ CHỈ ĐÁNH DẤU theo từng dòng (giữ trong prices):
   low_liquidity (hợp đồng tương lai có close == open), negative_price (WTI 20/4/2020),
-  suspect_holiday_row / known_source_error (chuỗi tham chiếu).
+  suspect_holiday_row / known_source_error (chuỗi tham chiếu),
+  stale_source (dòng cuối của tài sản có nguồn lỗi ở lần chạy gần nhất; gắn trong quality.py).
 Cờ theo chuỗi (stale, jump, roll, xcheck_*) do quality.py tính lại trên toàn bộ lịch sử mỗi lần chạy.
 
 published_at (quy tắc bảo thủ, config.PUBLISHED_AT_RULES): 00:00 UTC của date + N ngày, cộng H giờ.
@@ -38,6 +39,7 @@ ROW_FLAGS = {
     "negative_price",
     "suspect_holiday_row",
     "known_source_error",
+    "stale_source",  # dòng cuối của tài sản mà nguồn lỗi ở lần chạy gần nhất (ingest_prices)
 }
 
 

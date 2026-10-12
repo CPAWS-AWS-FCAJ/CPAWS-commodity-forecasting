@@ -1,0 +1,10 @@
+# Môi trường phát triển: thư viện runtime + test, lint, EDA và thí nghiệm.
+-r requirements.txt
+
+pytest>=8.0
+ruff>=0.6
+pre-commit>=3.7
+matplotlib>=3.8          # scripts/eda_prices.py, hình cho báo cáo và slide
+scipy>=1.11              # scripts/eda_prices.py (thống kê mô tả)
+moto[s3]>=5.0            # test ghi S3 không gọi AWS thật (tests/test_lambda_ingest.py)
+psutil>=5.9              # scripts/measure_ingest.py (bộ nhớ đỉnh)

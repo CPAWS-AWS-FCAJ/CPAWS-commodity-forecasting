@@ -86,8 +86,28 @@ PUBLISHED_AT_RULES: dict[str, tuple[int, int]] = {
     "eia": (7, 12),
 }
 
+# Lịch chạy Lambda ingest (EventBridge Scheduler, múi giờ UTC) — Tiến dùng khi viết CDK.
+# Phải KHỚP published_at: dữ liệu phiên D chỉ được coi là có sẵn từ 12:00 UTC ngày D+1, nên ingest
+# chạy 12:15 UTC (sau published_at, có 15 phút lề). Nếu chạy sớm hơn published_at thì production
+# dùng dữ liệu sớm hơn so với backtest giả định (lệch train/serve).
+# Thứ Ba–thứ Bảy: lấy phiên thứ Hai–thứ Sáu của hôm trước.
+# Lambda predict chạy SAU ingest (nối tiếp trong Step Functions, không đặt giờ riêng).
+# Khi rút PUBLISHED_AT_RULES["yfinance"] thì rút giờ này cùng lúc (test_schedule_matches_published_at).
+INGEST_SCHEDULE_UTC = (12, 15)  # (giờ, phút)
+INGEST_SCHEDULE_DAYS = "TUE-SAT"
+INGEST_SCHEDULE_EXPRESSION = (
+    f"cron({INGEST_SCHEDULE_UTC[1]} {INGEST_SCHEDULE_UTC[0]} ? * {INGEST_SCHEDULE_DAYS} *)"
+)
+INGEST_SCHEDULE_TIMEZONE = "UTC"
+
 # Ngưỡng đối chiếu chéo (chỉ đánh dấu, không loại)
-XCHECK_WTI_LEVEL = 0.03  # |CL=F / RWTC - 1| > 3% → "xcheck_level" trên wti
+# "xcheck_level" trên wti: tỷ số CL=F / RWTC lệch > 3% so với trung vị của chính tỷ số đó trong
+# XCHECK_WTI_WINDOW phiên chung trước đó (nhân quả, không gồm phiên t). So với trung vị trượt thay
+# vì 1,0 để không đánh dấu cả giai đoạn chênh lệch kỳ hạn kéo dài (contango/backwardation).
+# Chưa đủ XCHECK_WTI_MIN_PERIODS phiên lịch sử thì so với 1,0.
+XCHECK_WTI_LEVEL = 0.03
+XCHECK_WTI_WINDOW = 60
+XCHECK_WTI_MIN_PERIODS = 20
 XCHECK_BRENT_RESID = 0.08  # |r(BZ=F) - r(CL=F)| > 8% → "xcheck_resid" trên brent
 STALE_RUN = 3  # giá y hệt ≥ 3 phiên liên tiếp → "stale" (chỉ đánh dấu)
 # Spike: sau phiên vọt, giá phải quay về trong ±ngưỡng/2 quanh giá trước khi vọt trong tối đa
@@ -139,5 +159,12 @@ ALLOWED_NEGATIVE: set[tuple[str, str]] = {("wti", "2020-04-20")}
 
 
 def lake_bucket(env: str | None = None) -> str:
-    """Tên bucket theo quy ước cpaws-<env>-lake (skill aws-serverless-platform)."""
-    return f"cpaws-{env or os.getenv('CPAWS_ENV', 'dev')}-lake"
+    """Bucket lake: biến môi trường LAKE_BUCKET nếu có (Lambda đặt qua CDK), nếu không thì theo quy
+    ước cpaws-<env>-lake (skill aws-serverless-platform), env lấy từ CPAWS_ENV (mặc định dev)."""
+    return os.getenv("LAKE_BUCKET") or f"cpaws-{env or os.getenv('CPAWS_ENV', 'dev')}-lake"
+
+
+def lake_prefix() -> str:
+    """Tiền tố key trong bucket (LAKE_PREFIX, mặc định rỗng = gốc bucket)."""
+    p = os.getenv("LAKE_PREFIX", "").strip("/")
+    return f"{p}/" if p else ""

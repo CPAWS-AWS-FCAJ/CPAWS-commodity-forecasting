@@ -1,3 +1,6 @@
+# Thư viện chạy pipeline, huấn luyện và inference (Lambda, SageMaker AI).
+# Công cụ phát triển, test, EDA nằm trong requirements-dev.txt.
+
 # Core
 numpy>=1.26
 pandas>=2.2
@@ -7,13 +10,7 @@ torch>=2.3               # DLinear, LSTM, multi-branch model
 statsmodels>=0.14        # ARIMA baseline
 boto3>=1.34              # AWS SDK (S3, DynamoDB, Bedrock)
 requests>=2.31
-python-dotenv>=1.0
-
-# Dev
-pytest>=8.0
-ruff>=0.6
-pre-commit>=3.7
-matplotlib>=3.8          # scripts/eda_prices.py, hình cho báo cáo và slide
+python-dotenv>=1.0       # đọc .env khi chạy CLI ở máy local
 
 # Data pipeline giá (ADR-0005)
 yfinance==1.7.0

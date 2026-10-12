@@ -3,21 +3,24 @@
 Chạy:
   python -m src.data.ingest_prices --start 2012-01-01 --dest local   # tải toàn bộ lịch sử
   python -m src.data.ingest_prices --dest local                     # tăng dần: tải lại 5 phiên gần nhất
-Key: EIA_API_KEY (.env khi chạy local; Lambda đọc từ nơi lưu secret). yfinance không cần key.
+Key EIA: secret_store.get_eia_api_key() (.env khi chạy local; Lambda đọc từ nơi lưu secret). yfinance
+không cần key. Bucket/tiền tố S3: biến môi trường LAKE_BUCKET, LAKE_PREFIX (config.lake_bucket).
 
-Xử lý lỗi nguồn:
-- Nguồn của tài sản chính (ASSETS) lỗi hoặc trả rỗng: vẫn tải hết các tài sản để log đủ, nhưng
-  KHÔNG ghi clean/ (bản clean trước giữ nguyên), ghi logs/ingest/dt=.../fetch_log.json, log dòng
+Xử lý lỗi nguồn (theo từng tài sản):
+- Nguồn của một tài sản chính (ASSETS) lỗi hoặc trả rỗng: tài sản đó giữ dữ liệu clean của lần
+  trước, dòng cuối của nó gắn flag "stale_source"; quality.json có stale_sources[asset] =
+  {last_date, status, error}. Các tài sản khác vẫn cập nhật và bản clean mới vẫn được ghi. Log dòng
   ERROR có mã INGEST_SOURCE_FAILED (cho CloudWatch metric filter) và thoát mã 1.
-- Nguồn tham chiếu (EIA, GC=F, SI=F, NBP) lỗi: log WARNING INGEST_REFERENCE_FAILED, vẫn ghi clean
-  (giữ bản tham chiếu cũ), thoát mã 0.
+  Lần chạy thành công sau tải lại từ phiên thứ REFETCH_SESSIONS tính từ cuối của tài sản cũ nhất,
+  nên khoảng trống được bù và flag stale_source tự mất (dòng bị ghi đè theo khóa).
+- Nguồn tham chiếu (EIA, GC=F, SI=F, NBP) lỗi: log WARNING INGEST_REFERENCE_FAILED, giữ bản tham
+  chiếu cũ, thoát mã 0.
 """
 
 from __future__ import annotations
 
 import argparse
 import logging
-import os
 from dataclasses import dataclass, field
 
 import pandas as pd
@@ -31,7 +34,6 @@ PRICES = "clean/prices"
 REFS = "clean/reference_prices"
 FACTORS = "clean/display_factors"
 DISPLAY_FX = "clean/display_fx"
-LOGS = "logs/ingest"
 
 log_ = logging.getLogger("cpaws.ingest")
 
@@ -166,19 +168,8 @@ def run(
     written: list[str] = []
 
     acc, rej, failed = _collect(ASSETS, sources, start, now, st, run_dt, log, written, True)
-    if failed:
-        # Không ghi clean/: bản clean trước vẫn là bản mới nhất cho các bước sau
-        report = {
-            "status": "failed",
-            "failed_assets": failed,
-            "run": {"run_at_utc": now.isoformat(timespec="seconds"), "start": start},
-            "fetch_log": log,
-        }
-        written.append(storage.write_json(st, f"{LOGS}/dt={run_dt}/fetch_log.json", report))
-        log_.error("INGEST_ABORTED clean snapshot not written; failed_assets=%s", ",".join(failed))
-        empty = clean.empty_frame()
-        return RunResult(run_dt, empty, empty, empty, pd.DataFrame(), report, written, ok=False)
 
+    # Tài sản lỗi không có dòng mới nên merge_snapshot giữ nguyên dữ liệu cũ của nó
     new_acc, new_rej = _concat(acc), _concat(rej)
     keys = pd.concat([new_acc[clean.KEY], new_rej[clean.KEY]], ignore_index=True)
     prices = clean.merge_snapshot(prev["prices"], new_acc, keys)
@@ -194,6 +185,12 @@ def run(
     refs = clean.merge_snapshot(prev["references"], new_ref, ref_keys)
 
     prices = quality.apply_series_flags(prices, refs)
+    prices, stale = quality.mark_stale_sources(prices, failed, log)
+    if failed:
+        log_.error(
+            "INGEST_PARTIAL kept previous data for %s",
+            ", ".join(f"{a} (last {stale[a]['last_date']})" for a in failed),
+        )
     factors = quality.display_factors(prices, refs)
     fx = quality.display_fx(prices)
 
@@ -218,7 +215,8 @@ def run(
             log_.warning("INGEST_REFERENCE_FAILED asset=nbp_gold source=nbp error=%s", e)
 
     report = quality.build_report(prices, rejected, refs, factors, nbp, fx)
-    report["status"] = "ok"
+    report["status"] = "partial" if failed else "ok"
+    report["stale_sources"] = stale
     report["run"] = {
         "run_at_utc": now.isoformat(timespec="seconds"),
         "start": start,
@@ -234,24 +232,69 @@ def run(
         storage.write_parquet(st, f"{DISPLAY_FX}/{base}/display_fx.parquet", fx),
         storage.write_json(st, f"{PRICES}/{base}/quality.json", report),
     ]
-    return RunResult(run_dt, prices, rejected, refs, factors, report, written, fx=fx)
+    return RunResult(run_dt, prices, rejected, refs, factors, report, written, ok=not failed, fx=fx)
 
 
 def build_sources() -> tuple[dict, object]:
-    """Tạo adapter từ biến môi trường; thiếu EIA_API_KEY thì bỏ đối chiếu EIA."""
+    """Tạo adapter; không lấy được EIA key thì bỏ đối chiếu EIA (chỉ là nguồn tham chiếu)."""
+    from .secret_store import SecretUnavailable, get_eia_api_key
     from .sources.eia import EIASource
     from .sources.nbp import NBPSource
     from .sources.yfinance_src import YFinanceSource
 
     sources: dict = {"yfinance": YFinanceSource()}
-    if os.getenv("EIA_API_KEY", "").strip():
-        sources["eia"] = EIASource(os.environ["EIA_API_KEY"].strip())
+    try:
+        sources["eia"] = EIASource(get_eia_api_key())
+    except SecretUnavailable as e:
+        log_.warning("INGEST_REFERENCE_FAILED source=eia skipped: %s", e)  # không in key
     return sources, NBPSource()
 
 
+def make_storage(dest: str, lake_dir: str = "data/lake"):
+    """local: thư mục lake_dir; s3: bucket config.lake_bucket(), tiền tố config.lake_prefix()."""
+    if dest == "local":
+        return storage.LocalStorage(lake_dir)
+    if dest == "s3":
+        from .config import lake_bucket, lake_prefix
+
+        return storage.S3Storage(lake_bucket(), root=lake_prefix())
+    raise ValueError(f"unknown dest {dest}")
+
+
+def run_ingest(
+    dest: str = "local",
+    lake_dir: str = "data/lake",
+    start: str | None = None,
+    use_nbp: bool = True,
+) -> RunResult:
+    """Điểm vào chung cho CLI và Lambda (src/data/lambda_ingest.py)."""
+    st = make_storage(dest, lake_dir)
+    sources, nbp = build_sources()
+    return run(st, sources, start=start, nbp_source=nbp if use_nbp else None)
+
+
+def dry_run(sources: dict, now: pd.Timestamp | None = None, sessions: int = 10) -> dict:
+    """Chỉ tải các mã chính (ASSETS) cho `sessions` phiên gần nhất, không ghi gì.
+    Trả về {symbol: {rows, first_date, last_date, error}} để kiểm tra nguồn có chặn IP không."""
+    now = pd.Timestamp.now(tz="UTC") if now is None else pd.Timestamp(now)
+    start = str((now - pd.Timedelta(days=sessions * 2 + 7)).date())
+    out: dict[str, dict] = {}
+    for spec in ASSETS.values():
+        ref = spec.primary
+        try:
+            bars = sources[ref.source].fetch(ref.symbol, start).bars.tail(sessions)
+            out[ref.symbol] = {
+                "rows": len(bars),
+                "first_date": str(bars.index.min().date()) if len(bars) else None,
+                "last_date": str(bars.index.max().date()) if len(bars) else None,
+                "error": None,
+            }
+        except Exception as e:  # noqa: BLE001 - báo lỗi từng mã, không dừng
+            out[ref.symbol] = {"rows": 0, "first_date": None, "last_date": None, "error": str(e)}
+    return out
+
+
 def summarize(report: dict) -> str:
-    if report.get("status") == "failed":
-        return f"FAILED: {report['failed_assets']}\nfetch_log: {report['fetch_log']}"
     lines = ["asset     rows   first       last        flags / rejected"]
     for a, r in report["assets"].items():
         lines.append(
@@ -261,17 +304,21 @@ def summarize(report: dict) -> str:
     errors = [x for x in report["run"]["fetch_log"] if x["status"] != "ok"]
     if errors:
         lines.append(f"fetch problems: {errors}")
+    for a, s in (report.get("stale_sources") or {}).items():
+        lines.append(f"STALE {a}: kept data up to {s['last_date']} ({s['status']})")
     fx = report.get("display_fx") or {}
     if fx:
+        pending = "pending_confirm" in str(fx["flag"])
         lines.append(
             f"display_fx: {fx['rate']:.0f} ({fx['rate_date']}) flag={fx['flag'] or '-'}"
-            + (f" pending {fx['pending_rate']:.0f} ({fx['pending_date']})" if fx["flag"] else "")
+            + (f" pending {fx['pending_rate']:.0f} ({fx['pending_date']})" if pending else "")
         )
     return "\n".join(lines)
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Trả về mã thoát: 0 = đã ghi clean, 1 = nguồn chính lỗi, không ghi clean."""
+    """Mã thoát: 0 = mọi nguồn chính OK; 1 = có nguồn chính lỗi (clean vẫn ghi, tài sản lỗi giữ
+    dữ liệu cũ với flag stale_source)."""
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--start", default=None, help="YYYY-MM-DD; bỏ trống = tải lại 5 phiên gần nhất")
     ap.add_argument("--dest", choices=["local", "s3"], default="local")
@@ -283,15 +330,7 @@ def main(argv: list[str] | None = None) -> int:
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     load_dotenv()
-    from .config import lake_bucket
-
-    st = (
-        storage.LocalStorage(args.lake_dir)
-        if args.dest == "local"
-        else storage.S3Storage(lake_bucket())
-    )
-    sources, nbp = build_sources()
-    res = run(st, sources, start=args.start, nbp_source=None if args.no_nbp else nbp)
+    res = run_ingest(args.dest, args.lake_dir, start=args.start, use_nbp=not args.no_nbp)
     print(summarize(res.report))
     print(f"\nwritten {len(res.written)} files; last: {res.written[-1] if res.written else '-'}")
     return 0 if res.ok else 1

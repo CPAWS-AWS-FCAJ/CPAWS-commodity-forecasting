@@ -108,6 +108,16 @@ def test_published_at_rules():
     assert ref["published_at"].iloc[0] == pd.Timestamp("2020-04-16 12:00", tz="UTC")
 
 
+def test_schedule_matches_published_at():
+    from src.data import config
+
+    days, hours = config.PUBLISHED_AT_RULES["yfinance"]
+    h, m = config.INGEST_SCHEDULE_UTC
+    assert days == 1 and (h, m) >= (hours, 0)  # chạy sau khi dữ liệu D được coi là có sẵn
+    assert (h - hours) * 60 + m <= 60  # nhưng không trễ hơn 1 giờ
+    assert config.INGEST_SCHEDULE_EXPRESSION == "cron(15 12 ? * TUE-SAT *)"
+
+
 def test_eia_holiday_row_is_only_marked():
     b = _bars(["2024-12-24", "2024-12-25", "2024-12-26"], [74, 74.5, 75])
     acc, rej = clean.bars_to_long(b, REFERENCES["rbrte"], "eia", NOW)
@@ -262,6 +272,36 @@ def test_roll_and_crosschecks():
     assert "roll" in _flags(wti_f, "2020-04-22")
     assert "xcheck_level" in _flags(wti_f, "2020-04-16")
     assert "xcheck_resid" in _flags(f[f["asset"] == "brent"], "2020-04-23")
+
+
+def _wti_rwtc(n, ratio_fn):
+    d = calendars.sessions("CME", "2025-01-02", None)[:n]
+    wti = [80.0] * n
+    rwtc = [80.0 / ratio_fn(i) for i in range(n)]
+    return d, _long("wti", d, wti), _long("rwtc", d, rwtc, "eia")
+
+
+def test_xcheck_level_uses_rolling_median_not_one():
+    # chênh lệch kỳ hạn 5% kéo dài: chỉ đánh dấu lúc mới chuyển, không đánh dấu cả giai đoạn
+    d, prices, refs = _wti_rwtc(150, lambda i: 1.0 if i < 60 else 1.05)
+    f = quality.apply_series_flags(prices, refs)
+    flagged = [_flags(f, x) for x in d]
+    n_flag = sum("xcheck_level" in s for s in flagged)
+    assert "xcheck_level" in flagged[60]  # ngày bắt đầu lệch
+    assert 0 < n_flag <= 31  # trung vị 60 phiên bắt kịp sau khoảng nửa cửa sổ
+    assert "xcheck_level" not in flagged[-1]
+    # lệch đột ngột một ngày giữa giai đoạn ổn định vẫn bị đánh dấu
+    d2, p2, r2 = _wti_rwtc(100, lambda i: 1.04 if i == 80 else 1.0)
+    f2 = quality.apply_series_flags(p2, r2)
+    assert [x for x in d2 if "xcheck_level" in _flags(f2, x)] == [d2[80]]
+
+
+def test_xcheck_level_is_causal():
+    d, prices, refs = _wti_rwtc(150, lambda i: 1.0 + 0.002 * (i % 7) + (0.06 if i > 100 else 0))
+    full = quality.wti_level_deviation(prices, refs)
+    cut = d[90]
+    part = quality.wti_level_deviation(prices[prices["date"] <= cut], refs[refs["date"] <= cut])
+    pd.testing.assert_series_equal(full[full.index <= cut], part)
 
 
 def test_known_source_error_excluded_from_crosscheck():
