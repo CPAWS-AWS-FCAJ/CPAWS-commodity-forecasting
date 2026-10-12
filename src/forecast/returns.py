@@ -2,6 +2,7 @@
 
 Mô hình CPAWS dự đoán log return h ngày (không dự đoán mức giá) để tránh "độ chính xác ảo".
 """
+
 from __future__ import annotations
 
 import math
