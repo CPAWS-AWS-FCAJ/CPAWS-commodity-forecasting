@@ -22,7 +22,8 @@ git init && git add . && git commit -m "chore: cpaws starter"
 git remote add origin <url> && git push -u origin main
 
 python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
-pip install -r requirements-dev.txt                 # requirements.txt chỉ có thư viện runtime
+python -m pip install --upgrade pip                 # pip cũ trên Windows có thể lỗi khi đọc requirements
+pip install -r requirements-dev.txt                 # requirements.txt chỉ có thư viện runtime (phiên bản đã cố định)
 pre-commit install && pre-commit autoupdate
 python -m pytest -q                                 # 15 test phải xanh
 cp .env.example .env                                # điền key thật, KHÔNG commit
