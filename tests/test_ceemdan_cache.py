@@ -1,13 +1,17 @@
 """Cache IMF CEEMDAN: layout, dùng lại, tiếp tục khi bị ngắt, cập nhật hằng ngày, nhân quả."""
 
 import json
+import os
+import subprocess
+import sys
+import zlib
 
 import numpy as np
 import pandas as pd
 
 from src.data import storage
 from src.features import ceemdan_cache as cc
-from src.forecast.decomposition import CeemdanConfig, causal_imf_windows
+from src.forecast.decomposition import CeemdanConfig, causal_imf_windows, noise_seed
 
 CFG = CeemdanConfig(window=64, keep_last=16, trials=3, seed=7)
 
@@ -37,7 +41,8 @@ def test_layout_and_row_schema(tmp_path):
     assert list(df.columns) == cc.COLUMNS
     r = df.iloc[0]
     assert len(r["imfs"]) == r["n_imf"] * r["keep_last"] and len(r["residue"]) == 16
-    assert r["seed_id"] == (pd.Timestamp(r["end_date"]) - pd.Timestamp("1970-01-01")).days
+    days = (pd.Timestamp(r["end_date"]) - pd.Timestamp("1970-01-01")).days
+    assert r["seed_id"] == days + zlib.crc32(b"gold")
     assert stats.computed == 30 and stats.reused == 0
 
 
@@ -52,7 +57,7 @@ def test_cached_values_equal_direct_computation(tmp_path):
         prices["price"].to_numpy(),
         np.array([70, 90, 139]),
         CFG,
-        seed_ids=np.array([cc.seed_id(d) for d in origins]),
+        seed_ids=np.array([cc.seed_id("gold", d) for d in origins]),
     )
     assert list(got_d) == list(origins)
     for a, b in zip(got, direct, strict=True):
@@ -138,3 +143,51 @@ def test_config_change_uses_separate_partition():
     # window là một chiều riêng của đường dẫn, không nằm trong cfg_hash
     w252 = CeemdanConfig(window=252, keep_last=16, trials=3, seed=7)
     assert w252.hash() == CFG.hash() and "window=252" in cc.prefix("gold", w252)
+
+
+def test_seed_formula_is_fixed_and_asset_specific():
+    d = pd.Timestamp("2016-03-01")
+    days = (d - pd.Timestamp("1970-01-01")).days
+    for a in ("gold", "silver", "brent", "wti"):
+        assert cc.seed_id(a, d) == days + zlib.crc32(a.encode())
+        assert (
+            noise_seed(CFG, cc.seed_id(a, d)) == (CFG.seed + days + zlib.crc32(a.encode())) % 2**32
+        )
+    seeds = {noise_seed(CFG, cc.seed_id(a, d)) for a in ("gold", "silver", "brent", "wti")}
+    assert len(seeds) == 4  # bốn tài sản cùng ngày không dùng chung bộ nhiễu
+    assert all(0 <= s < 2**32 for s in seeds)
+
+
+def test_seed_does_not_depend_on_python_hash_randomization():
+    code = (
+        "import pandas as pd; from src.features import ceemdan_cache as cc; "
+        "print(cc.seed_id('brent', pd.Timestamp('2017-05-02')))"
+    )
+    out = {
+        subprocess.run(
+            [sys.executable, "-c", code],
+            capture_output=True,
+            text=True,
+            check=True,
+            env={**os.environ, "PYTHONHASHSEED": h},
+        ).stdout.strip()
+        for h in ("1", "2", "random")
+    }
+    assert len(out) == 1
+
+
+def test_same_asset_date_bit_identical_and_assets_differ(tmp_path):
+    prices = _prices()
+    other = prices.assign(asset="silver")  # cùng chuỗi giá, khác tên tài sản
+    both = pd.concat([prices, other], ignore_index=True)
+    origin = pd.DatetimeIndex([prices["date"].iloc[100]])
+    st1, st2 = storage.LocalStorage(tmp_path / "a"), storage.LocalStorage(tmp_path / "b")
+    for st in (st1, st2):
+        cc.ensure(st, both, "gold", CFG, origin)
+        cc.ensure(st, both, "silver", CFG, origin)
+    g1 = cc.load(st1, "gold", CFG, origin[0], origin[0])[1][0]
+    g2 = cc.load(st2, "gold", CFG, origin[0], origin[0])[1][0]
+    s1 = cc.load(st1, "silver", CFG, origin[0], origin[0])[1][0]
+    np.testing.assert_array_equal(g1.imfs, g2.imfs)  # cùng (tài sản, ngày): giống hệt từng bit
+    np.testing.assert_array_equal(g1.residue, g2.residue)
+    assert not np.array_equal(g1.imfs, s1.imfs) or g1.n_imf != s1.n_imf  # khác bộ nhiễu

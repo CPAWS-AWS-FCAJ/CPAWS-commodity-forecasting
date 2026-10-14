@@ -15,6 +15,9 @@ Xử lý lỗi nguồn (theo từng tài sản):
   nên khoảng trống được bù và flag stale_source tự mất (dòng bị ghi đè theo khóa).
 - Nguồn tham chiếu (EIA, GC=F, SI=F, NBP) lỗi: log WARNING INGEST_REFERENCE_FAILED, giữ bản tham
   chiếu cũ, thoát mã 0.
+- quality.json có xcheck_skipped: các phiên chưa được đối chiếu với EIA, lý do source_unavailable
+  (EIA lỗi/thiếu key, log WARNING XCHECK_SKIPPED) hoặc reference_pending (EIA chưa công bố tới ngày
+  đó, trễ date+7; chỉ log INFO). Ngày chưa có tham chiếu không mang cờ xcheck_*.
 """
 
 from __future__ import annotations
@@ -217,6 +220,19 @@ def run(
     report = quality.build_report(prices, rejected, refs, factors, nbp, fx)
     report["status"] = "partial" if failed else "ok"
     report["stale_sources"] = stale
+    ref_status = {
+        x["asset"]: {"status": x["status"], "error": x.get("error", "")}
+        for x in log
+        if x["asset"] in REFERENCES
+    }
+    report["xcheck_skipped"] = quality.xcheck_skipped(prices, refs, ref_status)
+    for x in report["xcheck_skipped"]:
+        msg = "XCHECK_SKIPPED check=%s asset=%s reference=%s reason=%s last_reference_date=%s n=%s"
+        args = (x["check"], x["asset"], x["reference"], x["reason"], x["last_reference_date"])
+        if x["reason"] == "source_unavailable":
+            log_.warning(msg, *args, x["n_unchecked_sessions"])
+        else:
+            log_.info(msg, *args, x["n_unchecked_sessions"])
     report["run"] = {
         "run_at_utc": now.isoformat(timespec="seconds"),
         "start": start,
@@ -304,6 +320,11 @@ def summarize(report: dict) -> str:
     errors = [x for x in report["run"]["fetch_log"] if x["status"] != "ok"]
     if errors:
         lines.append(f"fetch problems: {errors}")
+    for x in report.get("xcheck_skipped") or []:
+        lines.append(
+            f"xcheck skipped: {x['check']} ({x['reference']}) {x['reason']}, "
+            f"{x['n_unchecked_sessions']} sessions after {x['last_reference_date']}"
+        )
     for a, s in (report.get("stale_sources") or {}).items():
         lines.append(f"STALE {a}: kept data up to {s['last_date']} ({s['status']})")
     fx = report.get("display_fx") or {}

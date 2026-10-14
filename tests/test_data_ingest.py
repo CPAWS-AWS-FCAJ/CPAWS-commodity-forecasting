@@ -178,6 +178,57 @@ def test_source_down_longer_than_refetch_window_then_backfilled(tmp_path):
     assert res.report["run"]["start"] <= "2020-05-21"  # tải lại từ phiên thứ 5 của tài sản cũ nhất
 
 
+def _skipped(report, check):
+    return next(x for x in report["xcheck_skipped"] if x["check"] == check)
+
+
+def test_eia_unavailable_marks_xcheck_skipped_and_warns(tmp_path, caplog):
+    st = storage.LocalStorage(tmp_path)
+    first = ingest_prices.run(st, _sources(), start="2020-03-02", now=NOW)
+    assert first.report["xcheck_skipped"] == []  # EIA đủ tới phiên cuối: không bỏ đối chiếu nào
+    no_eia = {"yfinance": YFinanceSource(FakeYF(end="2020-06-05"))}  # thiếu key / EIA lỗi
+    with caplog.at_level("WARNING", logger="cpaws.ingest"):
+        res = ingest_prices.run(st, no_eia, now=NEXT)
+    lvl = _skipped(res.report, "xcheck_level")
+    assert lvl["asset"] == "wti" and lvl["reference"] == "rwtc"
+    assert lvl["reason"] == "source_unavailable"
+    assert lvl["last_reference_date"] == "2020-05-28"
+    assert lvl["unchecked_from"] == "2020-05-29" and lvl["unchecked_to"] == "2020-06-04"
+    assert lvl["n_unchecked_sessions"] == 5
+    assert _skipped(res.report, "brent_vs_rbrte_level")["reason"] == "source_unavailable"
+    msgs = [r.getMessage() for r in caplog.records if r.levelname == "WARNING"]
+    assert any("XCHECK_SKIPPED" in m and "source_unavailable" in m for m in msgs)
+    # ngày chưa có tham chiếu không mang kết quả đối chiếu
+    w = res.prices[(res.prices["asset"] == "wti") & (res.prices["date"] > "2020-05-28")]
+    assert not any("xcheck_level" in split_flags(f) for f in w["flag"])
+    assert res.report["xcheck"]["wti_vs_rwtc_level"]["last_checked_date"] == "2020-05-28"
+    q = json.loads(st.read_bytes("clean/prices/dt=2020-06-05/quality.json"))
+    assert q["xcheck_skipped"][0]["reason"] == "source_unavailable"
+
+
+def test_no_eia_ever_reports_whole_history_unchecked(tmp_path):
+    st = storage.LocalStorage(tmp_path)
+    src = {"yfinance": YFinanceSource(FakeYF())}
+    res = ingest_prices.run(st, src, start="2020-03-02", now=NOW)
+    lvl = _skipped(res.report, "xcheck_level")
+    assert lvl["last_reference_date"] is None and lvl["unchecked_from"] == "2020-03-02"
+    assert "wti_vs_rwtc_level" not in res.report["xcheck"]
+
+
+def test_reference_pending_is_recorded_without_warning(tmp_path, caplog):
+    st = storage.LocalStorage(tmp_path)
+    src = {"yfinance": YFinanceSource(FakeYF()), "eia": FakeEIA(end="2020-05-20")}  # trễ date+7
+    with caplog.at_level("INFO", logger="cpaws.ingest"):
+        res = ingest_prices.run(st, src, start="2020-03-02", now=NOW)
+    lvl = _skipped(res.report, "xcheck_level")
+    assert lvl["reason"] == "reference_pending" and lvl["error"] == ""
+    assert lvl["last_reference_date"] == "2020-05-20" and lvl["unchecked_from"] == "2020-05-21"
+    assert not [
+        r for r in caplog.records if r.levelname == "WARNING" and "XCHECK" in r.getMessage()
+    ]
+    assert any("XCHECK_SKIPPED" in r.getMessage() for r in caplog.records)  # chỉ ghi INFO
+
+
 def test_stale_vnd_marks_display_fx(tmp_path):
     st = storage.LocalStorage(tmp_path)
     ingest_prices.run(st, _sources(), start="2020-03-02", now=NOW)
