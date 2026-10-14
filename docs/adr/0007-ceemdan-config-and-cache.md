@@ -38,12 +38,18 @@ ADR-0001 chọn CEEMDAN theo cửa sổ kết thúc tại mỗi ngày gốc. Th�
 1. `decompose_window` dùng `CEEMDAN(trials, epsilon, parallel=False)`. Song song chỉ ở tầng ngoài.
 2. **Định dạng (b)**: `causal_imf_windows` trả về danh sách `WindowIMF(origin, imfs[n_imf, keep_last], residue[keep_last])`.
    - Mỗi cửa sổ giữ `keep_last = 128` điểm cuối, đủ cho `seq_len` 30–120.
+   - **Ràng buộc: `seq_len` ≤ `keep_last` (128)** (bổ sung 12/10/2026). `fixed_imf_matrix` báo `ValueError` nếu vượt. Nếu K3 muốn `seq_len` > 128 thì phải tăng `keep_last`; khi đó `cfg_hash` đổi và phải tính lại **toàn bộ** cache (khoảng 1,8 giờ cho 2014–2019 với 8 tiến trình). Nên chốt khoảng `seq_len` cần thử trước khi chạy cache đầy đủ.
    - `fixed_imf_matrix(windows, max_imf=K, seq_len)` ghép thành `(n, seq_len, K+1)`: IMF1..K, cột cuối là residue cộng phần đuôi, nên residue luôn ở cột cuối. Cửa sổ có ít hơn K IMF thì các cột thiếu bằng 0.
-3. **Noise seed = `seed` + số ngày từ 1970-01-01 tới ngày cuối cửa sổ** (`seed_ids` trong `causal_imf_windows`). Seed không phụ thuộc vị trí dòng.
+3. **Noise seed = (`seed` + `seed_id`) mod 2³²**, với `seed_id` = số ngày từ 1970-01-01 tới ngày cuối cửa sổ + `zlib.crc32(tên tài sản)` (`ceemdan_cache.seed_id`, `decomposition.noise_seed`). Sửa ngày 12/10/2026:
+   - Công thức cố định, không dùng `hash()` của Python (đổi theo `PYTHONHASHSEED`); có test chạy với nhiều `PYTHONHASHSEED`.
+   - Có tên tài sản nên bốn tài sản cùng ngày không dùng chung một bộ nhiễu (tránh tương quan giả giữa IMF các tài sản).
+   - Lấy mod 2³² vì `RandomState` của PyEMD chỉ nhận seed trong 0..2³²−1.
+   - Seed không phụ thuộc vị trí dòng.
+   - Cách tạo seed nằm trong `cfg_hash` (`SEED_SCHEME`), nên cache tính theo cách cũ (chỉ có ngày) nằm ở partition khác và không bị dùng nhầm.
 4. **Cache** (`src/features/ceemdan_cache.py`, chạy bằng `scripts/build_ceemdan_cache.py`):
    - Đường dẫn: `features/ceemdan/asset=<asset>/window=<window>/cfg=<cfg_hash>/month=YYYY-MM.parquet`, kèm `config.json`. Bố cục giống hệt trên `s3://cpaws-<env>-lake/`.
    - Khóa mỗi dòng: asset, window, `cfg_hash`, `end_date`. Ngoài ra lưu `price_hash`, là sha256 của các giá float64 trong cửa sổ.
-   - `cfg_hash` gồm trials, epsilon, seed, `keep_last`, phiên bản PyEMD và numpy. Đổi bất kỳ giá trị nào thì cache nằm ở partition mới.
+   - `cfg_hash` gồm trials, epsilon, seed, `keep_last`, cách tạo seed (`SEED_SCHEME`), phiên bản PyEMD và numpy. Đổi bất kỳ giá trị nào thì cache nằm ở partition mới.
    - Ghi theo tháng: bị ngắt thì chạy lại sẽ tiếp tục từ tháng chưa xong (file hỏng coi như chưa có).
    - Cập nhật hằng ngày (`update_recent`): tính các cửa sổ mới; với cửa sổ kết thúc trong 5 phiên gần nhất, so `price_hash` và tính lại nếu giá trong cửa sổ đã đổi. Muốn kiểm lại toàn bộ thì chạy `--verify`.
    - Cửa sổ tính theo **dòng giá được giữ** của tài sản (prices.parquet), không theo lịch sàn.
@@ -55,8 +61,9 @@ ADR-0001 chọn CEEMDAN theo cửa sổ kết thúc tại mỗi ngày gốc. Th�
 - **Brent với cửa sổ 504**: Brent chỉ có 486 dòng giá trong 2012–2013, vì thiếu các phiên ngay sau ngày đáo hạn theo lịch ICE cũ (ADR-0005). Vì vậy 17 ngày gốc đầu 2014 không có đủ 504 dòng lịch sử và bị bỏ (`skipped_no_history`). Vàng, bạc, WTI mỗi tài sản mất 1 ngày (02/01/2014). Nhóm **chấp nhận** việc mất các ngày này; khi so 252 với 504 trên cùng tập ngày gốc, phải loại các ngày này ở cả hai.
 - **Tái lập**: trên cùng nền tảng, kết quả giống hệt từng bit (có test). Giữa Windows (máy local) và Linux (Lambda, SageMaker) chỉ so theo dung sai `atol = 1e-10`, vì libm và thứ tự phép tính dấu phẩy động có thể khác. Cache dựng ở máy local vẫn dùng được với cửa sổ mới tính trong Lambda.
 - **Thời gian**, đo trên máy 16 luồng với 8 tiến trình và trials 100 (chạy thử vàng 01–03/2014): 0,45 s mỗi cửa sổ với độ dài 252, 0,63 s với 504. Cache 2014–2019 cho 4 tài sản × 2 độ dài (khoảng 12.000 cửa sổ) mất khoảng **1,8 giờ**, dung lượng khoảng 95 MB (khoảng 8 KB mỗi cửa sổ).
+  - **Chạy thật 12/10/2026** (`cfg_hash` 4c3229533ae3, seed theo ngày + tài sản): **84 phút**, 12.057 cửa sổ, khoảng 92 MB. Trung bình 0,33 s mỗi cửa sổ với độ dài 252 và 0,48–0,53 s với 504. Ước tính ban đầu cao hơn vì lần chạy thử chỉ có 3 tháng, nên chi phí khởi động chiếm tỷ lệ lớn.
 - **Cập nhật hằng ngày**: 4 tài sản × 2 độ dài = 8 cửa sổ, chạy tuần tự khoảng 20 s trên máy local. Cần đo lại trong Lambda.
 - **Rủi ro**:
   - Giá cũ hơn 5 phiên bị sửa thì cache không tự phát hiện; cần chạy `--verify` định kỳ (ví dụ trong lần retrain hằng tuần).
-  - Đổi phiên bản PyEMD hay numpy làm đổi `cfg_hash` và buộc tính lại toàn bộ, nên cần ghim phiên bản trong ảnh container.
+  - **Cache phụ thuộc phiên bản numpy và EMD-signal (PyEMD) qua `cfg_hash`** (bổ sung 12/10/2026). Hai thư viện này đã cố định trong `requirements.txt` (`numpy==2.4.6`, `EMD-signal==1.10.0`); máy local, CI và ảnh container phải cài đúng các bản đó. Muốn nâng một trong hai thư viện thì phải lên kế hoạch tính lại toàn bộ cache (khoảng 1,8 giờ cho 2014–2019 với 8 tiến trình, nhiều hơn khi có thêm 2020 → nay), và không nâng trong tuần có retrain hay demo.
 - Cập nhật skill `leakage-safe-forecasting` (mục tham số mặc định) cho khớp API mới.
