@@ -386,6 +386,7 @@ def xcheck_report(prices: pd.DataFrame, refs: pd.DataFrame) -> dict:
         dev = wti_level_deviation(prices, refs).abs() > XCHECK_WTI_LEVEL
         out["wti_vs_rwtc_level"] = {
             "n_common": len(ratio),
+            "last_checked_date": str(ratio.index.max().date()),
             "median_pct": round(float(pct.median()), 3),
             "abs_median_pct": round(float(pct.abs().median()), 3),
             "days_gt_3pct_vs_1": int((pct.abs() > XCHECK_WTI_LEVEL * 100).sum()),
@@ -411,10 +412,55 @@ def xcheck_report(prices: pd.DataFrame, refs: pd.DataFrame) -> dict:
         pct = (j["f"] / j["s"] - 1) * 100
         out["brent_vs_rbrte_level"] = {
             "n_common": len(j),
+            "last_checked_date": str(j.index.max().date()),
             "median_pct_by_year": {
                 k: round(float(v), 2) for k, v in _by_year(pct, np.median).items()
             },
         }
+    return out
+
+
+# Đối chiếu dùng nguồn tham chiếu EIA: (tên đối chiếu, tài sản, chuỗi tham chiếu)
+EIA_CHECKS = [("xcheck_level", "wti", "rwtc"), ("brent_vs_rbrte_level", "brent", "rbrte")]
+
+
+def xcheck_skipped(
+    prices: pd.DataFrame, refs: pd.DataFrame, ref_status: dict[str, dict]
+) -> list[dict]:
+    """Các phiên chưa được đối chiếu với EIA, kèm lý do. Đối chiếu chỉ chạy trên ngày có cả giá và
+    tham chiếu, nên ngày thiếu tham chiếu không có cờ: danh sách này cho biết đó là "chưa đối
+    chiếu", không phải "đối chiếu không thấy lệch".
+
+    ref_status: {ref: {"status": "ok" | "source_unavailable" | "error" | "empty", "error": ...}}
+    của lần chạy này. Lý do:
+      source_unavailable  nguồn EIA lỗi hoặc thiếu key (ingest log WARNING)
+      reference_pending   EIA chạy bình thường nhưng chưa công bố tới các ngày này (trễ date+7)
+    """
+    out = []
+    for check, asset, ref in EIA_CHECKS:
+        price_dates = _series(prices, asset).index
+        if price_dates.empty:
+            continue
+        ref_dates = _series(refs, ref, EXCLUDE_REF).index
+        last_ref = ref_dates.max() if len(ref_dates) else None
+        unchecked = price_dates if last_ref is None else price_dates[price_dates > last_ref]
+        st = ref_status.get(ref, {})
+        unavailable = st.get("status", "ok") != "ok"
+        if not unavailable and unchecked.empty:
+            continue
+        out.append(
+            {
+                "check": check,
+                "asset": asset,
+                "reference": ref,
+                "reason": "source_unavailable" if unavailable else "reference_pending",
+                "error": st.get("error", "") if unavailable else "",
+                "last_reference_date": str(last_ref.date()) if last_ref is not None else None,
+                "unchecked_from": str(unchecked.min().date()) if len(unchecked) else None,
+                "unchecked_to": str(unchecked.max().date()) if len(unchecked) else None,
+                "n_unchecked_sessions": len(unchecked),
+            }
+        )
     return out
 
 

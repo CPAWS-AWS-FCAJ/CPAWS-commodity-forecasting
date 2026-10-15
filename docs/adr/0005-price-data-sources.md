@@ -60,6 +60,10 @@ Không có nguồn dự phòng. Lỗi nguồn xử lý **theo từng tài sản*
 - Lần chạy thành công sau đó tải lại từ phiên thứ 5 tính từ cuối của tài sản cũ nhất, nên khoảng trống được bù và `stale_source` tự mất.
 - Nếu USD/VND lỗi, tỷ giá hiển thị cũng mang `stale_source`.
 - Nguồn tham chiếu (EIA, GC=F, SI=F, NBP) lỗi chỉ log `WARNING INGEST_REFERENCE_FAILED`, giữ bản tham chiếu cũ, thoát mã 0.
+- **`xcheck_skipped` trong `quality.json`** (bổ sung 12/10/2026): đối chiếu với EIA chỉ chạy trên ngày có cả giá lẫn tham chiếu, nên ngày thiếu tham chiếu không có cờ. Để không nhầm "chưa đối chiếu" với "đối chiếu không thấy lệch", mỗi phép đối chiếu (`xcheck_level` với RWTC, mức giá Brent với RBRTE) ghi tài sản, lý do, ngày cuối có tham chiếu và khoảng ngày chưa đối chiếu. Hai lý do:
+  - `source_unavailable`: EIA lỗi hoặc thiếu key; log `WARNING XCHECK_SKIPPED`.
+  - `reference_pending`: EIA chạy bình thường nhưng chưa công bố tới các ngày đó (trễ date+7); chỉ ghi nhận, log mức INFO.
+  `xcheck` trong `quality.json` cũng ghi `last_checked_date`.
 
 Lớp adapter (`src/data/sources/`) cho phép thay nguồn mà không phải sửa phần clean và quality.
 

@@ -9,7 +9,9 @@ Mỗi dòng Parquet là một cửa sổ, khóa (asset, window, cfg_hash, end_da
   pyemd_version, numpy_version, platform
 cfg_hash = CeemdanConfig.hash() (trials, epsilon, seed, keep_last, phiên bản PyEMD và numpy).
 price_hash = sha256 của `window` giá float64 trong cửa sổ: giá trong cửa sổ đổi thì tính lại.
-seed_id = số ngày từ 1970-01-01 tới end_date: không phụ thuộc vị trí dòng trong chuỗi.
+seed_id = số ngày từ 1970-01-01 tới end_date + zlib.crc32(tên tài sản); noise seed của PyEMD là
+  (cfg.seed + seed_id) % 2**32. Không phụ thuộc vị trí dòng trong chuỗi, không dùng hash() của
+  Python; bốn tài sản cùng ngày dùng bộ nhiễu khác nhau.
 
 Chuỗi giá là các dòng được giữ trong prices.parquet của tài sản (cửa sổ tính theo dòng, không theo
 lịch). Cửa sổ chỉ dùng dữ liệu tới end_date (causal_imf_windows).
@@ -22,6 +24,7 @@ from __future__ import annotations
 
 import hashlib
 import platform
+import zlib
 from collections.abc import Callable
 from dataclasses import asdict, dataclass, field
 
@@ -68,8 +71,9 @@ def prefix(asset: str, cfg: CeemdanConfig) -> str:
     return f"{PREFIX}/asset={asset}/window={cfg.window}/cfg={cfg.hash()}"
 
 
-def seed_id(d: pd.Timestamp) -> int:
-    return int((pd.Timestamp(d) - _EPOCH).days)
+def seed_id(asset: str, d: pd.Timestamp) -> int:
+    """Số ngày từ 1970-01-01 tới d cộng crc32 của tên tài sản (cố định giữa các tiến trình)."""
+    return int((pd.Timestamp(d) - _EPOCH).days) + zlib.crc32(asset.encode("utf-8"))
 
 
 def price_hash(values: np.ndarray) -> str:
@@ -126,7 +130,7 @@ def _rows(asset, cfg, dates, values, windows: list[WindowIMF]) -> pd.DataFrame:
                 "asset": asset,
                 "window": cfg.window,
                 "end_date": dates[t],
-                "seed_id": seed_id(dates[t]),
+                "seed_id": seed_id(asset, dates[t]),
                 "cfg_hash": cfg.hash(),
                 "price_hash": price_hash(values[t - cfg.window + 1 : t + 1]),
                 "n_imf": w.n_imf,
@@ -198,7 +202,7 @@ def ensure(
             todo,
             cfg,
             processes=processes,
-            seed_ids=np.array([seed_id(dates[t]) for t in todo]),
+            seed_ids=np.array([seed_id(asset, dates[t]) for t in todo], dtype=np.int64),
             pool=pool,
         )
         new = _rows(asset, cfg, dates, values, wins)

@@ -31,6 +31,9 @@ import numpy as np
 from PyEMD import CEEMDAN
 
 PYEMD_VERSION = version("EMD-signal")
+# Cách tạo noise seed; đổi cách tính thì đổi chuỗi này để cfg_hash đổi theo (cache cũ không bị dùng
+# nhầm). v2 (12/10/2026): seed_id = số ngày tới ngày cuối cửa sổ + crc32(tên tài sản).
+SEED_SCHEME = "v2-days-plus-crc32-asset"
 
 
 @dataclass(frozen=True)
@@ -38,7 +41,7 @@ class CeemdanConfig:
     window: int = 512  # điểm mỗi lần decompose; chưa chốt (252/504), chọn ở K3 trên validation 2019
     trials: int = 20  # kích thước ensemble CEEMDAN
     epsilon: float = 0.005  # biên độ nhiễu (mặc định PyEMD)
-    seed: int = 42  # noise seed = seed + seed_id của từng cửa sổ
+    seed: int = 42  # noise seed = (seed + seed_id) % 2**32 của từng cửa sổ
     keep_last: int = 128  # số điểm cuối cửa sổ được giữ; phải >= mọi seq_len sẽ thử (30–120)
 
     def hash(self) -> str:
@@ -46,7 +49,7 @@ class CeemdanConfig:
         phiên bản PyEMD, numpy: đổi bất kỳ thứ gì trong đây thì cache cũ không dùng được."""
         d = asdict(self)
         d.pop("window")
-        d.update(pyemd=PYEMD_VERSION, numpy=np.__version__)
+        d.update(pyemd=PYEMD_VERSION, numpy=np.__version__, seed_scheme=SEED_SCHEME)
         return hashlib.sha256(json.dumps(d, sort_keys=True).encode()).hexdigest()[:12]
 
 
@@ -72,12 +75,18 @@ def _make_ceemdan(cfg: CeemdanConfig) -> CEEMDAN:
     return CEEMDAN(trials=cfg.trials, epsilon=cfg.epsilon, parallel=False)
 
 
+def noise_seed(cfg: CeemdanConfig, seed_id: int) -> int:
+    """Seed của RandomState trong PyEMD: (cfg.seed + seed_id) % 2**32 (RandomState chỉ nhận
+    0..2**32-1). Công thức cố định, không dùng hash() của Python (đổi theo PYTHONHASHSEED)."""
+    return (int(cfg.seed) + int(seed_id)) % 2**32
+
+
 def decompose_window(
     window_values: np.ndarray, cfg: CeemdanConfig, seed_id: int, origin: int = -1
 ) -> WindowIMF:
     """Decompose một cửa sổ (đầy đủ, max_imf=-1); giữ keep_last điểm cuối."""
     c = _make_ceemdan(cfg)
-    c.noise_seed(cfg.seed + int(seed_id))
+    c.noise_seed(noise_seed(cfg, seed_id))
     comp = c(np.asarray(window_values, dtype=float), max_imf=-1)  # dòng cuối là residue
     k = cfg.keep_last
     return WindowIMF(int(origin), comp[:-1, -k:].copy(), comp[-1, -k:].copy())

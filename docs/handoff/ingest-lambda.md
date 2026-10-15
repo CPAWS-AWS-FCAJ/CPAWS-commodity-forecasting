@@ -80,11 +80,11 @@ Chạy lại trong cùng ngày thì ghi đè đúng các file đó (idempotent).
   - Các tài sản khác vẫn cập nhật và bản clean mới vẫn được ghi; tài sản lỗi giữ dữ liệu cũ với `flag=stale_source`.
   - Handler log dòng `ERROR INGEST_SOURCE_FAILED asset=... symbol=...`, rồi **raise `IngestSourceFailed`**, nên Lambda tính là lỗi (metric `Errors`). Handler không dùng `sys.exit`.
   - Lần chạy thành công sau đó tự tải bù khoảng trống (có test với trường hợp nguồn lỗi 7 phiên liên tiếp).
-- **Nguồn tham chiếu lỗi** (EIA, GC=F, SI=F, NBP): chỉ log `WARNING INGEST_REFERENCE_FAILED`, Lambda vẫn trả về thành công.
+- **Nguồn tham chiếu lỗi** (EIA, GC=F, SI=F, NBP): chỉ log `WARNING INGEST_REFERENCE_FAILED`, Lambda vẫn trả về thành công. Thiếu EIA thì `quality.json` có `xcheck_skipped` với `reason = source_unavailable`, kèm log `WARNING XCHECK_SKIPPED`. Mục `reference_pending` (EIA trễ date+7) là bình thường, không cần cảnh báo.
 - **Alarm đề xuất** (stack `CpawsOps`):
   1. `AWS/Lambda Errors` của hàm ingest ≥ 1 trong 1 ngày.
   2. Metric filter trên log group với mẫu `INGEST_SOURCE_FAILED`, alarm khi ≥ 1. Alarm này cho biết tài sản nào bị lỗi.
-  3. (Tùy chọn) Metric filter `INGEST_REFERENCE_FAILED`, chỉ để theo dõi, không cần báo động.
+  3. (Tùy chọn) Metric filter `INGEST_REFERENCE_FAILED` hoặc `XCHECK_SKIPPED ... source_unavailable`, để biết khi mất đối chiếu EIA (không cần báo động gấp).
 - **Retry**: chạy lại trong cùng ngày là an toàn (ghi đè theo khóa). Nên giới hạn retry của lần gọi bất đồng bộ (ví dụ 1 lần) để không tải Yahoo nhiều lần khi nguồn đang lỗi. Cần kiểm tra cả retry policy của Scheduler lẫn cấu hình async invocation của Lambda trong tài liệu AWS khi viết CDK.
 
 ## 7. Bộ nhớ và thời gian (đo ở local 11/10/2026)

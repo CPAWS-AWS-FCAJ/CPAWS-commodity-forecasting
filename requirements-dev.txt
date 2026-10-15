@@ -1,10 +1,11 @@
-# Môi trường phát triển: thư viện runtime + test, lint, EDA và thí nghiệm.
+# Development environment: runtime libraries + test, lint, EDA and experiments.
+# Keep this file ASCII-only: old pip on Windows reads it as cp1252.
 -r requirements.txt
 
-pytest>=8.0
-ruff>=0.6
+pytest==9.1.1
+ruff==0.16.10            # same version as CI, so format/lint results match
 pre-commit>=3.7
-matplotlib>=3.8          # scripts/eda_prices.py, hình cho báo cáo và slide
-scipy>=1.11              # scripts/eda_prices.py (thống kê mô tả)
-moto[s3]>=5.0            # test ghi S3 không gọi AWS thật (tests/test_lambda_ingest.py)
-psutil>=5.9              # scripts/measure_ingest.py (bộ nhớ đỉnh)
+matplotlib>=3.8          # scripts/eda_prices.py, report and slide figures
+scipy>=1.11              # scripts/eda_prices.py (descriptive statistics)
+moto[s3]>=5.0            # S3 tests without calling AWS (tests/test_lambda_ingest.py)
+psutil>=5.9              # scripts/measure_ingest.py (peak memory)
