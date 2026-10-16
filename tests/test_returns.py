@@ -8,14 +8,14 @@ from src.forecast import metrics, returns
 
 def test_horizon_log_returns_basic_and_tail_nan():
     p = np.array([100.0, 110.0, 121.0, 133.1])
-    r = returns.horizon_log_returns(p, 1)
+    r = returns.horizon_log_returns(p, 1, assume_aligned=True)
     assert np.allclose(r[:3], math.log(1.1))
     assert np.isnan(r[-1])
 
 
 def test_horizon_log_returns_nonpositive_price_is_nan():
     p = np.array([20.0, -37.63, 10.0, 12.0])  # kiểu WTI tháng 4/2020
-    r = returns.horizon_log_returns(p, 1)
+    r = returns.horizon_log_returns(p, 1, assume_aligned=True)
     assert np.isnan(r[0]) and np.isnan(r[1])
     assert r[2] == pytest.approx(math.log(1.2))
 
@@ -23,8 +23,8 @@ def test_horizon_log_returns_nonpositive_price_is_nan():
 def test_target_does_not_change_when_future_appended():
     rng = np.random.default_rng(0)
     p = 100 * np.exp(np.cumsum(rng.normal(0, 0.01, 300)))
-    short = returns.horizon_log_returns(p[:200], 3)
-    long = returns.horizon_log_returns(p, 3)
+    short = returns.horizon_log_returns(p[:200], 3, assume_aligned=True)
+    long = returns.horizon_log_returns(p, 3, assume_aligned=True)
     assert np.allclose(short[:197], long[:197])
 
 
