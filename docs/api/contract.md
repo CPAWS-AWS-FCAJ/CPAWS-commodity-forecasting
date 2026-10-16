@@ -1,8 +1,8 @@
 # Hợp đồng dữ liệu API dự báo (MVP)
 
-- Ngày: 2026-10-16
-- Trạng thái: Đề xuất
-- Người viết: Khải; góp ý: Long (bản "Chốt target, phân vị và đánh giá mô hình" và "Đánh giá các metric trong metrics.py", 15/10)
+- Ngày: 2026-10-16 (cập nhật theo review của Long trên PR #6)
+- Trạng thái: Đề xuất (chốt cùng ADR-0008 sau buổi họp 16/10)
+- Người viết: Khải; góp ý: Long (bản "Chốt target, phân vị và đánh giá mô hình" và "Đánh giá các metric trong metrics.py", 15/10; review PR #6)
 - Người dùng: Tuấn (API, Cognito), Tiến (web, Lambda `predict`), Long (DLinear), Phước (tool `get_forecast` của chatbot)
 
 File này là nguồn chuẩn cho định dạng bảng `Forecasts` và JSON trả về. Muốn đổi một trường thì sửa file này qua PR trước, rồi mới sửa code.
@@ -13,8 +13,9 @@ File này là nguồn chuẩn cho định dạng bảng `Forecasts` và JSON tr�
 |---|---|
 | Mã tài sản | `gold`, `silver`, `brent`, `wti` |
 | Chuỗi dùng làm target | `gold` → GLD, `silver` → SLV, `brent` → BZ=F, `wti` → CL=F |
-| Target | Log return h phiên giao dịch của chuỗi target, h = 1–7; giá ≤ 0 cho NaN |
+| Target | Log return h phiên giao dịch của chuỗi target, h = 1–7; t + h là phiên thứ h sau t theo lịch giao dịch của tài sản (không theo vị trí dòng); NaN khi không có giá hợp lệ tại t hoặc t + h (chi tiết: ADR-0008 mục 1) |
 | Mức phân vị lưu và trả về | 0.05, 0.10, 0.25, 0.50, 0.75, 0.90, 0.95 (luôn theo thứ tự này, không giảm) |
+| Chuẩn hóa phân vị | Một lần duy nhất bằng `normalize_quantiles()` ngay sau khi mô hình xuất kết quả; `prob_up`, giá quy đổi và bản ghi đều dùng bộ phân vị đã chuẩn hóa này (ADR-0008 mục 2) |
 | Phân vị web hiển thị | 0.10, 0.50, 0.90 (khoảng danh nghĩa 80%) |
 | Xác suất tăng | Nội suy tuyến tính giữa các phân vị, kẹp trong [0.05, 0.95]; là phép xấp xỉ, chưa hiệu chỉnh |
 | `base_date` | Ngày có giá cuối cùng của tài sản (không phải ngày chạy), `YYYY-MM-DD` |
@@ -57,7 +58,9 @@ Mỗi phần tử của `horizons`:
 | `q` | L of N | 7 log return theo đúng thứ tự `quantile_levels`, đã sắp xếp không giảm |
 | `prob_up` | N | Xác suất giá tăng, trong [0.05, 0.95] |
 
-`predict` phải sắp xếp lại các phân vị trước khi ghi nếu mô hình trả ra phân vị cắt nhau, và ghi log số lần phải sắp xếp (dùng cho chỉ số "tỷ lệ phân vị cắt nhau").
+`predict` gọi `normalize_quantiles()` đúng một lần ngay sau khi mô hình xuất kết quả, ghi log số lần phải sắp xếp trước khi sửa (chỉ số "tỷ lệ phân vị cắt nhau"), rồi mới tính `prob_up`, giá và ghi bản ghi. `prob_up()`, `quantiles_to_prices()` và `to_forecast_record()` không tự sửa phân vị: chúng báo lỗi nếu đầu vào không giảm.
+
+Nếu cửa sổ input mới nhất của một tài sản có giá thiếu hoặc bị loại, `predict` không ghi bản ghi mới cho tài sản đó; bản ghi cũ giữ nguyên.
 
 ## Endpoint
 
@@ -132,20 +135,22 @@ Lỗi: `400 invalid_asset` (mã tài sản sai), `400 invalid_date`, `404 not_fo
 
 ### Thêm sau
 
-**`GET /accuracy/{asset}`** (tuần 3, Long). Chỉ số tính trên 8 tuần gần nhất, riêng từng h, theo bộ chỉ số trong bản đánh giá của Long:
+**`GET /accuracy/{asset}`** (tuần 3, Long). Chỉ số tính trên 8 tuần gần nhất, riêng từng h, trên log return. Công thức, mốc 252 phiên và quy tắc dữ liệu hợp lệ nằm ở ADR-0008 mục 4–5; API chỉ trả kết quả:
 
 | Trường | Ý nghĩa | Vai trò |
 |---|---|---|
-| `pinball_skill` | 1 − pinball(mô hình) / pinball(mốc 252 phiên) | Chỉ số chính |
-| `quantile_hit_rates` | Tỷ lệ giá thực tế nằm dưới từng phân vị (7 giá trị, so với 0.05…0.95) | Kiểm tra hiệu chỉnh |
-| `coverage_80`, `width_80` | Độ phủ và độ rộng trung bình của khoảng [q10, q90] | Hiển thị trên web |
-| `interval_score_80` | Interval score của khoảng 80% | Kiểm tra hiệu chỉnh |
-| `brier_skill` | Brier skill score của `prob_up` so với tần suất tăng 252 phiên | Xác suất tăng |
-| `mae_ratio_vs_naive` | MAE của q50 / MAE của naive (return = 0) trên cùng giai đoạn | Báo cáo phụ |
-| `sign_accuracy`, `up_rate` | Tỷ lệ đúng chiều, luôn đi cùng tỷ lệ tăng thực tế | Báo cáo phụ |
-| `n_obs` | Số điểm dùng để tính | |
+| `pinball_skill` | 1 − PL(mô hình) / PL(mốc 252 phiên); PL = pinball loss trung bình đều trên 7 phân vị | Chỉ số chính |
+| `quantile_hit_rates` | Với từng mức τ: tỷ lệ log return thực tế nằm dưới phân vị dự báo q_τ (7 giá trị, so với 0.05…0.95) | Kiểm tra hiệu chỉnh |
+| `coverage_80` | Tỷ lệ log return thực tế nằm trong [q10, q90] | Hiển thị trên web |
+| `width_80` | Độ rộng trung bình q90 − q10, đơn vị log return | Đi kèm `coverage_80` |
+| `interval_score_80` | Interval score của khoảng [q10, q90], α = 0,2 | Kiểm tra hiệu chỉnh |
+| `brier_skill` | 1 − BS(mô hình) / BS(tần suất tăng 252 phiên); kèm `brier_skill_vs_half` so với hằng số 0,5 | Xác suất tăng |
+| `mae_ratio_vs_naive` | MAE của q50 / MAE của naive (return = 0) trên cùng tập điểm | Báo cáo phụ |
+| `sign_accuracy` | Tỷ lệ dấu của q50 trùng dấu log return thực tế (bỏ điểm bằng 0) | Báo cáo phụ |
+| `up_rate` | Tỷ lệ log return thực tế dương | Luôn đi cùng `sign_accuracy` |
+| `n_obs` | Số điểm hợp lệ thực sự dùng, theo từng chỉ số | |
 
-Không dùng RMSE, không tính sai số trên mức giá, không gọi tỷ lệ MAE là "MASE". Mốc 252 phiên chỉ dùng các return đã hoàn tất trước thời điểm dự báo.
+Mọi chỉ số dùng cùng một quy tắc lọc dữ liệu hợp lệ (ADR-0008 mục 5). Không dùng RMSE, không tính sai số trên mức giá, không gọi tỷ lệ MAE là "MASE". Mốc 252 phiên chỉ dùng các return đã hoàn tất trước thời điểm dự báo.
 
 **`POST /chat`** (tuần 4, Phước): hỏi đáp; giới hạn lượt hỏi theo người dùng mỗi ngày.
 
