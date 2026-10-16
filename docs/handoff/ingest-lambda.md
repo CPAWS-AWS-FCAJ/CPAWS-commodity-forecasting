@@ -1,8 +1,9 @@
 # Bàn giao: Lambda `ingest` (giá vàng, bạc, dầu, USD/VND)
 
-- Người viết: Trịnh Tiến Khải, 11/10/2026; cập nhật 15/10/2026 (image container dựng sẵn).
+- Người viết: Trịnh Tiến Khải, 11/10/2026; cập nhật 15/10/2026 (image container dựng sẵn), 17/10/2026 (ghim digest base image, mục 2.6).
 - Người nhận: Châu Trần Mạnh Tiến (CDK, stack `CpawsData`). Người review IAM: Huỳnh Ngọc Tuấn.
-- Code đã chạy và có test ở local (moto cho S3). **Image `docker/ingest/Dockerfile` đã build và chạy thử bằng RIE ở local** (mục 2). Chưa đẩy lên ECR, chưa tạo tài nguyên AWS. Image và Dockerfile là bản nháp để Tiến review; hạ tầng chính thức vẫn viết bằng CDK.
+- Code đã chạy và có test ở local (moto cho S3). **Image `docker/ingest/Dockerfile` đã build và chạy thử bằng RIE ở local** (mục 2). Hạ tầng chính thức vẫn viết bằng CDK.
+- **Image `cpaws-dev-ingest:286846a` trên ECR build trước khi ghim digest base, KHÔNG dùng để deploy.** Tiến build lại từ commit có Dockerfile đã ghim (mục 2.6).
 - Nguồn và quy tắc dữ liệu: ADR-0005.
 
 ## 1. Entrypoint và đóng gói
@@ -10,7 +11,7 @@
 | Mục | Giá trị |
 |---|---|
 | Handler | `src.data.lambda_ingest.handler` |
-| Runtime | Python 3.12, base image `public.ecr.aws/lambda/python:3.12` (Amazon Linux 2023). Lý do ở mục 2.1 |
+| Runtime | Python 3.12, base image `public.ecr.aws/lambda/python:3.12` (Amazon Linux 2023), ghim digest trong `FROM` (mục 2.6). Lý do chọn 3.12 ở mục 2.1 |
 | Thư viện | **`requirements-ingest.txt`** (không dùng `requirements.txt`): numpy, pandas, pyarrow, requests, boto3, yfinance, pandas_market_calendars, cố định `==` giống `requirements.txt`. Không có torch, EMD-signal, scikit-learn, statsmodels, python-dotenv. `tests/test_requirements_ingest.py` kiểm tra file này đủ cho mọi import của `src/data/` |
 | Đóng gói | **Container image** (ECR), `docker/ingest/Dockerfile`. Gói zip không đủ chỗ: riêng numpy, pandas và pyarrow đã sát giới hạn 250 MB (giải nén) |
 | Kiến trúc | Ngoài VPC, không NAT Gateway (gọi Yahoo, EIA, NBP qua Internet công cộng của Lambda) |
@@ -37,7 +38,11 @@ docker buildx build --platform linux/amd64 --provenance=false \
   -f docker/ingest/Dockerfile -t cpaws-ingest:dev .
 ```
 
-`--provenance=false` là bắt buộc để image dùng được với Lambda (theo tài liệu AWS). Tag `3.12` của base thay đổi khi AWS vá lỗi. Lần build 15/10/2026 dùng index `public.ecr.aws/lambda/python:3.12@sha256:bc8bad2dd10b59ad2032d61f916f81e238ec546128092b65140bdc3a9d77d5f2`. Khi image được duyệt, nên ghim digest này trong `FROM`.
+`--provenance=false` là bắt buộc để image dùng được với Lambda (theo tài liệu AWS).
+
+Base image đã ghim digest trong `FROM` từ 17/10/2026: `public.ecr.aws/lambda/python:3.12@sha256:3856536f53e945debf4c90d0ff301cbaa837c07a4ab9b0e2c102c6e54ceb9762` (digest của index đa kiến trúc, gồm linux/amd64 và linux/arm64). Cách đổi digest khi cần vá bảo mật ở mục 2.6.
+
+> **Lỗi thời, không dùng:** digest `sha256:bc8bad2d…77d5f2` của lần build local 15/10/2026 (trước khi ghim). Chỉ ghim digest đang có trong `docker/ingest/Dockerfile`.
 
 ### 2.3 Dung lượng (build 15/10/2026, linux/amd64)
 
@@ -87,6 +92,30 @@ Kết quả 15/10/2026 (gọi Yahoo thật từ máy local, không ghi gì): GLD
   - mọi wheel có bản aarch64 (đã kiểm tra bằng pip cho cp312 manylinux aarch64: có đủ, gồm curl_cffi 0.16.3 và pyarrow 25.0.1);
   - build lại với `--platform linux/arm64` và chạy lại test, dry_run (chưa làm);
   - đặt `Architectures = arm64` khi tạo Lambda.
+
+### 2.6 Cập nhật base image
+
+`FROM` ghim digest để mọi lần build từ cùng một commit cho ra cùng một base. Nhờ vậy image đã test bằng RIE chính là image được deploy. Đổi lại, image không tự nhận bản vá của AWS, nên phải cập nhật thủ công.
+
+**Khi nào làm:** ECR scan on push báo lỗ hổng trong base, AWS công bố bản vá cho runtime Python 3.12, hoặc định kỳ khoảng 1 tháng một lần.
+
+**Các bước** (theo đúng thứ tự, chưa push trước khi xong bước 4):
+
+1. Pull bản `3.12` mới và lấy digest:
+   ```bash
+   docker pull public.ecr.aws/lambda/python:3.12
+   docker inspect --format '{{index .RepoDigests 0}}' public.ecr.aws/lambda/python:3.12
+   ```
+2. Sửa dòng `FROM` trong `docker/ingest/Dockerfile` thành `public.ecr.aws/lambda/python:3.12@sha256:<digest mới>`; sửa ngày ghim trong comment phía trên và digest ở mục 2.2.
+3. Build lại theo mục 2.2.
+4. Test lại theo mục 2.4: pytest trong container (kỳ vọng 76 qua, 3 bỏ qua) và dry_run qua RIE (cả 5 mã `rows` ≈ 10, `error` = null).
+5. Commit Dockerfile và tài liệu, merge theo quy trình PR.
+6. **Build từ commit đã merge**, gắn tag = SHA ngắn của commit đó (`git rev-parse --short HEAD`), rồi push lên ECR. Không push image build từ thư mục có thay đổi chưa commit, vì khi đó tag không khớp với code.
+7. Cập nhật `DEFAULT_INGEST_IMAGE_TAG` trong `infra/app.py` thành tag mới (hoặc truyền `-c ingest_image_tag=<sha>`), rồi `cdk deploy CpawsData`.
+
+**Image `286846a`:** build trước khi ghim digest, nên không biết đã dùng base nào. Không deploy image này. Tiến làm bước 6–7 với commit có Dockerfile đã ghim: build lại, push với tag = SHA của commit đó, đổi `DEFAULT_INGEST_IMAGE_TAG` (hiện là `"286846a"` trên nhánh `feat/infra-ingest-lambda`) trước khi `cdk deploy`. Lifecycle policy giữ 3 image (mục 11) sẽ tự dọn `286846a` sau vài lần push; muốn xóa ngay thì xóa thủ công trên ECR.
+
+**Kết quả lần ghim 17/10/2026** (digest `3856536f…eb9762`, linux/amd64, Python 3.12.15): build xong, khoảng 325 MB (nén) như trước. Pytest trong container 76 qua, 3 bỏ qua (79/79 khi có python-dotenv). dry_run qua RIE: GLD, SLV, CL=F, BZ=F, VND=X đều 10 dòng (05–16/10), không lỗi; init 0,73 s, lần gọi 3,3 s.
 
 ## 3. Lịch chạy
 
@@ -192,7 +221,7 @@ LAKE_BUCKET=cpaws-dev-lake python -m src.data.ingest_prices --dest s3   # khi đ
 Theo thứ tự; mọi tài nguyên gắn tag `Project=CPAWS`, `Owner=Tien`, `Env=dev`, region `ap-southeast-1`.
 
 1. [ ] Tạo ECR repo `cpaws-dev-ingest` (scan on push), nằm trong stack `CpawsData` hoặc `CpawsInference`. Đặt **lifecycle policy chỉ giữ 3 image gần nhất**: mỗi image khoảng 325 MB (nén) và ECR tính phí lưu trữ cho mọi bản đã đẩy.
-2. [ ] Build image theo mục 2.2 (ghim digest base nếu đã duyệt), tag theo commit, đẩy lên ECR.
+2. [ ] Build image theo mục 2.2 từ commit có Dockerfile đã ghim digest, tag = SHA của commit đó, đẩy lên ECR, cập nhật `DEFAULT_INGEST_IMAGE_TAG` (mục 2.6). Không dùng image `286846a`.
 3. [ ] Tạo execution role theo mục 5 (S3 `raw/`, `clean/`, secret EIA, `AWSLambdaBasicExecutionRole`); Tuấn review.
 4. [ ] Tạo Lambda `cpaws-dev-ingest` từ image: package type Image, x86_64, **memory 1.024 MB, timeout 300 s**, ngoài VPC, biến môi trường `LAKE_BUCKET=cpaws-dev-lake`, `LAKE_PREFIX` (để trống), `CPAWS_ENV=dev`, `EIA_SECRET_ID` (khi đã có secret).
 5. [ ] Gọi thử `{"dry_run": true}` (mục 6). Nếu có mã lỗi thì báo Khải và dừng ở đây.
@@ -207,5 +236,5 @@ Theo thứ tự; mọi tài nguyên gắn tag `Project=CPAWS`, `Owner=Tien`, `En
 |---|---|---|
 | Thêm Python 3.12 vào CI (`.github/workflows/ci.yml`, ma trận 3.11 + 3.12 hoặc chuyển hẳn sang 3.12) | Phước (chủ file CI) | Khải không tự sửa `ci.yml`. Lambda chạy 3.12 trong khi CI chỉ test 3.11 |
 | Cân nhắc chuyển môi trường local sang Python 3.12 | Cả nhóm | Lưu ý: cache CEEMDAN gắn với phiên bản numpy và EMD-signal (ADR-0007), không gắn với phiên bản Python; vẫn cần thử lại một vài cửa sổ để chắc kết quả giống từng bit |
-| Ghim digest base image trong `FROM` khi image được duyệt | Tiến | Mục 2.2 |
+| Build lại image từ commit có Dockerfile đã ghim digest (17/10/2026), push với tag = SHA commit, đổi `DEFAULT_INGEST_IMAGE_TAG`; bỏ image `286846a` | Tiến | Mục 2.6 |
 | Build và thử arm64 nếu nhóm chọn Graviton | Tiến | Mục 2.5 |
