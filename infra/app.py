@@ -6,13 +6,19 @@ import os
 import aws_cdk as cdk
 from stacks.cpaws_data_stack import CpawsDataStack
 
+# Tag image của Lambda ingest trong ECR (tag theo commit của nhánh build).
+# Đổi khi đẩy image mới: cdk deploy CpawsData -c ingest_image_tag=<commit>
+DEFAULT_INGEST_IMAGE_TAG = "286846a"
+
 app = cdk.App()
 env_name = app.node.try_get_context("env") or "dev"
+ingest_image_tag = app.node.try_get_context("ingest_image_tag") or DEFAULT_INGEST_IMAGE_TAG
 
 CpawsDataStack(
     app,
     "CpawsData",
     env_name=env_name,
+    ingest_image_tag=ingest_image_tag,
     # Tài khoản lấy từ profile đang dùng; region cố định theo ADR
     env=cdk.Environment(account=os.getenv("CDK_DEFAULT_ACCOUNT"), region="ap-southeast-1"),
 )
