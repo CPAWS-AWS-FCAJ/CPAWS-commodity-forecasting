@@ -131,7 +131,9 @@ def test_spike_scores_counts():
     assert s["precision"] == 0.5 and s["recall"] == 0.5 and s["false_alarm_rate"] == 0.5
 
 
-def test_diebold_mariano_prefers_smaller_errors():
+def test_diebold_mariano_prefers_smaller_losses():
     rng = np.random.default_rng(2)
-    stat, p = M.diebold_mariano(rng.normal(0, 1, 300), rng.normal(0, 2, 300))
+    losses_a = rng.uniform(0.05, 0.10, 300)
+    losses_b = rng.uniform(0.15, 0.25, 300)
+    stat, p = M.diebold_mariano(losses_a, losses_b, h=1)
     assert stat < 0 and p < 0.05
