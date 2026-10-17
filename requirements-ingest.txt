@@ -1,0 +1,14 @@
+# Runtime libraries for the ingest Lambda only (src.data.lambda_ingest.handler).
+# Built into docker/ingest/Dockerfile. No torch / EMD-signal / scikit-learn / statsmodels.
+# Versions must match requirements.txt (tests/test_requirements_ingest.py checks this).
+# Keep this file ASCII-only: old pip on Windows reads it as cp1252.
+#
+# python-dotenv is NOT here: it is only imported inside the CLI main() for local runs.
+
+numpy==2.4.6
+pandas==3.0.6
+pyarrow==25.0.1                  # parquet engine used by pandas (not imported directly)
+requests==2.34.2                 # requirements.txt has >=2.31; pinned to the env version
+boto3==1.43.108                  # S3 writes; pinned instead of relying on the runtime copy
+yfinance==1.7.0
+pandas_market_calendars==5.5.0
