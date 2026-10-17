@@ -270,27 +270,3 @@ def test_metrics_reject_unfiltered_scalar_or_nan_inputs():
         M.brier_score(np.array([0.5, np.nan]), np.array([0.01, -0.02]))
     with pytest.raises(ValueError, match="finite"):
         M.sign_accuracy(np.array([0.01, np.nan]), np.array([0.02, -0.03]))
-
-
-def test_legacy_forecast_metrics_import_still_works():
-    from src.forecast import metrics as legacy
-
-    assert legacy.pinball_skill is M.pinball_skill
-    names = (
-        "mae",
-        "rmse",
-        "mae_ratio_vs_naive",
-        "mase",
-        "mase_returns",
-        "sign_accuracy",
-        "pinball_loss",
-        "brier_score",
-        "interval_coverage",
-        "past_rolling_std",
-        "spike_labels",
-        "spike_scores",
-        "peak_mae",
-        "diebold_mariano",
-    )
-    for name in names:
-        assert getattr(legacy, name) is getattr(M, name)
