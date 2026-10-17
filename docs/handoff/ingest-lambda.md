@@ -113,7 +113,7 @@ Kết quả 15/10/2026 (gọi Yahoo thật từ máy local, không ghi gì): GLD
 6. **Build từ commit đã merge**, gắn tag = SHA ngắn của commit đó (`git rev-parse --short HEAD`), rồi push lên ECR. Không push image build từ thư mục có thay đổi chưa commit, vì khi đó tag không khớp với code.
 7. Cập nhật `DEFAULT_INGEST_IMAGE_TAG` trong `infra/app.py` thành tag mới (hoặc truyền `-c ingest_image_tag=<sha>`), rồi `cdk deploy CpawsData`.
 
-**Image `286846a`:** build trước khi ghim digest, nên không biết đã dùng base nào. Không deploy image này. Tiến làm bước 6–7 với commit có Dockerfile đã ghim: build lại, push với tag = SHA của commit đó, đổi `DEFAULT_INGEST_IMAGE_TAG` (hiện là `"286846a"` trên nhánh `feat/infra-ingest-lambda`) trước khi `cdk deploy`. Lifecycle policy giữ 3 image (mục 11) sẽ tự dọn `286846a` sau vài lần push; muốn xóa ngay thì xóa thủ công trên ECR.
+**Image `286846a`:** build trước khi ghim digest, nên không biết đã dùng base nào. Không deploy image này. Tiến làm bước 6–7 với commit có Dockerfile đã ghim: build lại, push với tag = SHA của commit đó, đổi `DEFAULT_INGEST_IMAGE_TAG` (hiện là `"286846a"` trên nhánh `feat/infra-ingest-lambda`) trước khi `cdk deploy`. Lifecycle policy giữ 5 image (mục 11) sẽ tự dọn `286846a` sau vài lần push; muốn xóa ngay thì xóa thủ công trên ECR.
 
 **Kết quả lần ghim 17/10/2026** (digest `3856536f…eb9762`, linux/amd64, Python 3.12.15): build xong, khoảng 325 MB (nén) như trước. Pytest trong container 76 qua, 3 bỏ qua (79/79 khi có python-dotenv). dry_run qua RIE: GLD, SLV, CL=F, BZ=F, VND=X đều 10 dòng (05–16/10), không lỗi; init 0,73 s, lần gọi 3,3 s.
 
@@ -220,7 +220,7 @@ LAKE_BUCKET=cpaws-dev-lake python -m src.data.ingest_prices --dest s3   # khi đ
 
 Theo thứ tự; mọi tài nguyên gắn tag `Project=CPAWS`, `Owner=Tien`, `Env=dev`, region `ap-southeast-1`.
 
-1. [ ] Tạo ECR repo `cpaws-dev-ingest` (scan on push), nằm trong stack `CpawsData` hoặc `CpawsInference`. Đặt **lifecycle policy chỉ giữ 3 image gần nhất**: mỗi image khoảng 325 MB (nén) và ECR tính phí lưu trữ cho mọi bản đã đẩy.
+1. [ ] Tạo ECR repo `cpaws-dev-ingest` (scan on push), nằm trong stack `CpawsData` hoặc `CpawsInference`. Đặt **lifecycle policy chỉ giữ 5 image gần nhất**: mỗi image khoảng 325 MB (nén) và ECR tính phí lưu trữ cho mọi bản đã đẩy.
 2. [ ] Build image theo mục 2.2 từ commit có Dockerfile đã ghim digest, tag = SHA của commit đó, đẩy lên ECR, cập nhật `DEFAULT_INGEST_IMAGE_TAG` (mục 2.6). Không dùng image `286846a`.
 3. [ ] Tạo execution role theo mục 5 (S3 `raw/`, `clean/`, secret EIA, `AWSLambdaBasicExecutionRole`); Tuấn review.
 4. [ ] Tạo Lambda `cpaws-dev-ingest` từ image: package type Image, x86_64, **memory 1.024 MB, timeout 300 s**, ngoài VPC, biến môi trường `LAKE_BUCKET=cpaws-dev-lake`, `LAKE_PREFIX` (để trống), `CPAWS_ENV=dev`, `EIA_SECRET_ID` (khi đã có secret).
