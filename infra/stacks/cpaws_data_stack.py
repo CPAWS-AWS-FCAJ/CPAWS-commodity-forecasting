@@ -43,6 +43,9 @@ class CpawsDataStack(Stack):
             ],
         )
 
+        # Prod giữ repo và image khi xóa stack; dev dọn sạch sau buổi bảo vệ (góp ý của Khải, PR #5).
+        is_prod = env_name == "prod"
+
         # ECR cho container Lambda ingest (Khải đẩy image lên).
         # Tên repo và việc giữ 5 image đã được Khải xác nhận (15/10).
         self.ingest_repo = ecr.Repository(
@@ -50,8 +53,8 @@ class CpawsDataStack(Stack):
             "IngestRepo",
             repository_name=f"cpaws-{env_name}-ingest",
             image_scan_on_push=True,
-            removal_policy=RemovalPolicy.DESTROY,
-            empty_on_delete=True,
+            removal_policy=RemovalPolicy.RETAIN if is_prod else RemovalPolicy.DESTROY,
+            empty_on_delete=not is_prod,
             lifecycle_rules=[
                 ecr.LifecycleRule(max_image_count=5, description="Giu 5 image moi nhat")
             ],
