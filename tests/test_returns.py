@@ -3,7 +3,8 @@ import math
 import numpy as np
 import pytest
 
-from src.forecast import metrics, returns
+from src.eval import metrics
+from src.forecast import returns
 
 
 def test_horizon_log_returns_basic_and_tail_nan():
