@@ -6,9 +6,10 @@ import os
 import aws_cdk as cdk
 from stacks.cpaws_data_stack import CpawsDataStack
 
-# Tag image của Lambda ingest trong ECR (tag theo commit của nhánh build).
+# Tag image của Lambda ingest trong ECR = SHA ngắn của commit merge PR #9 trên developer
+# (Dockerfile đã ghim digest base). Không dùng 286846a: build trước khi ghim digest.
 # Đổi khi đẩy image mới: cdk deploy CpawsData -c ingest_image_tag=<commit>
-DEFAULT_INGEST_IMAGE_TAG = "286846a"
+DEFAULT_INGEST_IMAGE_TAG = "6956620"
 
 app = cdk.App()
 env_name = app.node.try_get_context("env") or "dev"
