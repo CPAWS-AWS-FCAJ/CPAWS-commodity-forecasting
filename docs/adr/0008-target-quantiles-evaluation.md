@@ -83,7 +83,7 @@ tránh việc mỗi chỉ số tự chọn tập điểm có lợi cho mình.
 Quy ước n_obs và trạng thái:
 
 n_obs của một chỉ số là số điểm thực sự đi vào công thức của chỉ số đó. Giá trị này bằng kích thước tập chung, trừ sign_accuracy (bỏ thêm các điểm có y = 0 hoặc q_0.50 = 0). Báo kèm n_common và số điểm bị loại theo từng lý do: target NaN, thiếu dự báo, mốc không hợp lệ.
-Chỉ số không xác định vì mẫu số bằng 0 (ví dụ mean(|y|) = 0, hoặc BS hay PL của mốc bằng 0): giá trị là NaN với trạng thái undefined_zero_denominator; n_obs vẫn ghi số điểm đã dùng; không thay bằng 0 và không bỏ dòng.
+Chỉ số không xác định vì mẫu số bằng 0 (ví dụ mean(|y|) = 0, hoặc BS hay PL của mốc bằng 0): giá trị là NaN với trạng thái undefined, lý do zero_denominator; n_obs vẫn ghi số điểm đã dùng; không thay bằng 0 và không bỏ dòng.
 Với dầu, mẫu excl_roll là tập con của tập chung, bỏ thêm các cửa sổ chứa ngày đáo hạn hoặc phiên có cờ roll (mục 6).
 Mọi chỉ số tính trên log return, riêng từng tài sản × h, trên giai đoạn đánh giá. Ký hiệu: y là `r_h(t)` thực tế; q_τ là phân vị dự báo mức τ; τ ∈ {0.05, 0.10, 0.25, 0.50, 0.75, 0.90, 0.95}.
 
@@ -110,7 +110,7 @@ Mọi chỉ số tính trên log return, riêng từng tài sản × h, trên gi
 - Kiểm tra mẫu số bằng 0 (Brent giai đoạn giá đứng) trước khi chia.
 - Mọi chỉ số kèm khoảng tin cậy block bootstrap. Khi báo nhiều kiểm định (4 tài sản × 7 mức h), định trước chỉ số chính và điều chỉnh p-value (Holm).
 - Bảy mức h dùng chung ngày tương lai nên không phải bảy bằng chứng độc lập.
-
+- Ngoại lệ: tỷ lệ phân vị cắt nhau là chẩn đoán đầu ra thô của mô hình. Chỉ số này tính trên mọi dự báo có t trong giai đoạn, không cần target hay mốc, và chỉ tính cho mẫu all.
 ### 6. Ngày roll của dầu
 
 - Giữ nguyên giá khi huấn luyện (phương án A). Không thay return ngày roll bằng return của loại dầu kia (phương án C bị loại).
@@ -123,7 +123,7 @@ Mọi chỉ số tính trên log return, riêng từng tài sản × h, trên gi
 - 2012–2013: khởi động (tính đặc trưng, cửa sổ CEEMDAN, mốc 252 phiên).
 - 2014–2018: train. 2019: validation, dùng để chọn tham số. 2020 → nay: test, chạy một lần sau khi khóa tham số.
 - Nếu kết quả 2020 → nay đã được dùng để ra quyết định nào, báo cáo phải nói rõ.
-
+- Nhãn không được vượt ranh giới giai đoạn. Một điểm (t, h) chỉ thuộc giai đoạn khi cả t và ngày đích t + h đều nằm trong giai đoạn đó. Ví dụ: validation 2019 không dùng target có ngày đích sang 2020; train không dùng target có ngày đích sang 2019. Số điểm bị loại vì ranh giới được báo cáo riêng.
 ### 8. DLinear MVP (demo 25/10)
 
 | Mục | Quyết định |

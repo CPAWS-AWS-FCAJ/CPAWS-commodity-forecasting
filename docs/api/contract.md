@@ -57,7 +57,6 @@ Mỗi phần tử của `horizons`:
 | `target_date` | S | Phiên giao dịch thứ h sau `base_date` theo lịch của tài sản |
 | `q` | L of N | 7 log return theo đúng thứ tự `quantile_levels`, đã sắp xếp không giảm |
 | `prob_up` | N | Xác suất giá tăng, trong [0.05, 0.95] |
-
 `predict` gọi `normalize_quantiles()` đúng một lần ngay sau khi mô hình xuất kết quả, ghi log số lần phải sắp xếp trước khi sửa (chỉ số "tỷ lệ phân vị cắt nhau"), rồi mới tính `prob_up`, giá và ghi bản ghi. `prob_up()`, `quantiles_to_prices()` và `to_forecast_record()` không tự sửa phân vị: chúng báo lỗi nếu đầu vào không giảm.
 
 Nếu cửa sổ input mới nhất của một tài sản có giá thiếu hoặc bị loại, `predict` không ghi bản ghi mới cho tài sản đó; bản ghi cũ giữ nguyên.
@@ -146,7 +145,7 @@ Lỗi: `400 invalid_asset` (mã tài sản sai), `400 invalid_date`, `404 not_fo
 | `interval_score_80` | Interval score của khoảng [q10, q90], α = 0,2 | Kiểm tra hiệu chỉnh |
 | `brier_skill` | 1 − BS(mô hình) / BS(tần suất tăng 252 phiên); kèm `brier_skill_vs_half` so với hằng số 0,5 | Xác suất tăng |
 | `mae_ratio_vs_naive` | MAE của q50 / MAE của naive (return = 0) trên cùng tập điểm | Báo cáo phụ |
-| `sign_accuracy` | Tỷ lệ dấu của q50 trùng dấu log return thực tế (bỏ điểm bằng 0) | Báo cáo phụ |
+| `sign_accuracy` | Tỷ lệ dấu của q50 trùng dấu log return thực tế (bỏ điểm bằng 0), loại cả điểm y = 0 và q_0.50 = 0” | Báo cáo phụ |
 | `up_rate` | Tỷ lệ log return thực tế dương | Luôn đi cùng `sign_accuracy` |
 | `n_obs` | Số điểm hợp lệ thực sự dùng, theo từng chỉ số | |
 
