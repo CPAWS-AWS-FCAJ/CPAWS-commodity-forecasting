@@ -57,7 +57,7 @@ ADR này giữ quyết định cốt lõi của ADR-0002 (dự báo phân vị l
 - MVP dùng nội suy tuyến tính giữa hai phân vị kẹp mức 0 để ước lượng P(r_h ≤ 0); xác suất tăng = 1 − P(r_h ≤ 0), kẹp trong [0.05, 0.95]. Đây là phép xấp xỉ, chưa hiệu chỉnh.
 - Trường hợp biên: 0 < q05 → 0.95; 0 > q95 → 0.05; 0 trùng một phân vị → dùng đúng mức của phân vị đó.
 - Thứ tự đánh giá: kiểm tra tỷ lệ trúng từng phân vị trước, sau đó mới đánh giá `prob_up` bằng Brier score và độ hiệu chỉnh trên dự báo ngoài mẫu.
-- Thí nghiệm khi có dự báo DLinear trên 2019: so Brier score của (a) nội suy tuyến tính và (b) nội suy đơn điệu PCHIP qua 7 phân vị, cả hai so với mốc tần suất tăng 252 phiên. Chỉ đổi sang (b) khi khoảng tin cậy block bootstrap của chênh lệch Brier không chứa 0.
+- Thí nghiệm khi có dự báo DLinear trên validation 2019: so Brier score của (a) nội suy tuyến tính và (b) PCHIP, trên cùng các điểm của tập đánh giá chung. Định nghĩa ΔBS = BS(PCHIP) − BS(tuyến tính), lấy trung bình đều trên 4 tài sản × 7 mức h. Khoảng tin cậy 95% tính bằng block bootstrap theo ngày: rút cùng một khối ngày cho mọi tài sản và h để giữ tương quan; độ dài khối định trước trong config. Chỉ chuyển sang PCHIP khi khoảng tin cậy nằm hoàn toàn dưới 0; nếu khoảng chứa 0 hoặc nằm trên 0 thì giữ nội suy tuyến tính. ΔBS theo từng tài sản × h chỉ để tham khảo, không dùng để chọn phương pháp riêng cho từng cặp.
 - Chưa dùng Platt scaling trong MVP; không hiệu chỉnh trên tập test.
 
 ### 4. Mốc so sánh
@@ -69,13 +69,22 @@ ADR này giữ quyết định cốt lõi của ADR-0002 (dự báo phân vị l
 | Tần suất tăng 252 phiên; hằng số 0,5 | Brier score | Tỷ lệ `r_h(s) > 0` trên cùng tập s như trên; 0,5 |
 | Luôn đoán tăng; tỷ lệ tăng thực tế | Tỷ lệ đúng chiều | |
 
-- Mốc 252 phiên chỉ hợp lệ khi có ít nhất 200 return hợp lệ trong cửa sổ; nếu không, điểm đánh giá đó bị bỏ cho mọi chỉ số dùng mốc này.
+- Mốc 252 phiên chỉ hợp lệ khi có ít nhất 200 return hợp lệ trong cửa sổ. Điểm không có mốc hợp lệ bị loại khỏi tập đánh giá chung (mục 5), tức là bị loại cho mọi chỉ số, kể cả chỉ số không dùng mốc. Vì dữ liệu bắt đầu từ 01/2012, điều kiện này luôn thỏa từ 2014 trở đi, trừ khi có khoảng trống dữ liệu dài; số điểm bị loại vì lý do này được báo cáo riêng.
 - Có test chống rò rỉ: kết quả mốc tại t không đổi khi sửa hoặc nối thêm giá sau t; return chưa hoàn tất (s + h > t) không được dùng.
 
 ### 5. Chỉ số đánh giá
 
-**Quy tắc dữ liệu hợp lệ (áp dụng cho mọi chỉ số).** Một điểm đánh giá (tài sản, t, h) hợp lệ khi: `r_h(t)` không phải NaN (mục 1), có dự báo đã chuẩn hóa (mục 2), và mốc 252 phiên hợp lệ (mục 4). Mọi chỉ số tính trên cùng tập điểm hợp lệ này. `n_obs` là số điểm hợp lệ thực sự dùng, báo riêng từng chỉ số. Với dầu, báo thêm mẫu thứ hai bỏ các cửa sổ chứa ngày đáo hạn hoặc phiên có cờ `roll` (mục 6).
+**Tập đánh giá chung (áp dụng cho mọi chỉ số). Với mỗi (tài sản, h, mẫu), điểm t thuộc tập đánh giá chung khi: r_h(t) không phải NaN (mục 1), có dự báo đã chuẩn hóa (mục 2), và mốc 252 phiên hợp lệ (mục 4). Mọi chỉ số đều tính trên cùng tập này, kể cả các chỉ số không dùng mốc (quantile_hit_rates, coverage_80, width_80, interval_score_80, sign_accuracy, up_rate). Lý do:
 
+các chỉ số đặt cạnh nhau phải mô tả cùng các điểm;
+kiểm định DM cần chuỗi loss khớp ngày;
+tránh việc mỗi chỉ số tự chọn tập điểm có lợi cho mình.
+
+Quy ước n_obs và trạng thái:
+
+n_obs của một chỉ số là số điểm thực sự đi vào công thức của chỉ số đó. Giá trị này bằng kích thước tập chung, trừ sign_accuracy (bỏ thêm các điểm có y = 0 hoặc q_0.50 = 0). Báo kèm n_common và số điểm bị loại theo từng lý do: target NaN, thiếu dự báo, mốc không hợp lệ.
+Chỉ số không xác định vì mẫu số bằng 0 (ví dụ mean(|y|) = 0, hoặc BS hay PL của mốc bằng 0): giá trị là NaN với trạng thái undefined_zero_denominator; n_obs vẫn ghi số điểm đã dùng; không thay bằng 0 và không bỏ dòng.
+Với dầu, mẫu excl_roll là tập con của tập chung, bỏ thêm các cửa sổ chứa ngày đáo hạn hoặc phiên có cờ roll (mục 6).
 Mọi chỉ số tính trên log return, riêng từng tài sản × h, trên giai đoạn đánh giá. Ký hiệu: y là `r_h(t)` thực tế; q_τ là phân vị dự báo mức τ; τ ∈ {0.05, 0.10, 0.25, 0.50, 0.75, 0.90, 0.95}.
 
 | Chỉ số | Công thức | Vai trò |
