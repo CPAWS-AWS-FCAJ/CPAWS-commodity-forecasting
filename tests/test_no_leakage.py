@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from src.forecast import metrics as M
+from src.eval import metrics as M
 from src.forecast.decomposition import (
     CeemdanConfig,
     causal_imf_windows,
