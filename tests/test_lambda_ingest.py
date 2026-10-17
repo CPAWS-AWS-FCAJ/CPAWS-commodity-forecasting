@@ -1,6 +1,7 @@
 """Ghi lên S3 (moto, không gọi AWS thật), Lambda handler, dry_run, lấy EIA key."""
 
 import functools
+import importlib.util
 import json
 
 import boto3
@@ -30,7 +31,9 @@ def s3(monkeypatch):
     for k in ("LAKE_PREFIX", "AWS_PROFILE", "AWS_DEFAULT_PROFILE"):
         monkeypatch.delenv(k, raising=False)
     # CLI gọi load_dotenv(); không để .env của máy (profile, key thật) lọt vào test
-    monkeypatch.setattr("dotenv.load_dotenv", lambda *a, **k: False)
+    # image Lambda không có python-dotenv (chỉ CLI local dùng), nên chỉ chặn khi có
+    if importlib.util.find_spec("dotenv") is not None:
+        monkeypatch.setattr("dotenv.load_dotenv", lambda *a, **k: False)
     with mock_aws():
         client = boto3.client("s3", region_name="ap-southeast-1")
         client.create_bucket(
@@ -125,6 +128,7 @@ def test_lambda_setup_moves_yfinance_cache_to_tmp(monkeypatch, tmp_path):
 
 
 def test_cli_dest_s3(s3, monkeypatch):
+    pytest.importorskip("dotenv")  # CLI local cần python-dotenv
     _fake(monkeypatch)
     code = ingest_prices.main(["--dest", "s3", "--start", "2020-03-02", "--no-nbp"])
     assert code == 0 and "clean/prices/dt=2020-05-29/quality.json" in _keys(s3)
