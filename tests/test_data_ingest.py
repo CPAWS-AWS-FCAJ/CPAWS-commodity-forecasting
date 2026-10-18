@@ -254,6 +254,7 @@ def test_reference_failure_only_warns(tmp_path, caplog):
 
 
 def test_cli_exit_code_nonzero_on_primary_failure(monkeypatch, tmp_path):
+    pytest.importorskip("dotenv")  # CLI local cần python-dotenv
     src = {"yfinance": YFinanceSource(FakeYF(fail={"CL=F"})), "eia": FakeEIA()}
     monkeypatch.setattr(ingest_prices, "build_sources", lambda: (src, None))
     real_run = ingest_prices.run
@@ -295,6 +296,7 @@ def test_incremental_run_refetches_last_sessions_only(tmp_path):
 
 @pytest.mark.parametrize("dest", ["local"])
 def test_cli_parses_args(dest, monkeypatch, tmp_path):
+    pytest.importorskip("dotenv")  # CLI local cần python-dotenv
     called = {}
 
     def fake_run(st, sources, start=None, nbp_source=None, now=None):
