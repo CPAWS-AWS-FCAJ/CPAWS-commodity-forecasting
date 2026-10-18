@@ -145,7 +145,7 @@ Lỗi: `400 invalid_asset` (mã tài sản sai), `400 invalid_date`, `404 not_fo
 | `interval_score_80` | Interval score của khoảng [q10, q90], α = 0,2 | Kiểm tra hiệu chỉnh |
 | `brier_skill` | 1 − BS(mô hình) / BS(tần suất tăng 252 phiên); kèm `brier_skill_vs_half` so với hằng số 0,5 | Xác suất tăng |
 | `mae_ratio_vs_naive` | MAE của q50 / MAE của naive (return = 0) trên cùng tập điểm | Báo cáo phụ |
-| `sign_accuracy` | Tỷ lệ dấu của q50 trùng dấu log return thực tế (bỏ điểm bằng 0), loại cả điểm y = 0 và q_0.50 = 0” | Báo cáo phụ |
+| `sign_accuracy` | Tỷ lệ dự báo đúng chiều, tính trên các điểm có y ≠ 0 và q_0.50 ≠ 0 | Báo cáo phụ |
 | `up_rate` | Tỷ lệ log return thực tế dương | Luôn đi cùng `sign_accuracy` |
 | `n_obs` | Số điểm hợp lệ thực sự dùng, theo từng chỉ số | |
 
