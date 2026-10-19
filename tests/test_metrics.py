@@ -150,7 +150,7 @@ def test_dm_hac_and_undefined_cases():
 
 
 def test_dm_hac_hln_two_sided_matches_independent_reference():
-    """Reference: manual Bartlett weights, HLN factor, two-sided Student t."""
+    """Reference: manual uniform weights, HLN factor, two-sided Student t."""
     from scipy.stats import t as student_t
 
     rng = np.random.default_rng(123)
@@ -160,7 +160,7 @@ def test_dm_hac_hln_two_sided_matches_independent_reference():
     diff = loss_a - loss_b
     z = diff - diff.mean()
     cov = [float(np.sum(z[k:] * z[: n - k]) / n) for k in range(lag + 1)]
-    lrv = cov[0] + 2 * sum((1 - k / (lag + 1)) * cov[k] for k in range(1, lag + 1))
+    lrv = cov[0] + 2 * sum(cov[1:])
     hln = np.sqrt((n + 1 - 2 * h + h * (h - 1) / n) / n)
     expected_stat = float(diff.mean() / np.sqrt(lrv / n) * hln)
     expected_p = float(2 * student_t.sf(abs(expected_stat), n - 1))
@@ -270,3 +270,165 @@ def test_metrics_reject_unfiltered_scalar_or_nan_inputs():
         M.brier_score(np.array([0.5, np.nan]), np.array([0.01, -0.02]))
     with pytest.raises(ValueError, match="finite"):
         M.sign_accuracy(np.array([0.01, np.nan]), np.array([0.02, -0.03]))
+
+
+def test_naive_ratio_and_direction():
+    y_true = np.array([101.0, 99.0, 102.0])
+    last = np.array([100.0, 100.0, 100.0])
+    assert M.mae_ratio_vs_naive(y_true, last, last) == 1.0
+    assert M.sign_accuracy(y_true - last, y_true - last) == 1.0
+
+
+def test_diebold_mariano_prefers_smaller_losses():
+    rng = np.random.default_rng(2)
+    losses_a = rng.uniform(0.05, 0.10, 300)
+    losses_b = rng.uniform(0.15, 0.25, 300)
+    stat, p = M.diebold_mariano(losses_a, losses_b, h=1)
+    assert stat < 0 and p < 0.05
+
+
+def test_metrics_for_returns():
+    y = np.array([0.01, -0.02, 0.005, -0.001])
+    assert M.sign_accuracy(y, y) == 1.0
+    assert M.mase_returns(y, y, train_returns=y) == 0.0
+    assert M.mase_returns(y, np.zeros_like(y), train_returns=y) == pytest.approx(1.0)
+    assert M.pinball_loss(y, y, 0.9) == 0.0
+    assert M.brier_score(np.full(4, 0.5), y) == pytest.approx(0.25)
+    assert not hasattr(M, "mape")
+
+
+@pytest.mark.parametrize(
+    "y,q,expected",
+    [
+        ([0.0, 1.0], [[0.0] * 7, [0.0] * 7], [0.0, 0.5]),
+        ([0.0], [[-0.03, -0.02, -0.01, 0, 0.01, 0.02, 0.03]], [0.012 / 7]),
+        ([-1.0], [[0.0] * 7], [0.5]),
+    ],
+)
+def test_pinball_per_origin_hand_values(y, q, expected):
+    result = M.pinball_loss_per_origin(y, q)
+    assert result.shape == (len(y),)
+    np.testing.assert_allclose(result, expected)
+    assert result.mean() == pytest.approx(M.mean_pinball_loss(y, q))
+
+
+@pytest.mark.parametrize(
+    "y,q",
+    [
+        (0.0, np.zeros((1, 7))),
+        ([0.0], np.zeros((1, 6))),
+        ([0.0, 1.0], np.zeros((1, 7))),
+        ([[0.0]], np.zeros((1, 7))),
+        ([np.nan], np.zeros((1, 7))),
+        ([np.inf], np.zeros((1, 7))),
+        ([0.0], [[np.nan] * 7]),
+        ([0.0], [[np.inf] * 7]),
+        ([0.0], [[1, 0, 2, 3, 4, 5, 6]]),
+    ],
+)
+def test_pinball_per_origin_rejects_invalid_without_filtering(y, q):
+    with pytest.raises(ValueError):
+        M.pinball_loss_per_origin(y, q)
+
+
+def test_pinball_per_origin_empty():
+    result = M.pinball_loss_per_origin([], np.empty((0, 7)))
+    assert isinstance(result, np.ndarray)
+    assert result.shape == (0,)
+    assert result.dtype.kind == "f"
+
+
+@pytest.mark.parametrize(
+    "flags,expected",
+    [
+        ([False, False, True, False], 0.25),
+        ([False, False], 0),
+        ([True, True], 1),
+        (np.array([[True, False], [False, True]]), 0.5),
+    ],
+)
+def test_crossing_rate_boolean_flags(flags, expected):
+    assert M.crossing_rate(flags) == expected
+
+
+def test_crossing_empty():
+    assert np.isnan(M.crossing_rate([]))
+    assert np.isnan(M.crossing_rate(np.empty((0, 7), dtype=bool)))
+
+
+@pytest.mark.parametrize(
+    "flags", [[0, 1], [False, np.nan], [True, None], ["False"], np.array([True], dtype=object)]
+)
+def test_crossing_rejects_non_boolean_flags(flags):
+    with pytest.raises(ValueError, match="boolean"):
+        M.crossing_rate(flags)
+
+
+@pytest.mark.parametrize(
+    "y,pred", [([np.nan], [0]), ([0], [np.inf]), ([0, 1], [0]), ([[0]], [[0]]), (0, [0])]
+)
+def test_mae_and_ratio_reject_bad_model_pairs(y, pred):
+    with pytest.raises(ValueError):
+        M.mae(y, pred)
+    with pytest.raises(ValueError):
+        M.mae_ratio_vs_naive(y, pred, np.zeros(np.asarray(y).shape))
+
+
+@pytest.mark.parametrize("naive", [[np.nan], [np.inf], [0, 0], [[0]]])
+def test_mae_ratio_rejects_bad_baseline_even_zero_model_error(naive):
+    with pytest.raises(ValueError):
+        M.mae_ratio_vs_naive([0], [0], naive)
+
+
+def test_mae_ratio_valid_and_zero_baseline_still_validates_prediction():
+    assert M.mae([1, 3], [0, 1]) == 1.5
+    assert M.mae_ratio_vs_naive([1, 3], [0, 1], [0, 0]) == 0.75
+    with pytest.raises(ValueError):
+        M.mae_ratio_vs_naive([0], [np.nan], [0])
+
+
+@pytest.mark.parametrize("h,lag", [(1, 0), (3, 2), (3, 4)])
+def test_dm_uniform_autocorrelated_independent_reference(h, lag):
+    from scipy.stats import t
+
+    # Smooth, positively autocorrelated differences with a nonzero mean.
+    d = np.sin(np.arange(120) * 0.12) + 0.3
+    n = len(d)
+    mu = sum(float(v) for v in d) / n
+    z = [float(v) - mu for v in d]
+    gamma = [sum(z[i] * z[i - k] for i in range(k, n)) / n for k in range(lag + 1)]
+    lrv = gamma[0] + 2 * sum(gamma[1:])
+    factor = ((n + 1 - 2 * h + h * (h - 1) / n) / n) ** 0.5
+    expected = mu / (lrv / n) ** 0.5 * factor
+    actual, p = M.diebold_mariano(d + 2, np.full(n, 2.0), h=h, hac_lag=lag)
+    assert actual == pytest.approx(expected, rel=1e-12)
+    assert p == pytest.approx(2 * t.sf(abs(expected), n - 1), rel=1e-12)
+    if lag == h - 1:
+        assert M.diebold_mariano(d + 2, np.full(n, 2.0), h=h) == pytest.approx((actual, p))
+
+
+def test_dm_nonpositive_uniform_variance_and_short_data():
+    # Alternating d: gamma0=1, gamma1=-19/20 -> uniform LRV=-0.9.
+    a = np.tile([0.0, 2.0], 10)
+    for x, y, h in [(a, np.ones(20), 2), ([1, 2], [0, 0], 2)]:
+        assert all(np.isnan(v) for v in M.diebold_mariano(x, y, h=h))
+
+
+@pytest.mark.parametrize("h,lag", [(0, None), (-1, None), (1.5, None), (3, 1), (1, -1), (1, 1.5)])
+def test_dm_invalid_horizon_or_lag(h, lag):
+    with pytest.raises(ValueError):
+        M.diebold_mariano(np.arange(20.0), np.zeros(20), h=h, hac_lag=lag)
+
+
+def test_dm_rejects_nan_without_dropping():
+    with pytest.raises(ValueError, match="finite"):
+        M.diebold_mariano([1, np.nan, 2], [0, 0, 0])
+
+
+@pytest.mark.parametrize("family", [14, 28])
+def test_holm_full_family_keeps_nan_slots(family):
+    p = np.full(family, np.nan)
+    p[:2] = [0.001, 0.002]
+    result = M.holm_adjust(p)
+    np.testing.assert_allclose(result[:2], [family * 0.001, (family - 1) * 0.002])
+    assert np.all(np.isnan(result[2:]))
