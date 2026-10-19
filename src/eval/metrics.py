@@ -2,7 +2,6 @@
 
 Các hàm này chỉ tính metric trên mẫu đầu vào đã được lọc ở src/eval/.
 Không tự sửa phân vị và không truy cập nhãn tương lai hoặc baseline lịch sử.
-Các hàm RMSE/spike cũ được giữ vì tương thích, KHÔNG dùng trong báo cáo ADR-0008.
 """
 
 from __future__ import annotations
@@ -47,25 +46,17 @@ def _interval_inputs(y_true, lower, upper) -> tuple[np.ndarray, np.ndarray, np.n
 
 
 def mae(y_true, y_pred) -> float:
-    return float(np.mean(np.abs(np.asarray(y_true) - np.asarray(y_pred))))
-
-
-def rmse(y_true, y_pred) -> float:
-    return float(np.sqrt(np.mean((np.asarray(y_true) - np.asarray(y_pred)) ** 2)))
+    y, pred = _paired_1d(y_true, y_pred)
+    return float(np.mean(np.abs(y - pred)))
 
 
 def mae_ratio_vs_naive(y_true, y_pred, y_naive) -> float:
     """MAE of the model divided by MAE of the naive forecast on the same test points.
     < 1 means the model beats naive."""
-    baseline = mae(y_true, y_naive)
-    return float(mae(y_true, y_pred) / baseline) if baseline > 0 else float("nan")
-
-
-def mase(y_true, y_pred, train_series, m: int = 1) -> float:
-    """Classic MASE: scale = in-sample MAE of the m-step naive forecast on the training data."""
-    train_series = np.asarray(train_series, dtype=float)
-    scale = np.mean(np.abs(train_series[m:] - train_series[:-m]))
-    return float(mae(y_true, y_pred) / scale) if scale > 0 else float("nan")
+    y, pred = _paired_1d(y_true, y_pred)
+    _, naive = _paired_1d(y, y_naive)
+    baseline = mae(y, naive)
+    return float(mae(y, pred) / baseline) if baseline > 0 else float("nan")
 
 
 def mase_returns(y_true, y_pred, train_returns) -> float:
@@ -101,11 +92,23 @@ def brier_score(prob_up, y_true) -> float:
     return float(np.mean((prob - outcome) ** 2))
 
 
-def interval_coverage(y_true, lower, upper) -> tuple[float, float]:
-    """(share of true values inside [lower, upper], mean interval width)."""
-    y_true, lower, upper = map(np.asarray, (y_true, lower, upper))
-    inside = (y_true >= lower) & (y_true <= upper)
-    return float(np.mean(inside)), float(np.mean(upper - lower))
+def pinball_loss_per_origin(y, q) -> np.ndarray:
+    """Seven-quantile mean pinball loss per origin; never filter or normalize."""
+    y, q = _quantile_inputs(y, q)
+    tau = np.asarray(QUANTILE_LEVELS, dtype=float)[None, :]
+    diff = y[:, None] - q
+    return np.mean(np.maximum(tau * diff, (tau - 1) * diff), axis=1)
+
+
+def crossing_rate(crossed) -> float:
+    """Mean of raw crossing flags; accept boolean arrays only, without coercion."""
+    flags = np.asarray(crossed)
+    if flags.dtype.kind != "b":
+        # A bare empty list has no flags and NumPy infers float dtype.
+        if flags.size == 0 and isinstance(crossed, (list, tuple)):
+            return float("nan")
+        raise ValueError("crossed must contain boolean flags")
+    return float(np.mean(flags)) if flags.size else float("nan")
 
 
 def mean_pinball_loss(y_true, quantiles) -> float:
@@ -195,59 +198,8 @@ def up_rate(y_true) -> float:
     return float(np.mean(y > 0))
 
 
-def past_rolling_std(changes, window: int = 30) -> np.ndarray:
-    """Std of the previous `window` changes, EXCLUDING the current one (causal).
-    First `window` values are NaN."""
-    changes = np.asarray(changes, dtype=float)
-    out = np.full(len(changes), np.nan)
-    for i in range(window, len(changes)):
-        out[i] = np.std(changes[i - window : i], ddof=1)
-    return out
-
-
-def spike_labels(changes, window: int = 30, k: float = 2.5, direction: str = "both") -> np.ndarray:
-    """Mark spikes: |change| > k * past rolling std. direction: 'up', 'down' or 'both'.
-    Fix window and k BEFORE running experiments and never tune them on the test set."""
-    changes = np.asarray(changes, dtype=float)
-    thr = k * past_rolling_std(changes, window)
-    with np.errstate(invalid="ignore"):
-        if direction == "up":
-            lab = changes > thr
-        elif direction == "down":
-            lab = changes < -thr
-        else:
-            lab = np.abs(changes) > thr
-    return np.where(np.isnan(thr), False, lab)
-
-
-def spike_scores(true_spike, pred_spike) -> dict:
-    """Precision, recall and false-alarm rate. Always report them together:
-    an over-predicting model can reach high recall with many false alarms."""
-    t = np.asarray(true_spike, dtype=bool)
-    p = np.asarray(pred_spike, dtype=bool)
-    tp, fp = int(np.sum(t & p)), int(np.sum(~t & p))
-    fn, tn = int(np.sum(t & ~p)), int(np.sum(~t & ~p))
-    return {
-        "precision": tp / (tp + fp) if tp + fp else float("nan"),
-        "recall": tp / (tp + fn) if tp + fn else float("nan"),
-        "false_alarm_rate": fp / (fp + tn) if fp + tn else float("nan"),
-        "tp": tp,
-        "fp": fp,
-        "fn": fn,
-        "tn": tn,
-    }
-
-
-def peak_mae(y_true, y_pred, mask) -> float:
-    """MAE restricted to spike days (mask = spike_labels of the true changes)."""
-    mask = np.asarray(mask, dtype=bool)
-    if not mask.any():
-        return float("nan")
-    return mae(np.asarray(y_true)[mask], np.asarray(y_pred)[mask])
-
-
 def diebold_mariano(loss_a, loss_b, h: int = 1, hac_lag: int | None = None) -> tuple[float, float]:
-    """DM on *paired per-origin losses*, with Bartlett HAC, HLN and t(T-1) p-value.
+    """DM on *paired per-origin losses*, with uniform-weight HAC, HLN and t(T-1) p-value.
 
     Negative statistic => A has lower average loss than B. No error transform:
     callers compute (7-quantile mean) pinball loss for each origin first.
@@ -269,11 +221,11 @@ def diebold_mariano(loss_a, loss_b, h: int = 1, hac_lag: int | None = None) -> t
         return float("nan"), float("nan")
     centered = d - np.mean(d)
     gamma0 = float(np.dot(centered, centered) / n)
-    # Bartlett/Newey-West weights ensure a valid long-run variance estimate.
+    # Uniform weights on all included autocovariance lags (ADR-0008 review).
     long_run_var = gamma0
     for k in range(1, lag + 1):
         gamma_k = float(np.dot(centered[k:], centered[:-k]) / n)
-        long_run_var += 2.0 * (1.0 - k / (lag + 1)) * gamma_k
+        long_run_var += 2.0 * gamma_k
     if long_run_var <= 0 or not np.isfinite(long_run_var):
         return float("nan"), float("nan")
     correction_sq = (n + 1 - 2 * h + h * (h - 1) / n) / n
