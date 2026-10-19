@@ -170,6 +170,16 @@ def test_invalid_dates_are_treated_as_missing():
     pd.testing.assert_frame_equal(f, B.build_feature_frame(_drop(p, cal[95]), "gold"))
 
 
+def test_invalid_dates_generator_matches_list():
+    p = _prices("wti", "2019-01-01", "2019-06-30", seed=13)
+    cal = calendars.sessions("CME", "2019-01-01", "2019-06-30")
+    days = [cal[40], cal[95]]
+    as_list = B.build_feature_frame(p, "wti", invalid_dates=days)
+    as_gen = B.build_feature_frame(p, "wti", invalid_dates=(d for d in days))
+    pd.testing.assert_frame_equal(as_gen, as_list)
+    assert (as_gen["feature_reason"] == B.FRAME_REASON_MISSING).sum() == 4  # 2 ngày × 2 feature
+
+
 # ---------- (e) chưa đủ window + 1 giá ----------
 
 
@@ -276,6 +286,45 @@ def test_available_at_and_max_input_published_at():
     assert b.max_input_published_at[0] == np.datetime64(late.tz_localize(None))
     expected = (cal[100] + pd.Timedelta(days=1, hours=12)).to_datetime64()
     assert b.max_input_published_at[1] == expected
+
+
+def test_missing_published_at_fails_closed():
+    p = _prices("gold", "2019-01-01", "2019-06-30", seed=14)
+    cal = calendars.sessions("NYSE", "2019-01-01", "2019-06-30")
+    p.loc[p["date"] == cal[95], "published_at"] = pd.NaT  # giá hợp lệ, không rõ lúc công bố
+    f = B.build_feature_frame(p, "gold")
+    row = f.set_index("feature_session_date")
+    # giá cal[95] được dùng bởi feature kết thúc ở cal[95] và cal[96]
+    for u in (cal[95], cal[96]):
+        assert not row.loc[u, "feature_valid"]
+        assert row.loc[u, "feature_reason"] == B.FRAME_REASON_MISSING_PUBLISHED
+        assert np.isnan(row.loc[u, "log_return_1_end"])
+        assert pd.isna(row.loc[u, "feature_available_at"])
+    assert row.loc[cal[97], "feature_valid"]
+
+    b = B.make_windows(f, [cal[96], cal[100], cal[110]], window=10)
+    assert list(b.valid) == [False, False, True]
+    assert b.reason[0] == b.reason[1] == B.REASON_INVALID_WINDOW
+    assert np.isnat(b.max_input_published_at[:2]).all()
+
+
+def test_valid_window_always_has_published_at():
+    p = _prices("wti", "2018-06-01", "2019-12-31", seed=15)
+    cal = calendars.sessions("CME", "2018-06-01", "2019-12-31")
+    p.loc[p["date"] == cal[120], "published_at"] = pd.NaT
+    p.loc[p["date"] == cal[200], "price"] = -1.0
+    p = _drop(p, cal[300])
+    f = B.build_feature_frame(p, "wti")
+    b = B.make_windows(f, cal, window=20)
+    assert b.valid.any() and (~b.valid).any()
+    assert not np.isnat(b.max_input_published_at[b.valid]).any()
+    assert np.isnat(b.max_input_published_at[~b.valid]).all()
+
+    # frame bị sửa tay (feature_valid=True nhưng thiếu thời điểm công bố) vẫn không cho cửa sổ hợp lệ
+    tampered = f.copy()
+    tampered.loc[tampered["feature_session_date"] == cal[250], "feature_available_at"] = pd.NaT
+    bt = B.make_windows(tampered, [cal[250], cal[260]], window=20)
+    assert not bt.valid.any() and (bt.reason == B.REASON_INVALID_WINDOW).all()
 
 
 # ---------- latest_base_date (Lambda predict) ----------
