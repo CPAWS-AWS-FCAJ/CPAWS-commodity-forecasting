@@ -1,13 +1,13 @@
 # Hợp đồng dữ liệu Walk-forward Evaluation — CPAWS
 
 - **Trạng thái: Draft để Khải/Tuấn review; chưa phải hợp đồng đã phê duyệt.**
-- Ngày soạn: 2026-10-18. Làm việc trên source giải nén cục bộ, không xác minh trạng thái merge từ xa.
+- Ngày soạn: 2026-10-18; cập nhật review Khải PR #12: 2026-10-19. Làm việc trên source giải nén cục bộ, không xác minh trạng thái merge từ xa.
 - Phạm vi: hợp đồng đầu vào/đầu ra của hai chức năng sinh dự báo và đánh giá; không triển khai Python, không chọn hệ lưu trữ.
 - Chỉ file này được tạo/chỉnh sửa trong nhiệm vụ. Không thay ADR, API contract, Accuracy Schema, code hoặc gói metrics đã bàn giao.
 
 ## 1. Mục tiêu, trạng thái và quy ước
 
-Đủ thông tin để triển khai riêng `generate_forecasts(model, prices, cfg)` và `evaluate(forecasts, prices, cfg)`, phát hiện dự báo thiếu và truy vết nhãn/dữ liệu đã dùng.
+Đủ thông tin để triển khai **một module `src/eval/walk_forward.py`** với hai chức năng logic độc lập: sinh dự báo từ model đã fit và đánh giá Forecasts đã có. Các tên `generate_forecasts(...)`/`evaluate(...)` bên dưới chỉ chức năng trong cùng module, không yêu cầu file riêng hoặc xác lập API Python mới. Giữ schema Forecasts/Detail/Accuracy, phát hiện dự báo thiếu và truy vết dữ liệu đã dùng.
 
 Nhãn nguồn trong tài liệu:
 
@@ -17,11 +17,12 @@ Nhãn nguồn trong tài liệu:
 | **[API]** | Cấu trúc trong `docs/api/contract.md`, nguồn chuẩn của DynamoDB/JSON API. |
 | **[AS10]** | Accuracy Schema đọc từ ZIP PR #10; snapshot này có các điểm đã được review mới cập nhật, xem [REVIEW]. Không suy ra toàn bộ schema đã được duyệt. |
 | **[REVIEW]** | Quyết định/cập nhật được nêu trong bản review người dùng cung cấp sau bản Draft 381 dòng; áp dụng theo yêu cầu sửa hiện tại. Không đồng nghĩa đã đọc trực tiếp file schema mới hơn ZIP hoặc kiểm chứng trạng thái merge. |
+| **[KHẢI12]** | Những quyết định Khải đã xác nhận trên PR #12, được người dùng cung cấp ngày 2026-10-19; thay các phương án cũ tương ứng. Bản hợp đồng sau cập nhật vẫn Draft đến khi reviewer xác nhận. |
 | **[SRC]** | Hành vi kiểm chứng được từ source cục bộ hoặc source trong ZIP được nêu tên. |
 | **[YÊU CẦU]** | Thiết kế/bối cảnh nhóm cung cấp trong yêu cầu nhiệm vụ này. |
 | **[ĐỀ XUẤT]** | Quyết định cụ thể của bản Draft này, cần review trước khi triển khai. |
 
-Toàn bộ tên trường, enum, khóa và quy tắc giao tiếp mới ở mục 5–9 là **[ĐỀ XUẤT]**, trừ dòng có nguồn khác. Chữ “phải” trong các mục đó là tiêu chí của Draft, không phải tuyên bố nhóm đã duyệt.
+Các thiết kế mới chưa có xác nhận ở mục 5–9 vẫn là **[ĐỀ XUẤT]**; quy tắc gắn [KHẢI12] là quyết định đã được review cung cấp, không mở lại để lựa chọn. Việc cập nhật không đồng nghĩa reviewer đã phê duyệt toàn bộ phiên bản tài liệu này.
 
 `date` là ngày phiên ISO `YYYY-MM-DD`, không múi giờ; `timestamp` là ISO 8601 có UTC (`Z`). `number` phải hữu hạn. `null` là chưa có/không xác minh được/không áp dụng theo trường, khác `0` và `false`. Không serialize NaN/Infinity thành số JSON; không thay missing bằng 0.
 
@@ -29,36 +30,57 @@ Toàn bộ tên trường, enum, khóa và quy tắc giao tiếp mới ở mục
 
 | Nguồn đã đọc | Tình trạng tại thời điểm soạn | Điều kiểm chứng/phụ thuộc |
 |---|---|---|
-| [ADR-0008 cục bộ](../adr/0008-target-quantiles-evaluation.md), mục 1–7 | Có trong thư mục `docs-adr-0008-review-fixes` | Target theo lịch; 7 phân vị; mask chung; crossing chỉ `all`; ranh giới nhãn. Header vẫn ghi đề xuất. |
-| ADR-0008 trong `CPAWS-commodity-forecasting-feat-returns-adr0008 (1).zip` (bản PR #8 do người dùng cung cấp) | Đã đọc trực tiếp trong ZIP; không giải nén đè | Bản này ngắn hơn bản cục bộ ở mask, crossing, ranh giới split và thí nghiệm PCHIP. |
+| [ADR-0008 cục bộ](../adr/0008-target-quantiles-evaluation.md), mục 1–7 | Có trong snapshot; [KHẢI12] thông báo ADR đã merge vào developer, không tự kiểm chứng từ xa | Giữ target/phân vị/mask/cutoff; header snapshot cũ vẫn ghi đề xuất. Không sửa ADR trong nhiệm vụ này. |
+| ADR-0008 trong ZIP Returns đã cung cấp trước đây | Nguồn tham khảo lịch sử; không giải nén đè | Các khác biệt snapshot trước đây không mở lại mask/cutoff đã được xác nhận. Trạng thái merge ADR lấy từ thông báo Khải, không từ tên ZIP. |
 | [API contract cục bộ](../api/contract.md) và `docs/api/contract.md` trong ZIP Returns | Cả hai đã đọc | Cùng cấu trúc DynamoDB `q`/JSON `returns`; khác diễn đạt sign accuracy và một số minh họa. |
 | `docs/api/accuracy-schema.md` trong `CPAWS-commodity-forecasting-docs-accuracy-schema.zip` (PR #10) | Đã đọc đủ; **chưa có bản cục bộ tại đường dẫn đích** | Snapshot trước các cập nhật trong [REVIEW]. Dùng review để cập nhật khóa, naive-zero và crossing, không giữ lại lựa chọn cũ đã được giải quyết. [Liên kết dự kiến — phụ thuộc PR #10](../api/accuracy-schema.md). |
-| Bản review người dùng cung cấp sau Draft 381 dòng | Đã đọc trực tiếp | Nêu evaluation_kind/cutoff bắt buộc, naive-zero chỉ làm mẫu số, crossing thiếu raw là not_applicable; hợp đồng baseline-252 và ranh giới roll còn mở. Chưa có file schema mới hơn để kiểm tra nguyên văn. |
+| Bản review người dùng cung cấp sau Draft 381 dòng | Đã đọc trực tiếp; review PR #12 dưới đây cập nhật tiếp | Giữ evaluation_kind/cutoff bắt buộc, naive-zero chỉ làm mẫu số và status crossing; các câu hỏi baseline/roll của bản này đã được [KHẢI12] giải quyết. |
+| Review Khải PR #12 được cung cấp ngày 2026-10-19 | Đã đọc trực tiếp; cập nhật mới hơn review trên | Chốt baseline chỉ ở Detail, roll, bootstrap/CI, DM/Holm, publication-rule provenance, Fits tối giản và một module triển khai; xem mục 14. |
 | [ADR-0002](../adr/0002-return-quantile-target.md) | Có cục bộ | Quyết định ban đầu; chi tiết 3 phân vị/MASE/input được ADR-0008 thay thế một phần. |
 | [calendars.py](../../src/data/calendars.py), [config.py](../../src/data/config.py) | Có cục bộ | NYSE cho GLD/SLV; CME cho BZ=F/CL=F; lịch hiện giới hạn 2010–2030; công bố yfinance tạm D+1 12:00 UTC. |
 | [clean.py](../../src/data/clean.py), [storage.py](../../src/data/storage.py) | Có cục bộ | Khóa `(date, asset)`; `published_at`, `ingested_at`, flag; snapshot `prices.parquet`/`rejected.parquet`; dòng `incomplete_bar` không lưu vào rejected. |
 | [returns.py cục bộ](../../src/forecast/returns.py) | Có, **bản cũ** | Target dịch theo vị trí mảng; `prob_up` còn tự sửa bằng maximum-accumulate; không đáp ứng giao tiếp mục tiêu ADR-0008. Không sử dụng như bản triển khai mới. |
-| `src/forecast/returns.py`, `src/forecast/baselines.py` trong ZIP Returns | Đã đọc; baselines chưa có cục bộ | Returns nhận Series/lịch/invalid_dates; sort một lần và trả crossing; baseline lấy các origin hoàn tất, tối thiểu 200. Chỉ là phụ thuộc tham khảo, chưa tích hợp. |
-| [src/eval/metrics.py — liên kết phụ thuộc PR Metrics](../../src/eval/metrics.py) | Có trong snapshot cục bộ đã kiểm thử; chưa xác minh trên branch đích | Hàm thuần, DM nhận loss và trả NaN khi phương sai bằng 0. Snapshot cục bộ còn shim cũ, nhưng [REVIEW] cho biết PR Metrics đã xóa shim; hợp đồng này không phụ thuộc import cũ hoặc yêu cầu khôi phục shim. |
-| `task.md`, `tasks.md`, `src/features/build.py` | Không tìm thấy trong source cục bộ; không có trong hai ZIP kèm nhiệm vụ | Chưa kiểm chứng giao tiếp features hoặc kế hoạch từ task file. |
-| `src/eval/generate_forecasts.py`, `src/eval/evaluate.py` | Chưa có cục bộ hoặc trong hai ZIP | Kiến trúc mục tiêu theo [YÊU CẦU], không phải module hiện hữu. |
+| PR #13: `CPAWS-commodity-forecasting-feat-returns-adr0008 (2).zip` | Đã đọc source trực tiếp trong ZIP mới; PR mở/được review theo [KHẢI12]; baselines/forecast_record chưa có trong source cục bộ | API target/normalize/prob_up và quantile_baseline/up_rate_baseline/constant_prob_baseline/baseline_valid được đối chiếu trong ZIP; không nhập code hoặc suy đã merge. |
+| [src/eval/metrics.py — phụ thuộc PR #11](../../src/eval/metrics.py) | Có snapshot cục bộ; PR #11 đang chỉnh theo review [KHẢI12] | **DM cục bộ vẫn dùng Bartlett, chưa đáp ứng uniform weights đã chốt.** Bootstrap helper cục bộ chỉ nhận mảng hữu hạn theo hàng, chưa tự căn lịch nhiều asset. Không coi snapshot này là bản PR #11 đã sửa; không sửa metrics tại đây. |
+| PR #14: `src/features/build.py` trong `CPAWS-commodity-forecasting-feat-features-build.zip` | Đã đọc source trực tiếp trong ZIP mới; chưa có file cục bộ; PR phụ thuộc PR #13 | Đối chiếu đủ build_feature_frame/make_windows/latest_base_date, FeatureBatch và reason/timestamp ở mục 3.1; không viết lại logic hoặc suy đã merge. |
+| `task.md`, `tasks.md` | Không tìm thấy cục bộ | Không suy thêm kế hoạch từ task file không có. |
+| `src/eval/walk_forward.py` | Chưa có cục bộ | Module MVP đã chốt theo [KHẢI12]; chỉ là kế hoạch triển khai, không tạo trong nhiệm vụ này. |
 
-**Nguồn tham khảo và liên kết:** Các file trong ZIP hoặc snapshot của branch khác chỉ là tài liệu tham khảo thiết kế, không chứng minh file đã tồn tại trong branch chứa PR này. Bảng trên xác nhận sự tồn tại cục bộ, không xác nhận `developer` hoặc trạng thái merge. Liên kết ADR-0008 phụ thuộc PR #8; Accuracy Schema phụ thuộc PR #10; module metrics phụ thuộc PR Metrics. Trước tích hợp phải kiểm tra lại các đường dẫn trên branch đích sau khi PR phụ thuộc được merge; không coi liên kết mở được cục bộ là bằng chứng trên GitHub.
+**Nguồn tham khảo và liên kết:** File trong ZIP/snapshot không chứng minh trạng thái branch đích. ADR-0008 đã merge theo thông báo của Khải; Accuracy là PR #10, Metrics PR #11, Returns/Baselines PR #13 và Feature Builder PR #14. Chưa tuyên bố các PR còn lại đã merge; chỉ triển khai khi API tương ứng được cung cấp/kiểm chứng. Liên kết mở được cục bộ không là bằng chứng GitHub. Không lấy commit bằng Git trong nhiệm vụ này.
 
-**Khác biệt phiên bản:** ADR trong ZIP Returns mục 4 nói thiếu baseline thì bỏ chỉ số *dùng mốc*, còn mục 5 nói mask chung; snapshot AS10 ZIP vẫn ghi câu hỏi này. ADR cục bộ đã làm rõ mask chung, ngoại lệ crossing và ranh giới nhãn. Draft giữ mask chung/crossing `all` theo **[YÊU CẦU] + ADR cục bộ**. Riêng khóa Accuracy, naive-zero và phân loại crossing áp dụng **[REVIEW]** mới hơn; không tiếp tục trình bày các lựa chọn cũ đó là câu hỏi cần phê duyệt lại.
+**Khác biệt phiên bản:** Giữ mask/cutoff/status và số học đã được Khải xác nhận đúng ADR; các câu hỏi cũ trong snapshot ZIP không mở lại quyết định đó. Khóa Accuracy/naive/crossing giữ theo [REVIEW]; những thay đổi phạm vi MVP và orchestration áp dụng [KHẢI12]. ADR cục bộ nói CI cho mọi metric; review chốt MVP bắt buộc CI pinball_skill, CI khác triển khai giai đoạn 2 trừ yêu cầu bắt buộc khác của hợp đồng cấp trên. Báo cáo phải nêu phạm vi CI đã thực hiện, không tự sửa ADR hoặc tuyên bố MVP đã tính mọi CI.
 
-## 3. Kiến trúc hai lớp
+## 3. Hai chức năng trong một module Walk-forward
 
-**[YÊU CẦU]** Luồng logic: `features → generate_forecasts → Internal Forecasts → evaluate → Detail → Accuracy`.
+**[KHẢI12]** Module duy nhất: `src/eval/walk_forward.py`. Luồng logic: `PR #14 build_feature_frame → make_windows → sinh dự báo → Internal Forecasts → ghép target/baseline → Detail → Accuracy`.
 
 | Thành phần mục tiêu | Đầu vào | Trách nhiệm | Đầu ra |
 |---|---|---|---|
-| `src/eval/generate_forecasts.py` | Model cố định, prices/metadata đầu vào, cfg; giao tiếp với `build.py` chưa có | Đi qua lịch gốc; kiểm tra input point-in-time; model xuất `(7,7)`; ghi crossing thô; normalize đúng một lần; tính prob_up; giữ lần bỏ qua/lỗi | Internal Forecasts + metadata lần sinh và fits |
-| `src/eval/evaluate.py` | Forecasts đã có, prices/rejected, cfg và metadata được cfg tham chiếu | Không gọi model, không normalize lại; dựng lịch kỳ vọng; tạo target/baseline; cutoff/mask; metrics/CI; ánh xạ status | Detail + Accuracy; log bộ đếm; comparison riêng khi có yêu cầu |
+| Sinh dự báo trong `walk_forward.py` | Model cố định, FeatureBatch từ make_windows, scaler của fit và cfg | Giữ expected origins; kiểm tra input/publication; scale và chuyển float32; model xuất `(7,7)`; crossing raw, normalize một lần, prob_up | Internal Forecasts + metadata lần sinh và fits |
+| Đánh giá trong cùng `walk_forward.py` | Forecasts model đã có, prices/rejected, cfg và fits | Không gọi model hoặc normalize; target từ Returns, baseline từ Baselines; cutoff/mask; metrics/CI từ PR #11 | Detail + Accuracy; log bộ đếm; comparison riêng khi cần |
 
-`evaluate()` nhận dự báo từ model, baseline phân phối hoặc nguồn đã lưu. Không bắt buộc gọi `generate_forecasts()` trong cùng tiến trình. `cfg` phải tham chiếu được các manifest/fits, snapshot giá, phiên bản lịch, giới hạn công bố, cấu hình bootstrap và hash bất biến; đây là giao tiếp đề xuất, không phải chữ ký Python đã triển khai.
+Chức năng đánh giá nhận Forecasts của mô hình thật, có thể đã lưu từ lần sinh trước; không bắt buộc chạy model cùng tiến trình. **Baseline-252 không là một nguồn Internal Forecasts hoặc model giả**; nó được tính bằng PR #13 và gắn vào Detail. `cfg` tham chiếu fits, snapshot giá, lịch/publication rule và seed/config đánh giá; các kiểm tra vintage đầy đủ thuộc chế độ PIT/giai đoạn 2, không là điều kiện bắt buộc cho publication-rule MVP.
 
 MVP **[YÊU CẦU]**: train 2014–2018, validation 2019; model cố định, `retrain_every=None`, không retrain trong 2019, không early stopping trên 2019. Tham số có thể chọn bằng kết quả validation theo ADR, nhưng không dùng validation làm nhãn train hoặc dữ liệu fit scaler. Input cần lịch sử 2012–2013 có thể dùng làm warm-up, không biến thành nhãn train ngoài cấu hình. Test từ 2020 chỉ chạy theo chiến lược đã khóa; không dùng test chọn block length, ngưỡng hay nội suy.
+
+### 3.1. Feature Builder PR #14 — API Khải công bố, đã đối chiếu ZIP
+
+| API | Output / trách nhiệm đã công bố |
+|---|---|
+| `build_feature_frame(prices, asset, *, invalid_dates=None)` | asset, feature_session_date, log_return_1_end, feature_valid, feature_reason, feature_available_at; invalid_dates xét riêng asset |
+| `make_windows(frame, base_dates, window=60) -> FeatureBatch` | X NumPy float64 `[N,L,1]`; valid, reason, base_dates, input_session_dates, max_input_published_at; asset, feature_names, window |
+| `latest_base_date(frame)` | Ngày gốc có giá cuối cùng, phục vụ predict production giai đoạn 2; không thay expected grid validation và không tự chứng minh window hợp lệ |
+
+**make_windows là nơi duy nhất cắt input windows.** Walk-forward không tự trượt L phiên, căn return lại, forward-fill, drop dòng thiếu trước khi cắt, hoặc viết fallback khi API chưa có. Luồng validation 2019 theo asset: lấy base_dates từ lịch phiên → gọi make_windows với `window=cfg.window` → giữ mọi base_dates trong audit. Với valid=False không gọi model; với valid=True kiểm tra max_input_published_at<=as_of_time, dùng scaler đã fit từ train và chuyển float32 cho model, xuất đủ 7 h × 7 q. Không fit scaler lại trên 2019.
+
+**Integration note từ source ZIP:** FeatureBatch giữ thứ tự base_dates caller truyền, không bỏ hàng invalid; valid=False có thể để X chứa NaN và max_input_published_at=NaT. Mảng timestamp max_input_published_at là `datetime64[ns]` không mang timezone nhưng **giá trị là UTC**; tầng orchestration gắn UTC khi so với as_of_time, không diễn giải thành giờ máy hoặc normalize về ngày. valid=True vẫn cần kiểm tra NaT/publication; không sửa builder để bỏ qua thiếu metadata. feature_available_at ở frame là timestamp UTC có timezone. latest_base_date trả phiên cuối frame, không lùi về cửa sổ hợp lệ gần nhất; production behavior này ở phase 2.
+
+| FeatureBatch.reason khi valid=False | forecast_status | missing_reason |
+|---|---|---|
+| `invalid_input_window` | `invalid_input_window` | `input_nan` |
+| `insufficient_input_history` | `invalid_input_window` | `insufficient_input_history` |
+
+Publication metadata thiếu/không xác định không được suy cửa sổ đủ điều kiện chỉ vì X hữu hạn; phải tra được quy tắc nguồn để kiểm tra hoặc ghi nhận không đủ bằng chứng/không phát hành. Một vi phạm publication đã biết giữ lý do input_not_available riêng theo mục 5.3/5.5, không đổi thành target/baseline failure hoặc no_forecast_row. Nếu PR #14 phát sinh reason ngoài hai mã đã công bố thì cần integration note đối chiếu API, không tự tạo mapping/logic window mới.
 
 ## 4. Bốn loại dữ liệu khác nhau
 
@@ -79,7 +101,7 @@ Mọi cột dưới đây phải hiện diện; cột “Bắt buộc” phân b
 |---|---|---|---|---|---|
 | `forecast_run_id` | string | Có | Không | ID lần sinh hoặc nhập dự báo | Không rỗng; tham chiếu manifest bất biến |
 | `model_version` | string | Có | Không | Nhóm kết quả của một phiên bản model | Không rỗng; nhất quán với fits/manifest |
-| `fit_id` | string | Với nguồn có fit | Có | Bản huấn luyện cụ thể | FK tồn tại; null cho nguồn không có fit hoặc external_unverified thiếu chứng cứ theo mục 6 |
+| `fit_id` | string | Có trong MVP | Chỉ phase 2 theo nguồn | Bản huấn luyện cụ thể | MVP: FK tồn tại, model_version/asset khớp Fits; external_unverified thiếu fit chỉ thuộc phase 2, không giả lập baseline |
 | `asset` | enum string | Có | Không | `gold`, `silver`, `brent`, `wti` | Khớp target series/lịch trong config |
 | `base_date` | date | Có | Không | Phiên gốc của dự báo | Là phiên tài sản; thuộc lịch chạy; không đổi thành ngày tác vụ chạy |
 | `h` | integer | Có | Không | Số phiên, `1..7` | Không nhận bool, số thập phân, hoặc ngày lịch |
@@ -88,8 +110,8 @@ Mọi cột dưới đây phải hiện diện; cột “Bắt buộc” phân b
 | `crossed_raw` | boolean | Cột có; chứng cứ tùy nguồn | Có | Crossing trước sort | true/false chỉ khi đã kiểm tra đủ 7 phân vị thô hữu hạn; không suy false từ q đã sort |
 | `forecast_status` | enum string | Có | Không | `ok`, `invalid_input_window`, `generation_error` | Không nhận `no_forecast_row` từ bộ sinh/importer |
 | `missing_reason` | enum string | Khi không ok | Có | Lý do bỏ qua/lỗi, mục 5.3 | null đúng khi ok; không dùng chuỗi tự do thay enum |
-| `as_of_time` | timestamp UTC | Với nguồn verified | Có | Thời điểm phát hành thật hoặc giả lập khi input đã sẵn sàng | Điều kiện công bố mục 5.5; external thiếu chứng cứ được null |
-| `provenance_status` | enum string | Có | Không | `verified_backtest`, `verified_production`, `external_unverified` | Các tên này là đề xuất; verified phải có metadata đủ kiểm tra |
+| `as_of_time` | timestamp UTC | Có trong MVP và verified | Chỉ external phase 2 nếu thiếu chứng cứ | Thời điểm phát hành thật hoặc giả lập | MVP: published_at(base_date) theo rule nguồn, không dùng created_at; kiểm tra mục 5.5 |
+| `provenance_status` | enum string | Có | Không | `backtest_publication_rule`, `verified_backtest`, `verified_production`, `external_unverified` | Mức publication-rule do [KHẢI12] chốt cho validation 2019; khác PIT verified; nguồn phase 2 giữ theo mục 5.5 |
 | `created_at` | timestamp UTC | Tùy nguồn | Có | Thời điểm tạo/ghi bản ghi, không phải chứng cứ PIT | Import production giữ giá trị nguồn, không ghi đè bằng giờ import; batch lưu giờ import trong manifest |
 
 ### 5.2. Khóa, chạy lại và nhiều fit
@@ -119,9 +141,9 @@ Bộ sinh ghi một dòng cho mọi `(asset, base_date,h)` dự kiến. Input l�
 
 **[ADR + SRC ZIP Returns]** Generate kiểm tra shape `(7,7)` và hữu hạn; ghi crossing trên trục phân vị; gọi `normalize_quantiles()` đúng một lần trên output hợp lệ; tính `prob_up` tuyến tính từ q đã sort. Importer chỉ nhận q đã chuẩn hóa, không tự sửa q. Evaluate xác thực không giảm, không normalize và không kẹp lại xác suất sai.
 
-**[SRC ZIP Returns]** 0 dưới q05 → prob_up=0.95; trên q95 → 0.05; 0 trùng nhiều q → lấy mức phân vị cao nhất trong nhóm bằng 0. Quy tắc tie này cần Khải xác nhận vì ADR không mô tả đầy đủ trường hợp trùng nhiều mức.
+**[SRC ZIP Returns + KHẢI12]** 0 dưới q05 → prob_up=0.95; trên q95 → 0.05; 0 trùng nhiều q → lấy mức τ cao nhất của nhóm trùng theo quy ước CDF liên tục bên phải. Khải đã xác nhận tie này; không mở lại thành quyết định chưa chốt.
 
-**[ĐỀ XUẤT]** Dự báo nội bộ chưa làm tròn phải khớp hàm prob_up với dung sai tuyệt đối `1e-12` (ghi cfg). Bản production đã làm tròn cần profile riêng ở mục 10; không dùng dung sai tùy tiện để che sai thuật toán. Phương pháp nội suy là metadata bất biến trong manifest; mặc định linear, không ngầm chuyển PCHIP.
+**[ĐỀ XUẤT]** Dự báo nội bộ chưa làm tròn phải khớp hàm prob_up với dung sai tuyệt đối `1e-12` (ghi cfg). Production import/làm tròn ở mục 10 thuộc phase 2, không chặn validation 2019; không dùng dung sai tùy tiện để che sai thuật toán. Phương pháp nội suy là metadata bất biến trong manifest; mặc định linear, không ngầm chuyển PCHIP.
 
 Crossing mask: `evaluation_start <= base_date <= evaluation_end AND crossed_raw IS NOT null`, với bằng chứng raw hữu hạn và dòng qua kiểm tra cấu trúc/provenance. `crossing_rate = count(crossed_raw=true)/count(crossed_raw IS NOT null)` riêng asset/h, `sample=all`; n_obs là mẫu số đó. Không dùng target, cutoff nhãn, baseline hay common_mask; target chưa có vẫn tính crossing. Không có chứng cứ ở một dòng → dòng đó không vào mẫu số, không suy false. [YÊU CẦU + ADR cục bộ]
 
@@ -139,41 +161,45 @@ Phân loại kết quả cho `sample=all` theo **[REVIEW]** (với dầu/excl_ro
 
 ### 5.5. Thời điểm và nguồn gốc
 
-`as_of_time` là lúc phát hành/giả lập phát hành, **không phải** lúc evaluate hoặc ingest lại bản ghi. Với nguồn verified, phải có khả năng tra snapshot và kiểm tra:
+`as_of_time` là lúc phát hành/giả lập phát hành, **không phải** lúc evaluate, trained_at hoặc ingest lại bản ghi. Không tự thêm cột provenance/run-status vào Accuracy; giữ provenance ở Internal Forecasts và cấu hình/báo cáo của run.
 
-1. `published_at(base_date) <= as_of_time`; **mọi** đầu vào, scaler/feature artifact phụ thuộc dữ liệu cũng phải sẵn sàng không muộn hơn as_of_time.
-2. `as_of_time < published_at(target_date)` cho từng h; bằng thời điểm nhãn sẵn sàng cũng là quá muộn.
-3. Snapshot và nhãn baseline dùng ở t không được mang revision chưa có ở as_of_time; kiểm tra date đơn thuần chưa bảo đảm điều này.
+**MVP validation 2019 — `backtest_publication_rule` [KHẢI12]:** dùng snapshot clean mới nhất sẵn có, mô phỏng publication theo ADR-0005. Với yfinance price-only, `published_at(D)=D+1 lúc 12:00 UTC` và **as_of_time=published_at(base_date)**. D+1 là ngày lịch của rule công bố, không phải bước h theo phiên. Kiểm tra `max_input_published_at <= as_of_time` và `as_of_time < published_at(target_date)`; kiểm tra nhãn fit/baseline đã hoàn tất và có thể công bố theo cùng rule. Không áp D+1 cho EIA hoặc nguồn có lag khác.
 
-`published_at` hiện là **quy tắc công bố bảo thủ do config đặt**, không phải timestamp sàn được kiểm chứng; `ingested_at` là thời điểm nạp, không tự thay thế publication history. [SRC] Clean snapshot bị refetch/ghi đè theo khóa; snapshot mới nhất có thể chứa sửa giá về sau. [ĐỀ XUẤT] Manifest giữ snapshot URI/version/hash, phiên bản lịch/publication rule và max input publication time theo lần phát hành; nếu không có lịch sử revision thì hạ mức chứng cứ, không tự gắn verified.
+Mức này **được dùng để chọn cấu hình/model trong MVP validation 2019**, nếu các kiểm tra dữ liệu, fit, mask/cutoff và input theo rule đạt. Báo cáo phải ghi rõ: “Sử dụng snapshot sạch mới nhất, mô phỏng thời điểm công bố; chưa kiểm chứng historical vintage/revisions; không phải backtest đã xác minh point-in-time đầy đủ.” Giữ định danh snapshot và rule/seed/config để tái lập; không yêu cầu xây pipeline lưu vintage trong MVP. Thiếu vintage một mình không chuyển run hợp lệ của chế độ này thành external_unverified.
 
-| Tình trạng đề xuất | Chính sách evaluate |
-|---|---|
-| `verified_backtest` | Cần snapshot/cấu hình/fits và mô phỏng input as-of tái lập; trained_at thực tế có thể sau ngày lịch sử vì đây là backtest. Không coi replay hiện tại là dự báo production lịch sử. |
-| `verified_production` | Cần timestamp phát hành thực, dữ liệu/artifact đã tồn tại trước phát hành; created_at riêng lẻ không đủ chứng minh. |
-| `external_unverified` | Thiếu raw/fit/publication history: được chấm thống kê **thăm dò** nếu cấu trúc/nhãn hợp lệ, cảnh báo rõ PIT chưa xác minh. Tách run khỏi verified, không dùng như bằng chứng chọn model/so sánh chính thức. |
-| Có chứng cứ vi phạm công bố/nhãn train hoặc FK/sai schema | Từ chối batch trước tính metrics; không “hạ thành external” để bỏ qua vi phạm đã biết. |
-| Tự khai verified nhưng thiếu metadata bắt buộc | Từ chối chế độ verified; chỉ nhập lại thành external_unverified bằng quyết định rõ ràng có audit, không tự đổi nhãn. |
+Publication metadata phải xác định được từ nguồn/ngày và rule tương ứng, không suy từ X hữu hạn. Nếu thiếu max_input_published_at hoặc không thể kiểm tra nguồn/rule thì chưa đủ điều kiện phát hành/chọn model; không tự gắn publication-rule hợp lệ hoặc verified. Vi phạm publication hoặc nhãn train đã biết vẫn bị từ chối/ghi lý do, không được “hạ provenance” để bỏ qua. Dòng input chưa sẵn sàng giữ lần thử input_not_available, không biến thành no_forecast_row.
 
-Các chính sách nguồn, enum và cách từ chối/cảnh báo là **[ĐỀ XUẤT CẦN KHẢI/TUẤN REVIEW]**. Không trộn provenance khác nhau vào cùng run kết quả; config/report phải chỉ rõ mức chứng cứ dù Accuracy chưa có cột provenance.
+| Provenance | Eligibility / trạng thái run | Phạm vi |
+|---|---|---|
+| `backtest_publication_rule` | Kiểm tra rule/fit/dữ liệu đạt → được xuất kết quả và chọn model validation 2019, **kèm giới hạn vintage bắt buộc**. Metric status vẫn theo mục 11, không đổi thành undefined chỉ vì thiếu vintage. | MVP [KHẢI12] |
+| `external_unverified` | Nguồn ngoài chưa đáp ứng chính sách cho phép chọn model; chỉ chấm thăm dò nếu cấu trúc/nhãn hợp lệ; không dùng chọn model chính thức. Thiếu raw chỉ ảnh hưởng crossing, không tự quyết định provenance. | Phase 2 |
+| `verified_backtest` | Phải có bằng chứng lịch sử snapshot/revisions và input as-of; không suy từ snapshot mới nhất hoặc publication rule. trained_at thực tế có thể sau ngày lịch sử, không sửa thành năm 2018. | Chế độ PIT nâng cao/phase 2 |
+| `verified_production` | Cần timestamp phát hành và bằng chứng dữ liệu/artifact tồn tại trước phát hành; created_at riêng lẻ không đủ. | Phase 2 |
+
+Với hai chế độ verified, giữ điều kiện mọi input/artifact cần thiết sẵn sàng tại thời điểm mô phỏng/phát hành và không mang revision tương lai; đó là tiêu chuẩn **mạnh hơn** publication-rule MVP. Tự khai verified nhưng thiếu bằng chứng thì từ chối xác nhận verified; không tự đổi nhãn. Không trộn provenance khác nhau vào cùng run tổng hợp. Các yêu cầu production/import/rolling_8w ở mục này và mục 7/10 còn cần Tuấn review giai đoạn 2, không chặn MVP publication-rule theo quyết định của Khải.
 
 ## 6. Fits metadata
 
-Đề xuất cấu trúc `fits` riêng, khóa duy nhất `fit_id`; không tạo thuộc tính DynamoDB mới.
+Metadata logic `fits`, khóa duy nhất fit_id; không thiết kế bảng DynamoDB/API Fits. **MVP có đúng nhóm trường bắt buộc sau [KHẢI12]**; các thông tin audit không biến thành điều kiện phụ cản demo.
 
 | Trường | Kiểu; null? | Quy tắc |
 |---|---|---|
 | `fit_id` | string; không | ID bất biến của artifact huấn luyện, seed khác/artifact khác có ID khác |
-| `model_name`, `model_version` | string; không | Tên thuật toán và nhóm phiên bản; model_version khớp Forecasts |
+| `model_version` | string; không | Nhóm phiên bản; khớp Forecasts |
+| `asset` | enum string; không | gold/silver/brent/wti; khớp asset của Forecasts tham chiếu fit |
 | `train_end` | date; không | Giới hạn ngày gốc train khai báo, không thay cho ngày đích nhãn |
 | `max_training_target_date` | date; không | Ngày đích muộn nhất trong mọi nhãn train/tuning nội bộ/early-stopping đã dùng để fit artifact |
-| `max_training_label_available_at` | timestamp UTC; verified không null | Thời điểm nhãn train muộn nhất thực sự sẵn sàng; khác ngày đích |
-| `trained_at` | timestamp UTC; không với fit có chứng cứ | Giờ tạo artifact thật; không đổi thành năm 2018 để giả lập backtest |
+| `trained_at` | timestamp UTC; không | Giờ tạo artifact thật; không đổi thành năm 2018 để giả lập backtest |
 | `config_hash` | string; không | Hash cấu hình fit: data snapshot, seed, preprocessing/scaler, train split, target/calendar versions; khác hash đánh giá |
+| `commit` | string; không | Metadata do workflow triển khai cung cấp; không dùng Git lấy ở nhiệm vụ này, không bịa hash hoặc thay bằng chuỗi giả |
 
-MVP validation 2019: `train_end <= 2018-12-31`, `max_training_target_date <= 2018-12-31`; các ngày gốc train thuộc 2014–2018. Nhãn origin cuối 2018 có target sang 2019 phải bị bỏ. `max_training_label_available_at <= as_of_time` đầu tiên dùng fit; nhãn ngày cuối 2018 công bố năm 2019 chỉ có thể dùng khi đã sẵn sàng, không tự gán khả dụng cuối năm. Không có nhãn validation dùng để fit/early stopping/scaler. [ADR ranh giới cục bộ + YÊU CẦU + ĐỀ XUẤT kiểm tra metadata]
+**Tùy chọn/audit trong MVP:** model_name, snapshot/version/hash references, max_training_label_available_at. Trường thời điểm nhãn này có thể suy từ publication rule của asset và các nhãn đã khai (với price-only yfinance, từ ngày đích muộn nhất theo rule); không bắt buộc phải lưu cột để kiểm tra. Nếu cả metadata lẫn rule/nguồn đều không cho xác định thời điểm nhãn thì báo thiếu khả năng kiểm tra, không suy nhãn đã sẵn sàng.
 
-Nguồn baseline không có fit → fit_id=null và manifest khai `no_training`; nguồn model có fit nhưng không khai ID không được giả làm baseline. Với external model không có fit metadata, chỉ chế độ unverified được chấp nhận, ghi rõ lý do trong manifest; không suy ra đã kiểm chứng train.
+**Giai đoạn 2:** chứng cứ vintage/revision đầy đủ, lineage retrain và metadata production nâng cao phục vụ verified modes. Giữ các khái niệm audit đó để truy vết, không yêu cầu pipeline vintage cho MVP. Một ID fit không có dữ liệu metadata bắt buộc do workflow cung cấp chưa đủ điều kiện tích hợp; ví dụ fit-demo ở mục 12 chỉ là minh họa, không là fit thật đã được xác nhận.
+
+MVP validation 2019: `train_end <= 2018-12-31`, `max_training_target_date <= 2018-12-31`; origin train thuộc 2014–2018. Nhãn cuối 2018 sang 2019 phải bỏ. Thời điểm nhãn train sẵn sàng, lấy từ trường audit hoặc suy theo publication rule, phải <=as_of_time đầu tiên dùng fit; không gán nhãn đã khả dụng trước giờ công bố. Không dùng nhãn validation để fit/early stopping/scaler. Trained_at là thời gian chạy thật, không phải giới hạn ngày nhãn train. [ADR + KHẢI12]
+
+Baseline không tạo Forecasts hoặc Fits; không tạo fit_id=null/no_training để đưa baseline thành model giả. Model thật trong MVP phải tham chiếu fit hợp lệ. External model thiếu fit metadata chỉ thuộc luồng nhập thăm dò phase 2, ghi giới hạn và không giả làm baseline.
 
 Tương lai retrain: mỗi forecast tham chiếu fit có nhãn đã công bố không muộn hơn as_of_time tương ứng; production còn yêu cầu trained_at không muộn hơn phát hành. Một model_version nhiều fit_id hợp lệ nếu manifest chọn đúng fit mỗi origin. Không cấm máy móc mọi dữ liệu từ 2020 trong mọi chế độ tương lai; phải chốt trước giao thức retrain và ngăn dùng nhãn chưa sẵn sàng. MVP vẫn từ chối retrain_every khác None. Metadata chỉ là khai báo/audit, không chứng minh tuyệt đối quá trình fit không rò rỉ.
 
@@ -186,7 +212,9 @@ Cfg có `evaluation_start`, `evaluation_end`, `target_cutoff_date`, `evaluation_
 | validation/test lịch sử | Mọi phiên tài sản trong khoảng ngày gốc đóng `[start,end]` × các h cấu hình (MVP 1..7) | Lấy từ lịch, **không lấy từ các ngày còn giá hoặc có Forecasts**; giữ origin cuối kỳ dù target vượt cutoff để đếm loại |
 | `rolling_8w` | Manifest phát hành production trong cửa sổ 8 tuần, có asset/base_date/h và nguồn model/run kỳ vọng | Không giả định phát hành mọi phiên. Cách neo 8 tuần, lịch phát hành và chính sách ingest/predict chưa có: **[CẦN KHẢI/TUẤN XÁC NHẬN]** |
 
-Left join expected grid với Forecasts theo run/model/asset/base_date/h, lấy fit_id từ lịch fit đã khai. Thiếu dòng → Detail tổng hợp status/reason=no_forecast_row; fit_id lấy từ manifest hoặc null nếu nguồn không có fit. Không suy fit từ dòng lân cận. Giữ counters riêng cho invalid_input_window, generation_error và no_forecast_row.
+**Phạm vi [KHẢI12]:** MVP chỉ validation 2019 với model/scaler cố định và make_windows trên mọi phiên asset. `rolling_8w`, lịch phát hành thật, production import và các yêu cầu mở của Tuấn là **phase 2**, không là điều kiện chặn MVP. Giao thức test tương lai tiếp tục phải khóa trước khi dùng, không mở tập 2020+ ở nhiệm vụ này.
+
+Left join expected grid với Forecasts theo run/model/asset/base_date/h, lấy fit_id từ fit cố định đã khai cho asset trong MVP (lịch fit phase 2 khi retrain được hỗ trợ). Thiếu dòng → Detail tổng hợp status/reason=no_forecast_row; không suy fit từ dòng lân cận. Giữ counters riêng cho invalid_input_window, generation_error và no_forecast_row. make_windows trả valid=False vẫn tạo lần thử có lý do, không để join biến thành dòng vắng.
 
 Forecasts ngoài khoảng đang chấm được bỏ qua có đếm; dòng sai lịch hoặc h không hợp lệ bị từ chối ở validation cấu trúc, không đổi base_date. Snapshot giá bắt đầu quá muộn để tái tạo warm-up/cửa sổ input là lỗi chuẩn bị dữ liệu cần báo rõ hoặc lần thử insufficient_input_history; không lặng lẽ cắt ngày bắt đầu đánh giá. Một số origin có baseline dưới 200 là loại từng điểm, không tự làm mất cả run.
 
@@ -221,9 +249,11 @@ Detail kế thừa **tất cả** cột Forecasts mục 5, cho phép thêm statu
 | `model_pinball_loss`, `baseline_pinball_loss` | number >=0; có | Tính đủ 7 q, cùng y trên common_mask_all; ngoài mask để null |
 | `exclusion_reason` | enum string; có | Lý do chính loại khỏi all theo ưu tiên mục 9.2; null nếu thuộc all |
 
-**Baseline [ADR + SRC ZIP Returns]:** dùng `quantile_baseline`, `up_rate_baseline`, `baseline_valid` của Khải, không triển khai bản cạnh tranh trong evaluate. Trên lưới phiên đầy đủ, tại chỉ số t, origin s thuộc `[t−251,t−h]`; điều kiện s+h<=t là **vị trí lịch**, không cộng ngày lịch. Các NaN vẫn chiếm vị trí cửa sổ, không gom 252 return hợp lệ. Source ZIP dùng quantile interpolation linear. Adapter lọc rejected riêng từng asset, bảo đảm Series căn lịch/hữu hạn trước khi đưa vào module; output giữ index tương ứng.
+**Baseline [ADR + SRC PR #13 + KHẢI12]:** gọi `quantile_baseline()`, `up_rate_baseline()`, `baseline_valid()` và `constant_prob_baseline()` (mốc 0.5 khi cần) từ module của Khải; **không tạo Baseline Adapter riêng hoặc triển khai bản cạnh tranh**. Giữ cửa sổ 252 phiên, return đã hoàn tất, tối thiểu 200 quan sát hợp lệ; chỉ mô tả phạm vi theo source là s thuộc `[t−251,t−h]` trên lịch. NaN vẫn chiếm vị trí phiên, không gom 252 return hợp lệ bất kể xa tới đâu. Tầng Walk-forward chỉ chuẩn bị target Series theo API Returns/invalid_dates đúng asset và ghép output module vào Detail; không sao chép thuật toán baseline.
 
-Đề xuất thêm ràng buộc publication: return lịch sử dùng trong baseline phải khả dụng ở as_of_time của origin, cả endpoint và revision; điều kiện s+h<=t một mình chưa đủ chứng minh PIT. Source baseline trong ZIP chưa nhận publication timestamp; trách nhiệm xác thực nguồn nằm ở adapter/khung evaluate. Với nguồn external không có as_of_time đáng tin, chỉ xác minh được tính nhân quả theo ngày trên snapshot khai báo, phải ghi giới hạn này.
+Với backtest_publication_rule, kiểm tra return lịch sử dùng trong baseline đã hoàn tất và có thể công bố tại as_of_time theo rule của asset; vintage/revisions chưa xác minh phải báo rõ nhưng không cấm chọn model validation 2019. Source Baselines không nhận publication timestamp: kiểm tra này thuộc orchestration, không thêm API hoặc adapter baseline. Chỉ các chế độ verified nâng cao mới đòi bằng chứng snapshot/revision as-of thực sự.
+
+Baseline luôn nằm ở các cột baseline_q*, baseline_prob_up, baseline_pinball_loss và validity/audit của **cùng dòng Detail**, không tạo model_name/model_version giả, dòng Fits hoặc Internal Forecasts riêng cho Baseline-252. Baseline_prob_up là tần suất `[0,1]`, không chịu điều kiện p nội suy/kẹp của hàng dự báo model nên không cần mở rộng Forecasts Schema.
 
 **Loss [ADR + SRC metrics]:** với τ theo đủ 7 mức, `L_t = sum(max(τ*(y-qτ), (τ-1)*(y-qτ)))/7`. Giữ hai cột loss để ghép ngày cho DM và resample block. `pinball_skill = 1 − mean(model_loss)/mean(baseline_loss)` trên cùng mask; **không** lấy trung bình skill từng dòng. Loss null ngoài mask không được tự điền 0.
 
@@ -245,7 +275,7 @@ Trên expected grid đã chọn run và trong start/end:
 
 `common_mask_all = forecast_valid AND (target_valid IS true) AND baseline_valid AND within_cutoff`.
 
-Áp dụng cho **mọi metric thông thường**, kể cả hit rates, coverage, width, interval score, Brier, up_rate. Sign accuracy dùng thêm `y_true != 0 AND q50 != 0`; crossing dùng mask riêng mục 5.4. Không để từng metric tự chọn ngày. [YÊU CẦU + ADR cục bộ; khác điểm còn chờ review trong AS10/ADR ZIP]
+Áp dụng cho **mọi metric thông thường**, kể cả hit rates, coverage, width, interval score, Brier, up_rate. Sign accuracy dùng thêm `y_true != 0 AND q50 != 0`; crossing dùng mask riêng mục 5.4. Không để từng metric tự chọn ngày. [ADR + KHẢI12: giữ logic mask đã được xác nhận]
 
 Ưu tiên exclusion_reason đề xuất: `outside_target_cutoff` → `no_forecast_row` → `invalid_input_window` → `generation_error` → `invalid_target` → `insufficient_baseline`; null khi thuộc all. Detail giữ target_invalid_reason, baseline_invalid_reason, missing_reason và cờ độc lập để không mất nguyên nhân chồng lấp. Dòng input sai cấu trúc/FK/chứng cứ rò rỉ bị từ chối trước bước tạo tập kết quả, không biến thành “thiếu dự báo”.
 
@@ -255,15 +285,15 @@ Log theo run/model/asset/h/sample: n_expected, n_received, n_common và các s�
 
 **[ADR]** Brent/WTI có thêm mẫu bỏ cửa sổ chứa đáo hạn hoặc phiên flag roll; GLD/SLV chỉ all. **[SRC]** calendars.py cung cấp cl_expiries/bz_expiries và roll_days; roll flag trong clean gắn phiên đầu sau expiry, không đồng nghĩa chính ngày expiry. BZ expiry dùng xấp xỉ ngày làm việc London bằng CME, cần giữ giới hạn này trong config/report.
 
-**[ĐỀ XUẤT CẦN KHẢI REVIEW]** Cửa sổ target chọn các phiên trong `(base_date,target_date]` và kiểm tra **cả** expiry lẫn flag roll theo asset; boundary có tính base_date hay không chưa được ADR diễn đạt đủ chi tiết. Chưa xác nhận boundary thì không công bố excl_roll như kết quả đã chốt. Không suy ra không roll từ việc thiếu dòng clean: nếu không tái dựng đủ flag/expiry, roll_in_horizon=null, chưa xuất excl_roll chính thức và báo thiếu metadata; không đổi thành false.
+**[KHẢI12 — đã chốt]** Kiểm tra các phiên tài sản trong **`(base_date,target_date]`**: **loại chính base_date, tính target_date**. Dùng ngày đáo hạn từ cl_expiries/bz_expiries theo chức năng thực tế của calendars.py và các cờ roll liên quan nếu dữ liệu cung cấp. Roll ở base_date một mình không loại cửa sổ; expiry hoặc roll ở target_date thuộc cửa sổ. Không tự suy ngày đáo hạn hoặc thay công thức lịch. Thiếu thông tin lịch đáo hạn cần thiết/không xác định đủ thông tin roll thì giữ roll_in_horizon=null và chính sách báo thiếu metadata, không tự đổi thành false hay phát minh ngoại lệ. Giữ giới hạn xấp xỉ lịch Brent theo source trong báo cáo.
 
 Với dầu và metadata đủ: common_mask_excl_roll = common_mask_all AND NOT roll_in_horizon. Lý do loại riêng cho excl_roll là exclusion_reason của all nếu đã bị loại, nếu không thì `roll_window`; không sửa exclusion_reason all. `excluded_roll` chỉ đếm điểm vốn thuộc all. Kim loại: mask excl_roll=null, không tạo bản sao sample. Không nhân đôi Detail cho all/excl_roll. [YÊU CẦU + ĐỀ XUẤT]
 
-**Quy tắc đã chốt cho crossing:** chỉ tính giá trị `crossing_rate` trên `sample=all`. Với **Brent/WTI và sample=excl_roll**, vẫn phải xuất dòng Accuracy `metric=crossing_rate`, `status=not_applicable`, `value=null`, `n_obs=0`, `undefined_reason=unsupported_sample` (CI=null/null). Đây là dòng thông báo metric không áp dụng, không phải tính crossing trên mask excl_roll và không cần nhân đôi Detail. Xét unsupported_sample trước khả năng cung cấp raw: dù nguồn có raw hay không, dòng dầu/excl_roll vẫn mang reason này. Quy tắc này không phụ thuộc quyết định boundary roll còn mở; không thêm sample excl_roll cho kim loại.
+**Quy tắc đã chốt cho crossing:** chỉ tính giá trị `crossing_rate` trên `sample=all`. Với **Brent/WTI và sample=excl_roll**, vẫn phải xuất dòng Accuracy `metric=crossing_rate`, `status=not_applicable`, `value=null`, `n_obs=0`, `undefined_reason=unsupported_sample` (CI=null/null). Đây là dòng thông báo metric không áp dụng, không phải tính crossing trên mask excl_roll và không cần nhân đôi Detail. Xét unsupported_sample trước khả năng cung cấp raw: dù nguồn có raw hay không, dòng dầu/excl_roll vẫn mang reason này. Không thêm sample excl_roll cho kim loại; việc chốt boundary roll không thay quy tắc status này.
 
 ## 10. Ánh xạ với API/DynamoDB contract
 
-**[API]** Contract cục bộ là nguồn chuẩn; bảng dưới chỉ định adapter, không sửa PK/SK hoặc JSON.
+**[API]** Contract cục bộ là nguồn chuẩn; bảng dưới giữ để tham khảo tích hợp **production/import phase 2**, không sửa PK/SK hoặc JSON và không là điều kiện bắt buộc cho demo validation 2019. Tuấn vẫn cần review phần production ở mục 5.5, 7 và 10 sau MVP.
 
 | Trường API/DynamoDB | Trường nội bộ Walk-forward | Quy tắc |
 |---|---|---|
@@ -297,7 +327,7 @@ Adapter thêm forecast_run_id, fit_id (khi biết), provenance theo manifest. `f
 | `quantile_hit_0.05`…`quantile_hit_0.95` | Từng khóa quantile_hit_rates | Bảy dòng dài; API pivot thành đối tượng quantile_hit_rates |
 | `n_obs` | Số điểm thực đi vào metric | Thường n_common; sign loại hai loại 0; crossing/all đếm raw; dòng crossing dầu/excl_roll là 0 với unsupported_sample |
 | `status`, `undefined_reason` | Bộ chuyển dòng kết quả | Giữ enum ok/undefined/not_applicable của AS10; không ghi NaN/inf thành value |
-| `ci_low`, `ci_high` | Block bootstrap trên đúng mask | Có thể null/null khi chưa triển khai hoặc CI không tính được; value hợp lệ vẫn status=ok; cấu hình/log phân biệt lý do |
+| `ci_low`, `ci_high` | Block bootstrap trên đúng mask | MVP bắt buộc triển khai CI pinball_skill; các CI khác có thể deferred phase 2 theo phạm vi đã chốt. CI không tính được vẫn null/null, value hữu hạn giữ status=ok và phải log lý do; không coi chưa triển khai CI pinball_skill là đã đạt MVP. |
 
 Giữ status AS10 với các quy tắc đã chốt: tính được → ok/value hữu hạn; mẫu số=0 khi có quan sát → undefined/zero_denominator và **giữ n_obs**. Khi common_mask không còn quan sát, **bất kể vì baseline thiếu hay nguyên nhân khác**, metric áp dụng dùng `status=undefined`, `value=null`, `n_obs=0`, `undefined_reason=no_evaluable_obs` (CI=null/null). Không dùng `insufficient_baseline` hoặc `excluded_insufficient_baseline` làm Accuracy.undefined_reason; `excluded_insufficient_baseline` chỉ là bộ đếm trong log. Reason `insufficient_baseline` ở Detail vẫn chỉ giải thích điểm bị loại, không chuyển thành mã lý do của Accuracy.
 
@@ -305,26 +335,42 @@ Thiếu capability model → not_applicable/missing_quantiles hoặc missing_pro
 
 **Naive-zero trong MVP [REVIEW + ADR]:** chỉ làm **mẫu số** `mean(abs(y_true))` của `mae_ratio_vs_naive` cho mô hình đang được đánh giá, trên cùng common mask. Evaluate tính mốc return=0 bên trong; **không tạo nguồn dự báo/adapter model độc lập cho naive-zero, không xuất bất kỳ dòng Accuracy nào có model_version=naive-zero**, kể cả dòng not_applicable. Không tính sign_accuracy riêng cho Naive, không giả lập bảy phân vị hoặc prob_up. Nếu mẫu số=0, dòng ratio của model hiện tại là undefined/zero_denominator và giữ n_obs. Đây là phạm vi MVP đã được review xác nhận, không còn là câu hỏi mở.
 
-Baseline-252 có thể làm nguồn model phân phối để evaluate khi cần, fit_id=null và nguồn no_training; q/p theo baseline, không suy p bằng nội suy q. Vì p baseline là tần suất có thể bằng 0/1, **giao tiếp Internal Forecasts mục 5 chỉ dành nguồn có prob_up nội suy/kẹp ADR**; đề xuất adapter baseline phân phối có capability/profile riêng trong evaluate, không ghi sai một hàng ok theo schema đó. Khải cần chốt có mở rộng profile Internal Forecasts hay giữ adapter riêng; chưa triển khai mở rộng ngầm.
+**Baseline-252 [KHẢI12]:** chỉ tính từ Baselines PR #13 và lưu trong Detail; không đưa vào Internal Forecasts, không tạo Baseline Adapter riêng, không mở Forecasts profile hoặc model giả để chứa p tần suất. Pinball Skill dùng hai cột loss cùng điểm như mục 8. Bảng comparison có thể so model với baseline bằng các loss đó, không cần baseline phát hành Forecasts.
 
-**DM/Holm [ADR + AS10]:** bảng model_comparison riêng. Ghép cặp theo asset/base_date/h và cùng cutoff/snapshot, giao các mask của hai model rồi dùng hai loss cùng ngày; không ghép theo vị trí sau lọc độc lập. d=PL_A−PL_B, âm nghĩa A loss nhỏ hơn. HAC lag>=h−1, HLN, p hai phía t(T−1); phương sai không dương/constant diff → undefined, giữ số cặp đã xét. Holm dùng họ định trước, không bỏ các vị trí test không xác định khỏi kích thước họ. Không dùng naive-zero cho DM pinball 7 q.
+### 11.1. DM và Holm — dùng Metrics PR #11 theo review
 
-**CI [ADR + AS10 + SRC metrics]:** moving-block bootstrap theo trục ngày, giữ pairing loss; seed/block length/confidence/n_resamples khóa trong cfg trước test. Với skill phải resample cùng model/baseline và tính lại tỷ số của hai mean, không bootstrap skill từng điểm. Khi tổng hợp nhiều asset/h, dùng cùng block ngày (căn lịch và missingness được quy định trong cfg), không resample độc lập từng cột. Hàm thuần chỉ resample hàng, không tự căn lịch; adapter chịu trách nhiệm. Replicate không hữu hạn làm CI undefined/null theo metrics hiện có, không lặng lẽ bỏ replicate. MVP chưa CI phải ghi giới hạn này, không tuyên bố đã đáp ứng đầy đủ CI theo ADR.
+**DM [KHẢI12]:** dùng chuỗi loss từng quan sát, lag **h−1**, **trọng số đều** trên các lag 1…h−1, giữ HLN và p hai phía t(T−1) theo ADR; **không dùng Bartlett weights**. Không triển khai lại công thức trong Walk-forward. Snapshot metrics cục bộ còn Bartlett, vì vậy chỉ truyền hac_lag=h−1 vào bản đó vẫn chưa đáp ứng review; phải dùng implementation PR #11 sau khi được chỉnh/đối chiếu. Đây là phụ thuộc tích hợp, không phải yêu cầu sửa metrics trong nhiệm vụ tài liệu.
+
+- Model với Baseline-252: lấy model_pinball_loss và baseline_pinball_loss từ **cùng Detail**, cùng asset/base_date/h và common mask của sample. Không tạo/ghép Forecasts baseline.
+- Hai model thật: chọn đúng model_version/run/forecast_run/fit lineage, cùng cutoff/snapshot; join Detail theo `(asset,base_date,h)`, lấy giao mask và loss hợp lệ của cả hai. Không join nhầm các phiên bản hoặc zip vector sau dropna độc lập.
+- Giữ bảng model_comparison riêng theo AS10; d=PL_A−PL_B, âm nghĩa A loss thấp hơn. Không đủ cặp hoặc phương sai không dương/constant difference → undefined, giữ số cặp đã xét, không bịa p-value. Naive-zero không tham gia DM pinball 7 q.
+
+**Holm [KHẢI12]:** với từng cặp model–baseline hoặc cặp model thật và cấu hình so sánh đã định, sample=all có **28 vị trí (4 asset × 7 h)**; sample=excl_roll có **14 vị trí (2 asset dầu × 7 h)**. Không gộp/trộn cặp so sánh hoặc sample thành họ khác. Vị trí NaN vẫn chiếm chỗ trong họ; p thô/điều chỉnh của vị trí không xác định vẫn thiếu theo status AS10, không thay bằng 1 hay xóa để thu nhỏ họ.
+
+### 11.2. CI pinball_skill — bắt buộc trong MVP
+
+**[KHẢI12]** Block bootstrap theo ngày, `block_length=20` phiên, `n_bootstrap=1000`, `confidence_level=0.95`; seed nằm trong cfg. Với pinball_skill, resample model/baseline loss **ghép cặp**, tính lại tỷ số hai mean trên từng replicate, không lấy mean skill từng dòng. Không bootstrap độc lập quantile hoặc từng horizon làm mất quan hệ ngày chung. Cấu hình tên n_bootstrap phải được ánh xạ đúng API helper PR #11 (snapshot cục bộ dùng n_resamples), không tự thêm tham số vào Metrics.
+
+**[ĐỀ XUẤT triển khai]** Cách căn ngày orchestration khi bootstrap đồng thời nhiều asset/h dưới đây giữ nguyên quyết định bootstrap đã chốt. Việc chọn hợp lịch NYSE/CME và định nghĩa block là 20 vị trí trên lưới hợp nhất là chi tiết đề xuất để Khải xác nhận khi review, chưa phải chi tiết đã được Khải xác nhận: dùng lưới ngày gốc theo **hợp các phiên NYSE/CME** trong khoảng đánh giá, sắp tăng; giữ mỗi chuỗi loss và mask riêng theo **cùng ngày thật** trên lưới. Một block 20 là 20 vị trí phiên trên lưới ngày chung, không ép mỗi asset có đủ 20 quan sát. Tạo **một kế hoạch rút các block ngày** cho các replicate và áp cùng chỉ số/ngày đó cho các asset/h có mặt. Ngày một asset không giao dịch hoặc không có quan sát trong mask vẫn vắng ở chuỗi đó; không ghép sang ngày khác, forward-fill, điền 0 hoặc drop ngày theo từng asset trước khi tạo kế hoạch chung. Ngày bị rút lặp phải giữ lặp trong replicate, không dedup theo base_date. Ghi quy tắc lưới ngày trong cfg để tái lập.
+
+Sau khi áp kế hoạch chung, mỗi metric chỉ nhận cặp loss thực có mặt/hợp lệ của nó; cỡ mẫu từng asset/h có thể khác và số quan sát replicate có thể đổi vì lịch/mask khác. Không coi thiếu ở một asset là giá trị 0 hoặc bắt loại ngày khỏi mọi asset. Giữ cùng cặp model/baseline và các quan hệ ở ngày chung; không gọi helper riêng trên các vector đã nén lịch với hy vọng cùng seed là cùng ngày. Snapshot helper cục bộ chỉ nhận mảng hữu hạn và resample hàng, **chưa tự xử lý bảng lịch có missing**: orchestration/PR #11 integration phải giữ kế hoạch ngày và chuyển đúng loss, không đưa NaN vào API không hỗ trợ hay viết lại công thức metric.
+
+CI không tính được (ví dụ không đủ lịch sử cho block, không còn cặp hoặc replicate làm mẫu số không xác định) → ci_low/ci_high=null và log lý do, không bỏ replicate lỗi để làm đẹp CI; giữ status/value/n_obs theo AS10. Đây khác với **chưa triển khai** CI pinball_skill: trường hợp chưa triển khai chưa đạt MVP. Các CI khác deferred phase 2 theo review trừ yêu cầu bắt buộc khác của hợp đồng cấp trên; report ghi phạm vi thực tế, không tuyên bố đã có CI cho mọi metric.
 
 ## 12. Ví dụ dữ liệu tổng hợp
 
-Các ví dụ không là giá/dự báo tài chính thật; timestamps là giả định metadata có chứng cứ. Ví dụ chỉ hiển thị một horizon, không thay yêu cầu generator giữ cả bảy lần thử. fit-demo có metadata hợp lệ theo mục 6; source/config/snapshot IDs ở manifest.
+Các ví dụ không là giá/dự báo tài chính thật; timestamps giả lập theo publication rule yfinance D+1 ngày lịch lúc 12:00 UTC. Validation dùng snapshot sạch mới nhất với backtest_publication_rule, được chọn model trong MVP nhưng chưa kiểm chứng historical vintage/revisions, không phải PIT verified. Ví dụ chỉ hiển thị một horizon, không thay yêu cầu generator giữ cả bảy lần thử. fit-demo giả định có đủ tám trường bắt buộc mục 6 và model/scaler cố định trong 2019; commit do workflow cung cấp, không tạo hash giả. Source/config/snapshot IDs ở manifest.
 
 **12.1. Một Internal Forecasts hợp lệ (profile internal_full_precision)**
 
 ```json
-{"forecast_run_id":"forecast-demo-01","model_version":"demo-fixed","fit_id":"fit-demo","asset":"gold","base_date":"2019-01-02","h":1,"q05":-0.03,"q10":-0.02,"q25":-0.01,"q50":0.0,"q75":0.01,"q90":0.02,"q95":0.03,"prob_up":0.5,"crossed_raw":false,"forecast_status":"ok","missing_reason":null,"as_of_time":"2019-01-03T12:00:00Z","provenance_status":"verified_backtest","created_at":null}
+{"forecast_run_id":"forecast-demo-01","model_version":"demo-fixed","fit_id":"fit-demo","asset":"gold","base_date":"2019-01-02","h":1,"q05":-0.03,"q10":-0.02,"q25":-0.01,"q50":0.0,"q75":0.01,"q90":0.02,"q95":0.03,"prob_up":0.5,"crossed_raw":false,"forecast_status":"ok","missing_reason":null,"as_of_time":"2019-01-03T12:00:00Z","provenance_status":"backtest_publication_rule","created_at":null}
 ```
 
 **12.2. Lần thử input NaN**
 
 ```json
-{"forecast_run_id":"forecast-skip-demo-01","model_version":"demo-fixed","fit_id":"fit-demo","asset":"gold","base_date":"2019-01-02","h":2,"q05":null,"q10":null,"q25":null,"q50":null,"q75":null,"q90":null,"q95":null,"prob_up":null,"crossed_raw":null,"forecast_status":"invalid_input_window","missing_reason":"input_nan","as_of_time":"2019-01-03T12:00:00Z","provenance_status":"verified_backtest","created_at":null}
+{"forecast_run_id":"forecast-skip-demo-01","model_version":"demo-fixed","fit_id":"fit-demo","asset":"gold","base_date":"2019-01-02","h":2,"q05":null,"q10":null,"q25":null,"q50":null,"q75":null,"q90":null,"q95":null,"prob_up":null,"crossed_raw":null,"forecast_status":"invalid_input_window","missing_reason":"input_nan","as_of_time":"2019-01-03T12:00:00Z","provenance_status":"backtest_publication_rule","created_at":null}
 ```
 
 Ví dụ 12.2 thuộc run minh họa khác 12.1; nếu cùng một cửa sổ input dùng cho mọi h bị NaN thì cả bảy h phải được ghi bỏ qua.
@@ -337,7 +383,7 @@ Ví dụ 12.2 thuộc run minh họa khác 12.1; nếu cùng một cửa sổ in
 
 Kiểm chứng số học đủ 7 mức: model loss từng tau = `[0.0015,0.002,0.0025,0,0.0025,0.002,0.0015]`; tổng=0.012, chia 7. Baseline gấp đôi q → tổng loss=0.024, chia 7; skill trên ví dụ một điểm là 0.5. Vì y=q50=0, dòng vẫn thuộc common nhưng **không** vào sign_accuracy; n_obs(sign)=0. Không dùng các số này như kết quả model thật.
 
-**12.4. Unnest DynamoDB (trích hai horizons trong bản ghi có đủ 7)**
+**12.4. Phase 2 — Unnest DynamoDB (trích hai horizons trong bản ghi có đủ 7)**
 
 ```json
 {"asset":"gold","base_date":"2019-01-02","model_version":"demo-fixed","created_at":"2019-01-03T12:15:00Z","quantile_levels":[0.05,0.10,0.25,0.50,0.75,0.90,0.95],"horizons":[{"h":1,"target_date":"2019-01-03","q":[-0.03,-0.02,-0.01,0,0.01,0.02,0.03],"prob_up":0.5},{"h":2,"target_date":"2019-01-04","q":[-0.03,-0.02,-0.01,0,0.01,0.02,0.03],"prob_up":0.5}],"roll_in_horizon":false}
@@ -347,60 +393,81 @@ Kiểm chứng số học đủ 7 mức: model loss từng tau = `[0.0015,0.002,
 
 ## 13. Test cases / acceptance criteria (chưa viết pytest)
 
-| # | Tình huống / đầu vào | Kết quả mong muốn | Chịu trách nhiệm |
-|---|---|---|---|
-| 1 | Đủ 7 q hữu hạn, không giảm, p đúng | Hàng ok; không normalize thêm ở evaluate | generate/evaluate |
-| 2 | Raw q10>q25, đủ 7 số | crossed_raw=true trước sort; normalize đúng 1 lần, p tính sau sort | generate |
-| 3 | Nguồn ngoại nhập q đã sort, không cung cấp raw/chứng cứ crossing và capability=false, sample=all | crossed_raw=null; crossing not_applicable/value=null/n_obs=0; dùng mã schema đã có hoặc chờ review mã thiếu raw, không tự dùng mã đề xuất | adapter/evaluate |
-| 4 | Cửa sổ input có NaN | Giữ hàng invalid_input_window/input_nan, q/p null, tính bộ đếm riêng | generate |
-| 5 | Expected grid có điểm không có Forecasts | Tạo Detail no_forecast_row, không coi là input_nan | evaluate |
-| 6 | Trùng khóa kể cả fit_id=null | Payload giống: dedup idempotent; khác: từ chối, không double count | adapter/evaluate |
-| 7 | Có fit_id nhưng không có fits tương ứng | Từ chối FK; không tự bỏ fit_id hoặc tự gắn baseline | fits metadata/evaluate |
-| 8 | Fit validation dùng nhãn target_date năm 2019 | Từ chối; train_end 2018 không che được nhãn vượt ranh giới | fits metadata |
-| 9 | Một input published_at>as_of_time | Không sinh dự báo từ input đó; ghi input_not_available; verified import có vi phạm thì từ chối | generate/adapter |
-| 10 | as_of_time trước base publication hoặc >= target publication | Từ chối xác nhận phát hành hợp lệ; created_at không cứu được | adapter/evaluate |
-| 11 | h=7, origin cuối 2019, target sang 2020 | Giữ Detail, within_cutoff=false; không đọc y, không vào common, tăng boundary counter | evaluate |
-| 12 | Không có giá đúng phiên target | y=null, target_valid=false/missing_target_price; không lùi/tiến sang dòng khác | evaluate |
-| 13 | Hai cửa sổ có lần lượt 1 và 2 phiên giữa không hợp lệ, hai đầu đều hợp lệ | y vẫn đúng h lịch; evaluate tính missing_between_count lần lượt 1 và 2; attrs tổng đếm 2 target, không gán 2 cho cả hai dòng | evaluate/hàm phụ trợ |
-| 14 | rejected chỉ có `(silver,D)`, gold có giá hợp lệ D | Chỉ target silver chịu loại; gold không bị loại theo date đơn thuần | evaluate |
-| 15 | Baseline chỉ có 199 return hợp lệ | baseline_valid=false; loại khỏi mọi metric thường, kể cả coverage/width | evaluate/Baselines adapter |
-| 16 | Sửa/nối giá sau base_date, giữ snapshot as-of trước origin | q/p/count baseline tại origin không đổi | evaluate/Baselines adapter |
-| 17 | WTI/Brent có expiry hoặc roll trong cửa sổ đã chốt, có hoặc không có raw | Thuộc all nếu đủ điều kiện, không thuộc excl_roll; crossing/excl_roll vẫn xuất Accuracy not_applicable/value=null/n_obs=0/unsupported_sample, kể cả mask rỗng; không nhân đôi Detail | evaluate |
-| 18 | y=0 hoặc q50=0 trong common | Không vào sign; các metric thường khác vẫn dùng; crossing độc lập | evaluate |
-| 19 | Không còn điểm common vì baseline thiếu, thiếu target hoặc nhiều nguyên nhân | Metric áp dụng: undefined/value=null/n_obs=0/no_evaluable_obs; excluded_insufficient_baseline chỉ đếm trong log, không dùng làm undefined_reason | evaluate |
-| 20 | Nhập DynamoDB 6 chữ số, không raw | crossed_raw=null; profile rounded, ghi giới hạn p/q; không normalize hoặc tái tính thay p đã lưu | adapter |
-| 21 | Một model_version có hai fit_id sau retrain | MVP từ chối retrain; giao thức tương lai chọn fit theo origin, không double count | fits metadata/evaluate |
-| 22 | q chứa NaN/Infinity, thiếu một mức hoặc crossing ở hàng ok | Generate ghi invalid_model_output; import ok sai cấu trúc bị từ chối, không thay 0 | generate/adapter |
-| 23 | base_date không là phiên NYSE/CME tương ứng | Từ chối trước join, không dịch sang phiên gần nhất | adapter/evaluate |
-| 24 | Return WTI hai đầu có giá <=0 dù clean chấp nhận giá âm | y=null/target_valid=false; không lấy log abs(price) | evaluate |
-| 25 | Mean baseline loss=0 với n_common>0 | Skill undefined/zero_denominator, giữ n_obs; loss/coverage khác vẫn có thể tính | evaluate |
-| 26 | crossing có raw nhưng target chưa có hoặc baseline thiếu | Vẫn tính crossing/all trong khoảng origin; unknown raw không biến false; dòng dầu/excl_roll là not_applicable/unsupported_sample | evaluate |
-| 27 | Thiếu manifest rolling_8w | Không tuyên bố đủ lịch/đếm missing chính thức; từ chối run chính thức hoặc run thăm dò có cảnh báo | evaluate/adapter |
-| 28 | Hai run model có ngày missing khác nhau | DM ghép giao theo khóa ngày/h; không ghép theo vị trí vector | evaluate |
-| 29 | Skill từng dòng có baseline=0, nhưng baseline mean trên common>0 | Tính tỷ số hai mean; không lấy mean skill từng dòng hoặc bỏ dòng baseline=0 | evaluate |
-| 30 | Timestamp công bố bằng as_of_time; target publication bằng as_of_time | Input được dùng với <=; target ở ngưỡng bằng bị từ chối vì cần < | generate/evaluate |
-| 31 | Future revision nằm trong snapshot mới nhất | Không tự xác nhận PIT; phải có snapshot as-of hoặc external_unverified | adapter/fits metadata |
-| 32 | Lookup lịch ra ngoài phạm vi 2010–2030 hiện có | Lỗi cấu hình/phụ thuộc rõ ràng; không coi rỗng lịch là không có expected forecast | evaluate |
-| 33 | Nguồn hỗ trợ crossing nhưng không có raw hữu hạn đủ điều kiện trong khoảng đánh giá | crossing undefined/no_evaluable_obs, value/CI=null, n_obs=0; khác nguồn không hỗ trợ raw ở case 3 | evaluate |
-| 34 | Xuất Accuracy thiếu/null evaluation_kind hoặc target_cutoff_date | Từ chối hàng sai schema; cả hai trường bắt buộc và có trong khóa logic | evaluate/bộ chuyển dòng |
-| 35 | Tính mae_ratio_vs_naive cho model thông thường | Mẫu số là mean(abs(y)) trên common; không sinh hàng Accuracy model_version=naive-zero hoặc sign riêng cho Naive | evaluate |
+| # | Tình huống / đầu vào | Kết quả mong muốn | Chịu trách nhiệm | Phạm vi |
+|---|---|---|---|---|
+| 1 | Đủ 7 q hữu hạn, không giảm, p đúng | Hàng ok; không normalize thêm ở evaluate | generate/evaluate | MVP 2019 |
+| 2 | Raw q10>q25, đủ 7 số | crossed_raw=true trước sort; normalize đúng 1 lần, p tính sau sort | generate | MVP 2019 |
+| 3 | Nguồn ngoại nhập q đã sort, không cung cấp raw/chứng cứ crossing và capability=false, sample=all | crossed_raw=null; crossing not_applicable/value=null/n_obs=0; dùng mã schema đã có hoặc chờ review mã thiếu raw, không tự dùng mã đề xuất | adapter/evaluate | Hồi quy hỗ trợ / phase 2 theo nguồn |
+| 4 | Cửa sổ input có NaN | Giữ hàng invalid_input_window/input_nan, q/p null, tính bộ đếm riêng | generate | MVP 2019 |
+| 5 | Expected grid có điểm không có Forecasts | Tạo Detail no_forecast_row, không coi là input_nan | evaluate | MVP 2019 |
+| 6 | Trùng khóa kể cả fit_id=null | Payload giống: dedup idempotent; khác: từ chối, không double count | adapter/evaluate | Hồi quy hỗ trợ / phase 2 theo nguồn |
+| 7 | Có fit_id nhưng không có fits tương ứng | Từ chối FK; không tự bỏ fit_id hoặc tự gắn baseline | fits metadata/evaluate | Hồi quy hỗ trợ / phase 2 theo nguồn |
+| 8 | Fit validation dùng nhãn target_date năm 2019 | Từ chối; train_end 2018 không che được nhãn vượt ranh giới | fits metadata | MVP 2019 |
+| 9 | Một input published_at>as_of_time | Không sinh dự báo từ input đó; ghi input_not_available; verified import có vi phạm thì từ chối | generate/adapter | MVP 2019: generate/validation nội bộ; Phase 2: import production |
+| 10 | as_of_time trước base publication hoặc >= target publication | Từ chối xác nhận phát hành hợp lệ; created_at không cứu được | adapter/evaluate | MVP 2019: generate/validation nội bộ; Phase 2: import production |
+| 11 | h=7, origin cuối 2019, target sang 2020 | Giữ Detail, within_cutoff=false; không đọc y, không vào common, tăng boundary counter | evaluate | MVP 2019 |
+| 12 | Không có giá đúng phiên target | y=null, target_valid=false/missing_target_price; không lùi/tiến sang dòng khác | evaluate | MVP 2019 |
+| 13 | Hai cửa sổ có lần lượt 1 và 2 phiên giữa không hợp lệ, hai đầu đều hợp lệ | y vẫn đúng h lịch; evaluate tính missing_between_count lần lượt 1 và 2; attrs tổng đếm 2 target, không gán 2 cho cả hai dòng | evaluate/hàm phụ trợ | Hồi quy hỗ trợ / phase 2 theo nguồn |
+| 14 | rejected chỉ có `(silver,D)`, gold có giá hợp lệ D | Chỉ target silver chịu loại; gold không bị loại theo date đơn thuần | evaluate | MVP 2019 |
+| 15 | Baseline chỉ có 199 return hợp lệ | baseline_valid=false; loại khỏi mọi metric thường, kể cả coverage/width | evaluate/Baselines PR #13 | MVP 2019 |
+| 16 | Sửa/nối giá có ngày sau base_date, giữ nguyên dữ liệu lịch sử đến origin | q/p/count baseline tại origin không đổi | evaluate/Baselines PR #13 | Hồi quy hỗ trợ / phase 2 theo nguồn |
+| 17 | WTI/Brent có expiry/roll: chỉ ở base_date hoặc ở target_date, có hoặc không có raw | Chỉ roll ở base_date không loại; roll ở target_date loại khỏi excl_roll nhưng vẫn thuộc all nếu đủ điều kiện; crossing/excl_roll vẫn xuất Accuracy not_applicable/value=null/n_obs=0/unsupported_sample, kể cả mask rỗng; không nhân đôi Detail | evaluate | MVP 2019 |
+| 18 | y=0 hoặc q50=0 trong common | Không vào sign; các metric thường khác vẫn dùng; crossing độc lập | evaluate | MVP 2019 |
+| 19 | Không còn điểm common vì baseline thiếu, thiếu target hoặc nhiều nguyên nhân | Metric áp dụng: undefined/value=null/n_obs=0/no_evaluable_obs; excluded_insufficient_baseline chỉ đếm trong log, không dùng làm undefined_reason | evaluate | MVP 2019 |
+| 20 | Nhập DynamoDB 6 chữ số, không raw | crossed_raw=null; profile rounded, ghi giới hạn p/q; không normalize hoặc tái tính thay p đã lưu | adapter | Hồi quy hỗ trợ / phase 2 theo nguồn |
+| 21 | Một model_version có hai fit_id sau retrain | MVP từ chối retrain; giao thức tương lai chọn fit theo origin, không double count | fits metadata/evaluate | Hồi quy hỗ trợ / phase 2 theo nguồn |
+| 22 | q chứa NaN/Infinity, thiếu một mức hoặc crossing ở hàng ok | Generate ghi invalid_model_output; import ok sai cấu trúc bị từ chối, không thay 0 | generate/adapter | MVP 2019: generate/validation nội bộ; Phase 2: import production |
+| 23 | base_date không là phiên NYSE/CME tương ứng | Từ chối trước join, không dịch sang phiên gần nhất | adapter/evaluate | MVP 2019 |
+| 24 | Return WTI hai đầu có giá <=0 dù clean chấp nhận giá âm | y=null/target_valid=false; không lấy log abs(price) | evaluate | MVP 2019 |
+| 25 | Mean baseline loss=0 với n_common>0 | Skill undefined/zero_denominator, giữ n_obs; loss/coverage khác vẫn có thể tính | evaluate | MVP 2019 |
+| 26 | crossing có raw nhưng target chưa có hoặc baseline thiếu | Vẫn tính crossing/all trong khoảng origin; unknown raw không biến false; dòng dầu/excl_roll là not_applicable/unsupported_sample | evaluate | Hồi quy hỗ trợ / phase 2 theo nguồn |
+| 27 | Thiếu manifest rolling_8w | Không tuyên bố đủ lịch/đếm missing chính thức; từ chối run chính thức hoặc run thăm dò có cảnh báo | evaluate/adapter | Hồi quy hỗ trợ / phase 2 theo nguồn |
+| 28 | Hai run model có ngày missing khác nhau | DM ghép giao theo khóa ngày/h; không ghép theo vị trí vector | evaluate | MVP 2019 |
+| 29 | Skill từng dòng có baseline=0, nhưng baseline mean trên common>0 | Tính tỷ số hai mean; không lấy mean skill từng dòng hoặc bỏ dòng baseline=0 | evaluate | MVP 2019 |
+| 30 | Timestamp công bố bằng as_of_time; target publication bằng as_of_time | Input được dùng với <=; target ở ngưỡng bằng bị từ chối vì cần < | generate/evaluate | Hồi quy hỗ trợ / phase 2 theo nguồn |
+| 31 | Future revision nằm trong snapshot mới nhất | Không tự xác nhận PIT; backtest_publication_rule vẫn được chọn model MVP nếu qua kiểm tra công bố và ghi giới hạn vintage; verified_backtest cần chứng cứ thật | adapter/fits metadata | Hồi quy hỗ trợ / phase 2 theo nguồn |
+| 32 | Lookup lịch ra ngoài phạm vi 2010–2030 hiện có | Lỗi cấu hình/phụ thuộc rõ ràng; không coi rỗng lịch là không có expected forecast | evaluate | Hồi quy hỗ trợ / phase 2 theo nguồn |
+| 33 | Nguồn hỗ trợ crossing nhưng không có raw hữu hạn đủ điều kiện trong khoảng đánh giá | crossing undefined/no_evaluable_obs, value/CI=null, n_obs=0; khác nguồn không hỗ trợ raw ở case 3 | evaluate | Hồi quy hỗ trợ / phase 2 theo nguồn |
+| 34 | Xuất Accuracy thiếu/null evaluation_kind hoặc target_cutoff_date | Từ chối hàng sai schema; cả hai trường bắt buộc và có trong khóa logic | evaluate/bộ chuyển dòng | Hồi quy hỗ trợ / phase 2 theo nguồn |
+| 35 | Tính mae_ratio_vs_naive cho model thông thường | Mẫu số là mean(abs(y)) trên common; không sinh hàng Accuracy model_version=naive-zero hoặc sign riêng cho Naive | evaluate | Hồi quy hỗ trợ / phase 2 theo nguồn |
+| 36 | Validation 2019 trên snapshot mới nhất, chưa có vintage | backtest_publication_rule; as_of_time=published_at(base_date); kiểm tra input<=as_of_time<target publication; được chọn model và bắt buộc ghi giới hạn vintage, không gán PIT verified | generate/evaluate | MVP 2019 |
+| 37 | FeatureBatch có cả window invalid, thiếu lịch sử và timestamp UTC-naive/NaT | Giữ mọi origin và đủ lần thử h; mapping theo mục 3.1; chỉ make_windows cắt input; gắn UTC đúng, không coi NaT là hợp lệ; scaler của fit, không fit trên 2019 | generate/Feature Builder PR #14 | MVP 2019 |
+| 38 | CI pinball_skill trên asset/h có ngày giao dịch/missing khác nhau | Block 20, 1000 replicate, 95%, seed cfg; cùng kế hoạch ngày thật; giữ cặp loss và ngày rút lặp, không fill/ghép lệch ngày; tính lại tỷ số hai mean; CI không tính được ghi null và log | evaluate/Metrics PR #11 | MVP 2019 |
+| 39 | DM model–baseline hoặc hai model thật trong luồng demo, có p NaN | Loss baseline cùng Detail hoặc join hai model đúng lineage; lag h−1, uniform weights và HLN; Holm giữ 28/14 vị trí kể cả NaN, không bịa p | evaluate/Metrics PR #11 | MVP nếu demo dùng DM/Holm |
+| 40 | Fits validation thiếu trường bắt buộc, hoặc đổi fit/scaler trong 2019 | Tám trường mục 6 bắt buộc; max_training_label_available_at tùy chọn nhưng vẫn kiểm tra availability; commit từ workflow; không retrain/refit scaler trong 2019 | fits metadata/generate | MVP 2019 |
 
-Hoàn thành thiết kế khi các câu hỏi mục 14 đã có quyết định được ghi nhận; hoàn thành triển khai về sau cần test các bất biến trên. Tài liệu này không tuyên bố code walk-forward đã tồn tại hoặc đã vượt các acceptance tests.
+Nhóm ID MVP Khải chỉ định được giữ nguyên: **1, 2, 4, 5, 8, 11, 12, 14, 15, 17, 18, 19, 23, 24, 25, 28, 29**. Theo review bổ sung, nhánh generate/validation nội bộ của **9, 10, 22** cũng thuộc MVP 2019; chỉ nhánh import production của các ID này thuộc phase 2. ID 36–40 chỉ bổ sung kiểm tra các quyết định mới về provenance, Feature Builder, CI/DM và Fits/model cố định; không đánh số lại 1–35. Nhãn hồi quy hỗ trợ/phase 2 không miễn các bất biến cấu trúc, publication hoặc leakage khi áp dụng trong MVP; import production/rolling_8w vẫn là phase 2.
 
-## 14. Những điểm cần Khải/Tuấn review
+Các quyết định review đã chốt được ghi ở mục 14; bản cập nhật vẫn cần reviewer xác nhận. Hoàn thành triển khai về sau cần kiểm thử nhóm MVP và các bất biến áp dụng; tài liệu này không tuyên bố code walk-forward đã tồn tại hoặc đã vượt acceptance tests.
 
-| Người review | Quyết định còn mở | Đề xuất của Draft / tác động |
+## 14. Quyết định đã chốt và phụ thuộc còn lại
+
+### 14.1. Resolved — không yêu cầu chọn lại
+
+| Quyết định [KHẢI12] | Quy tắc áp dụng |
+|---|---|
+| Baseline-252 | PR #13 tính và gắn baseline/loss/validity vào Detail; không Baseline Adapter, model giả, Fits hoặc Internal Forecasts baseline |
+| Roll | Brent/WTI kiểm tra (base_date,target_date]; unknown giữ chính sách null; crossing/excl_roll vẫn not_applicable/unsupported_sample |
+| Tie prob_up | Chọn τ cao nhất của nhóm trùng theo CDF liên tục bên phải; crossing raw trước normalize một lần |
+| Bootstrap/CI | Block 20 phiên, 1000 replicate, CI 95%, seed cfg; kế hoạch ngày chung theo mục 11.2; CI pinball_skill bắt buộc MVP |
+| DM | PR #11 theo review: loss từng điểm, lag h−1, uniform weights, HLN; không Bartlett |
+| Holm | Mỗi họ so sánh có all=28, excl_roll=14 vị trí; NaN vẫn chiếm chỗ |
+| Provenance MVP | backtest_publication_rule cho phép model selection validation 2019, bắt buộc ghi giới hạn vintage; không phải PIT verified |
+| Fits MVP | Tám trường bắt buộc mục 6; max_training_label_available_at tùy chọn, không bỏ kiểm tra availability; commit từ workflow |
+| Module và features | Một src/eval/walk_forward.py; chỉ PR #14 make_windows cắt input; không tạo module trong nhiệm vụ tài liệu |
+
+### 14.2. Phụ thuộc tích hợp và phase 2
+
+| Phụ thuộc / người review | Việc thực sự còn lại | Phạm vi / tác động |
 |---|---|---|
-| Khải | Hợp đồng baseline-252 như nguồn dự báo để so sánh DM | Chọn profile Internal Forecasts mở rộng hay adapter riêng; p là tần suất `[0,1]`, không ép nội suy/kẹp như AI. Không bao gồm naive-zero, vốn chỉ là mẫu số. |
-| Khải | Boundary roll, expiry và dữ liệu flag thiếu | Đề xuất `(base_date,target_date]`; unknown roll không giả false; chốt trước excl_roll |
-| Khải/Tuấn | Lịch production/manifest và cửa sổ rolling_8w | Không suy lịch predict từ ingest cron; chốt neo cửa sổ, expected emissions, freshness và thời điểm nhãn |
-| Khải/Tuấn | Làm tròn, import production, provenance enums/policy | Chốt tolerance/profile và metadata chứng minh phát hành; created_at không tự là as_of_time |
-| Khải | CI, ghép ngày multi-asset và họ Holm | Khóa block/seed/confidence, quy tắc ngày không giao dịch/missingness và họ all/excl_roll trước test; không tự coi 7 h độc lập |
+| Metrics PR #11 | Đối chiếu bản đã sửa uniform DM/HLN/Holm; snapshot cục bộ vẫn Bartlett. Bootstrap helper hữu hạn theo hàng chưa tự giữ lịch có missing; orchestration phải áp kế hoạch ngày chung trước khi tính replicate | Điều kiện tích hợp MVP cho CI pinball_skill; DM/Holm khi thuộc demo. Không sửa metrics hoặc tự triển khai công thức trong nhiệm vụ này |
+| Returns/Baselines PR #13; Feature Builder PR #14 | API đã đọc trực tiếp từ hai ZIP mới, nhưng local returns còn cũ, baselines/forecast_record/build chưa có; đưa đúng phiên bản vào luồng triển khai và xử lý UTC/NaT theo mục 3.1 | Phụ thuộc triển khai MVP, không còn câu hỏi về API hoặc yêu cầu cung cấp lại ZIP; PR #14 phụ thuộc PR #13 |
+| Accuracy PR #10 | File đích cục bộ chưa có; đồng bộ schema theo các cập nhật review đã cung cấp, giữ nguyên khóa/status đã chốt | Không định nghĩa lại schema trong hợp đồng Walk-forward |
+| Tuấn/Khải — mục 5.5, 7, 10 | Production import, rolling_8w/manifest, tolerance quantiles làm tròn và chứng cứ PIT nâng cao | Phase 2; không chặn MVP validation 2019 dùng publication rule |
+| Khải — tên reason thiếu raw ở mục 5.4 | Ưu tiên mã đã có của Accuracy Schema; chỉ nếu cần mã mới missing_raw_quantiles thì phải review tên trước khi dùng | Liên quan import thiếu raw phase 2; không tự thêm enum hoặc đổi status crossing đã chốt |
 
-Hai quyết định nghiệp vụ còn mở được [REVIEW] nêu rõ là hợp đồng baseline-252 và boundary roll. Các dòng về production, làm tròn và CI là chi tiết triển khai còn thiếu bằng chứng/cấu hình, không phải yêu cầu phê duyệt lại khóa Accuracy, vai trò naive-zero hay cách phân biệt status crossing. Giao tiếp features và snapshot point-in-time vẫn là phụ thuộc triển khai đã ghi ở mục 2–3/5.5, không làm thay đổi những quyết định đã được xác nhận.
+Giữ nguyên mask/cutoff/status đã được xác nhận: common rỗng dùng undefined/no_evaluable_obs dù vì baseline thiếu; excluded_insufficient_baseline chỉ là log. Không mở lại baseline, boundary roll, CI configuration, họ Holm hoặc provenance MVP thành quyết định OPEN.
 
-Riêng **tên mã lý do thiếu raw** ở mục 5.4: đối chiếu và ưu tiên mã Accuracy Schema đã có; nếu cần thêm `missing_raw_quantiles` thì Khải phải review tên mã mới trước khi dùng. Không mở lại các quy tắc đã chốt: crossing dầu/excl_roll xuất not_applicable/unsupported_sample và common_mask rỗng dùng undefined/no_evaluable_obs dù thiếu baseline.
+Đề xuất commit message (chỉ văn bản): `docs(eval): align walk-forward contract with review decisions`.
 
-Đề xuất commit message (chỉ văn bản): `docs(eval): draft walk-forward data contract`.
-
-Đề xuất Draft PR title (chỉ văn bản): `docs: Walk-forward evaluation data contract`.
+Mô tả cập nhật PR đề xuất (chỉ văn bản): Cập nhật Walk-forward Contract theo review Khải PR #12: baseline trong Detail, roll (base_date,target_date], CI pinball_skill và DM/Holm, publication-rule provenance, API PR #13/#14, Fits tối giản và một module triển khai. Giữ mask/cutoff/status/schema và ví dụ số học; đánh dấu acceptance MVP 2019, tách phase 2 và ghi rõ các phụ thuộc source chưa tích hợp. Bản cập nhật tiếp tục Draft để reviewer xác nhận.
