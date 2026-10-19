@@ -41,6 +41,7 @@ DEFAULT_WINDOW = 60
 FRAME_REASON_MISSING = "missing_price"  # không có giá hợp lệ tại u hoặc phiên trước u
 FRAME_REASON_NONPOSITIVE = "nonpositive_price"  # giá <= 0 tại u hoặc phiên trước u
 FRAME_REASON_HISTORY_START = "history_start"  # phiên đầu của frame, chưa có phiên trước
+FRAME_REASON_MISSING_PUBLISHED = "missing_published_at"  # giá hợp lệ nhưng published_at là NaT
 
 # Lý do cấp cửa sổ (FeatureBatch.reason); "" nghĩa là hợp lệ
 REASON_INVALID_WINDOW = "invalid_input_window"
@@ -105,12 +106,16 @@ def build_feature_frame(
     Mỗi phiên của lịch tài sản từ ngày giá đầu tới ngày giá cuối là một dòng (không bỏ dòng), khóa
     duy nhất (asset, feature_session_date), sắp tăng dần. Cột: asset, feature_session_date
     (datetime64[ns]), log_return_1_end (float64, NaN nếu không hợp lệ), feature_valid (bool),
-    feature_reason ("" | missing_price | nonpositive_price | history_start), feature_available_at
-    (datetime64[ns, UTC]: published_at lớn nhất của 2 giá, NaT nếu không hợp lệ).
+    feature_reason ("" | missing_price | nonpositive_price | missing_published_at | history_start),
+    feature_available_at (datetime64[ns, UTC]: published_at lớn nhất của 2 giá, NaT nếu không hợp
+    lệ). Giá hợp lệ mà published_at là NaT thì feature không hợp lệ (fail-closed), nên
+    feature_valid=True luôn kéo theo feature_available_at khác NaT.
 
     invalid_dates: ngày bị loại (ví dụ của rejected.parquet), chuyển thẳng cho horizon_log_returns.
     Bảng prices.parquet vốn không chứa dòng bị loại, nên thường để None."""
     cal_name = _calendar(asset)
+    # Đọc invalid_dates đúng một lần: iterator/generator sẽ rỗng ở lần dùng thứ hai
+    invalid_list = None if invalid_dates is None else list(invalid_dates)
     df = prices.loc[prices["asset"] == asset]
     if df.empty:
         raise ValueError(f"no price rows for asset {asset!r}")
@@ -120,15 +125,15 @@ def build_feature_frame(
 
     # Return một phiên theo lịch (nhãn = phiên bắt đầu); hàm này báo lỗi nếu trùng ngày hoặc có
     # ngày không phải phiên giao dịch. Index = mọi phiên từ ngày giá đầu tới ngày giá cuối.
-    r1 = horizon_log_returns(price, 1, calendar=cal_name, invalid_dates=invalid_dates)
+    r1 = horizon_log_returns(price, 1, calendar=cal_name, invalid_dates=invalid_list)
     cal = pd.DatetimeIndex(r1.index)
 
     # Đổi nhãn phiên bắt đầu cal[i] → phiên kết thúc cal[i+1] (theo lịch, không theo dòng dữ liệu)
     ret_end = pd.Series(r1.to_numpy()[:-1], index=cal[1:]).reindex(cal)
 
     # Giá hợp lệ theo phiên, chỉ để ghi lý do và published_at (không tính lại return)
-    if invalid_dates is not None:
-        drop = _naive_dates(list(invalid_dates))
+    if invalid_list is not None:
+        drop = _naive_dates(invalid_list)
         price = price.drop(drop, errors="ignore")
         published = published.drop(drop, errors="ignore")
     p = price.reindex(cal).to_numpy()
@@ -144,14 +149,20 @@ def build_feature_frame(
     reason[nonpos] = FRAME_REASON_NONPOSITIVE
     reason[~present | ~prev_present] = FRAME_REASON_MISSING  # thiếu giá ưu tiên hơn giá <= 0
     reason[0] = FRAME_REASON_HISTORY_START
-    valid = reason == ""
     values = ret_end.to_numpy(dtype=float)
-    if not np.array_equal(valid, np.isfinite(values)):
+    if not np.array_equal(reason == "", np.isfinite(values)):
         raise RuntimeError("feature validity disagrees with horizon_log_returns")
 
-    # published_at lớn nhất của 2 giá (phiên trước u và u); NaT khi đặc trưng không hợp lệ
+    # Fail-closed: giá hợp lệ nhưng không biết thời điểm công bố thì không dùng được (không
+    # chứng minh được dữ liệu đã có tại thời điểm dự báo)
     pub_ns = pub.tz_localize(None).to_numpy(dtype="datetime64[ns]")
     prev_ns = np.concatenate([np.array(["NaT"], dtype="datetime64[ns]"), pub_ns[:-1]])
+    no_pub = np.isnat(pub_ns) | np.isnat(prev_ns)
+    reason[(reason == "") & no_pub] = FRAME_REASON_MISSING_PUBLISHED
+    valid = reason == ""
+    values = np.where(valid, values, np.nan)
+
+    # published_at lớn nhất của 2 giá (phiên trước u và u); NaT khi đặc trưng không hợp lệ
     avail_ns = np.where(valid, np.maximum(pub_ns, prev_ns), np.datetime64("NaT"))
     available_at = pd.DatetimeIndex(avail_ns.astype("datetime64[ns]")).tz_localize("UTC")
 
@@ -191,8 +202,8 @@ def make_windows(frame: pd.DataFrame, base_dates, window: int = DEFAULT_WINDOW) 
     """Cửa sổ input tại từng base_date t: `window` phiên lịch [t-window+1, ..., t], cũ → mới.
 
     - insufficient_input_history: phiên t-window (giá đầu của cửa sổ) nằm trước phiên đầu frame.
-    - invalid_input_window: đủ lịch sử nhưng có phần tử không hợp lệ (thiếu giá, giá <= 0, hoặc t
-      nằm sau ngày giá cuối của frame).
+    - invalid_input_window: đủ lịch sử nhưng có phần tử không hợp lệ (thiếu giá, giá <= 0, thiếu
+      published_at, hoặc t nằm sau ngày giá cuối của frame).
     Dòng không hợp lệ vẫn giữ (X là NaN ở phần tử thiếu, không tự điền). base_date không phải phiên
     của lịch tài sản hoặc bị trùng → ValueError (lỗi của caller)."""
     if int(window) != window or window < 1:
@@ -222,7 +233,12 @@ def make_windows(frame: pd.DataFrame, base_dates, window: int = DEFAULT_WINDOW) 
     feats = frame[list(FEATURE_NAMES)].to_numpy(dtype=float)
     X = np.full((n, window, k), np.nan)
     X[in_frame] = feats[jc[in_frame]]
-    elem_valid = in_frame & frame["feature_valid"].to_numpy(dtype=bool)[jc]
+    # published_at: chuyển về UTC rồi bỏ múi giờ để lưu dạng datetime64[ns]
+    avail = pd.DatetimeIndex(frame["feature_available_at"]).tz_convert("UTC").tz_localize(None)
+    avail_ns = avail.to_numpy(dtype="datetime64[ns]")[jc]
+    # Fail-closed cả khi frame bị sửa tay: phần tử không có thời điểm công bố là không hợp lệ,
+    # nên valid=True luôn kéo theo max_input_published_at khác NaT
+    elem_valid = in_frame & frame["feature_valid"].to_numpy(dtype=bool)[jc] & ~np.isnat(avail_ns)
 
     has_history = (pos_t - window) >= start
     valid = has_history & elem_valid.all(axis=1)
@@ -230,9 +246,6 @@ def make_windows(frame: pd.DataFrame, base_dates, window: int = DEFAULT_WINDOW) 
         valid, "", np.where(has_history, REASON_INVALID_WINDOW, REASON_INSUFFICIENT_HISTORY)
     ).astype(object)
 
-    # published_at: chuyển về UTC rồi bỏ múi giờ để lưu dạng datetime64[ns]
-    avail = pd.DatetimeIndex(frame["feature_available_at"]).tz_convert("UTC").tz_localize(None)
-    avail_ns = avail.to_numpy(dtype="datetime64[ns]")[jc]
     max_pub = np.full(n, np.datetime64("NaT"), dtype="datetime64[ns]")
     if valid.any():
         max_pub[valid] = avail_ns[valid].max(axis=1)
@@ -263,6 +276,7 @@ __all__ = [
     "FEATURE_NAMES",
     "FRAME_REASON_HISTORY_START",
     "FRAME_REASON_MISSING",
+    "FRAME_REASON_MISSING_PUBLISHED",
     "FRAME_REASON_NONPOSITIVE",
     "REASON_INSUFFICIENT_HISTORY",
     "REASON_INVALID_WINDOW",
