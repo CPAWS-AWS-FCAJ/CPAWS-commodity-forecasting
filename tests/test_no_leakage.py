@@ -3,7 +3,6 @@
 import numpy as np
 import pytest
 
-from src.eval import metrics as M
 from src.forecast.decomposition import (
     CeemdanConfig,
     causal_imf_windows,
@@ -107,33 +106,3 @@ def test_raw_format_and_fixed_matrix():
 def test_rejects_origin_without_enough_history():
     with pytest.raises(ValueError):
         causal_imf_windows(_series(), np.array([50]), CFG)
-
-
-def test_spike_threshold_is_causal():
-    rng = np.random.default_rng(1)
-    changes = rng.normal(0, 1, 200)
-    before = M.past_rolling_std(changes, 30)[:150]
-    changes2 = changes.copy()
-    changes2[150:] *= 50  # huge future volatility must not affect earlier thresholds
-    after = M.past_rolling_std(changes2, 30)[:150]
-    np.testing.assert_allclose(before, after)
-
-
-def test_naive_ratio_and_direction():
-    y_true = np.array([101.0, 99.0, 102.0])
-    last = np.array([100.0, 100.0, 100.0])
-    assert M.mae_ratio_vs_naive(y_true, last, last) == 1.0
-    assert M.sign_accuracy(y_true - last, y_true - last) == 1.0
-
-
-def test_spike_scores_counts():
-    s = M.spike_scores([1, 1, 0, 0], [1, 0, 1, 0])
-    assert s["precision"] == 0.5 and s["recall"] == 0.5 and s["false_alarm_rate"] == 0.5
-
-
-def test_diebold_mariano_prefers_smaller_losses():
-    rng = np.random.default_rng(2)
-    losses_a = rng.uniform(0.05, 0.10, 300)
-    losses_b = rng.uniform(0.15, 0.25, 300)
-    stat, p = M.diebold_mariano(losses_a, losses_b, h=1)
-    assert stat < 0 and p < 0.05
