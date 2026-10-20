@@ -432,3 +432,60 @@ def test_holm_full_family_keeps_nan_slots(family):
     result = M.holm_adjust(p)
     np.testing.assert_allclose(result[:2], [family * 0.001, (family - 1) * 0.002])
     assert np.all(np.isnan(result[2:]))
+
+
+def test_removed_metrics_are_not_exposed():
+    for name in ("mape", "rmse"):
+        assert not hasattr(M, name)
+
+
+@pytest.mark.parametrize(
+    "y,q",
+    [
+        ([np.nan], [0.0]),
+        ([0.0], [np.nan]),
+        ([np.inf], [0.0]),
+        ([0.0], [-np.inf]),
+        ([0.0, 1.0], [0.0]),
+        ([[0.0], [1.0]], [0.0, 1.0]),
+        ([0.0, 1.0], [[0.0], [1.0]]),
+        (0.0, [0.0]),
+    ],
+)
+def test_pinball_single_tau_rejects_invalid_pairs_and_broadcasting(y, q):
+    with pytest.raises(ValueError):
+        M.pinball_loss(y, q, 0.25)
+
+
+def test_mase_returns_independent_training_length_hand_calculation():
+    # Evaluation MAE=(1+2)/2=1.5; train mean absolute return=(1+2+3)/3=2.
+    assert M.mase_returns([1.0, -2.0], [0.0, 0.0], [-1.0, 2.0, -3.0]) == 0.75
+
+
+@pytest.mark.parametrize("train", [[np.nan], [np.inf], [-np.inf], [[1.0]], 1.0])
+def test_mase_returns_rejects_invalid_training_series(train):
+    with pytest.raises(ValueError):
+        M.mase_returns([1.0, -2.0], [0.0, 0.0], train)
+
+
+@pytest.mark.parametrize(
+    "y,pred",
+    [
+        ([np.nan], [0.0]),
+        ([0.0], [np.nan]),
+        ([np.inf], [0.0]),
+        ([0.0], [-np.inf]),
+        ([0.0, 1.0], [0.0]),
+        ([[0.0], [1.0]], [0.0, 1.0]),
+        ([0.0, 1.0], [[0.0], [1.0]]),
+        (0.0, [0.0]),
+    ],
+)
+@pytest.mark.parametrize("train", [[1.0, 2.0, 3.0], [0.0, 0.0, 0.0]])
+def test_mase_returns_validates_evaluation_even_with_zero_scale(y, pred, train):
+    with pytest.raises(ValueError):
+        M.mase_returns(y, pred, train)
+
+
+def test_mase_returns_zero_scale_with_different_training_length():
+    assert np.isnan(M.mase_returns([1.0, -2.0], [0.0, 0.0], [0.0, 0.0, 0.0]))
