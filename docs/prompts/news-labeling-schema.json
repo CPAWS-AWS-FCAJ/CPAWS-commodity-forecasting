@@ -1,0 +1,69 @@
+{
+  "type": "object",
+  "properties": {
+    "asset_labels": {
+      "type": "array",
+      "description": "Nhãn đánh giá cho bốn tài sản Gold, Silver, Brent và WTI.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "asset": {
+            "type": "string",
+            "enum": ["Gold", "Silver", "Brent", "WTI"]
+          },
+          "relevant": {
+            "type": "boolean"
+          },
+          "impact_score": {
+            "type": ["integer", "null"],
+            "enum": [0, 1, 2, 3, null]
+          },
+          "direction": {
+            "type": ["string", "null"],
+            "enum": ["bullish", "bearish", "mixed", "uncertain", null]
+          },
+          "confidence": {
+            "type": "string",
+            "enum": ["high", "medium", "low"]
+          },
+          "evidence": {
+            "type": "string",
+            "description": "Bằng chứng ngắn bằng tiếng Việt; chuỗi rỗng nếu tài sản không liên quan."
+          }
+        },
+        "required": [
+          "asset",
+          "relevant",
+          "impact_score",
+          "direction",
+          "confidence",
+          "evidence"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 4,
+      "maxItems": 4
+    },
+    "event_type": {
+      "type": "string",
+      "enum": [
+        "monetary_policy",
+        "geopolitics",
+        "opec_supply",
+        "inventory",
+        "macro_data",
+        "other"
+      ]
+    },
+    "notes": {
+      "type": "string",
+      "description": "Ghi chú bằng tiếng Việt về sự mơ hồ hoặc giới hạn thông tin; chuỗi rỗng nếu không cần ghi chú."
+    }
+  },
+  "required": [
+    "asset_labels",
+    "event_type",
+    "notes"
+  ],
+  "additionalProperties": false
+}
