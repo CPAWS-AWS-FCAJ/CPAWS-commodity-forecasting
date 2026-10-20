@@ -1,6 +1,6 @@
 # ADR-0003: News and Signal Sources
 
-- **Date:** 2026-10-19
+- **Date:** 2026-10-20
 - **Status:** Chấp nhận cho MVP
 
 ## Bối cảnh
@@ -55,9 +55,19 @@ Metadata bổ sung gồm `published_at`, `labeled_at` và `model_id`. Prompt g�
 
 Nhãn phản ánh nội dung và đánh giá của mô hình tại thời điểm xử lý, không khẳng định bài viết đã gây ra biến động giá.
 
-### 5. Xử lý thời điểm công bố
+### 5. Xử lý thời điểm công bố và point-in-time integrity
 
-Tin được công bố sau giờ đóng cửa của thị trường tương ứng sẽ được xem xét cho phiên giao dịch kế tiếp. Quy tắc này cần được triển khai trong logic ứng dụng dựa trên lịch giao dịch của từng tài sản, tránh sử dụng thông tin chưa khả dụng tại thời điểm dự báo.
+Mỗi bài viết phải giữ `published_at` theo thời điểm công bố gốc và múi giờ nguồn nếu có. Khi lưu trữ hoặc so sánh giữa các nguồn, ứng dụng nên chuẩn hóa timestamp về UTC, đồng thời giữ lại thông tin thời gian gốc để truy vết.
+
+Với một dự báo được tạo tại thời điểm cutoff `t`, chỉ được sử dụng tin có `published_at <= t`. Tin được công bố sau cutoff không được đưa vào feature, tập tin truy xuất cho dự báo, hoặc dữ liệu đầu vào của benchmark tại thời điểm đó, kể cả khi tin và dự báo cùng ngày theo lịch.
+
+Cutoff phải khớp với kịch bản dự báo thực tế. Ví dụ, nếu dự báo được tạo trước khi phiên giao dịch mở cửa, không được sử dụng tin xuất hiện sau thời điểm cutoff đó. Không ghép tin chỉ dựa trên ngày lịch.
+
+Việc gán tin vào phiên giao dịch phải dựa trên lịch giao dịch của từng tài sản, bao gồm múi giờ, giờ mở cửa/đóng cửa, cuối tuần và ngày nghỉ của thị trường. Tin công bố sau giờ đóng cửa được xem xét cho phiên tiếp theo theo lịch tương ứng, nhưng vẫn phải tuân thủ cutoff của lần dự báo đang đánh giá.
+
+Nếu `published_at` bị thiếu, không hợp lệ hoặc không đủ chính xác để xác định tin đã khả dụng trước cutoff hay chưa, phải loại tin đó khỏi đánh giá forecasting nhạy theo thời gian hoặc đánh dấu rõ thời điểm công bố là không xác định. Không được mặc định rằng tin đã tồn tại trước timestamp ghi nhận.
+
+Benchmark lịch sử phải tái tạo thông tin có thể biết tại từng cutoff. Không sử dụng tin tức tương lai, giá tương lai hoặc nhãn được tạo từ kết quả tương lai làm đầu vào của dự báo. Quy tắc này nhằm tránh look-ahead bias và data leakage.
 
 ### 6. Lưu trữ và truy xuất nhãn
 
@@ -86,6 +96,6 @@ Cấu trúc này là đề xuất cho MVP và cần được xác nhận với `
 
 ### Kiểm chứng
 
-Đánh giá hiệu quả của tín hiệu tin tức bằng thí nghiệm ablation trên tập validation năm 2019. So sánh mô hình có và không có tín hiệu tin tức, đồng thời đảm bảo dữ liệu đầu vào chỉ chứa thông tin đã khả dụng tại thời điểm dự báo.
+Đánh giá hiệu quả của tín hiệu tin tức bằng thí nghiệm ablation trên tập validation năm 2019. So sánh mô hình có và không có tín hiệu tin tức, đồng thời đảm bảo dữ liệu đầu vào chỉ chứa thông tin đã khả dụng tại cutoff của từng dự báo. Cần kiểm tra timestamp của tin trước khi ghép với mẫu dữ liệu; không dùng ngày lịch làm điều kiện duy nhất.
 
 Không kết luận quan hệ nhân quả chỉ dựa trên tương quan giữa tin tức và biến động giá.

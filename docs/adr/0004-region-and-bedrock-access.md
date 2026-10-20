@@ -1,6 +1,6 @@
 # ADR-0004: Region and Bedrock Access
 
-- **Date:** 2026-10-19
+- **Date:** 2026-10-20
 - **Status:** Chấp nhận cho MVP
 
 ## Bối cảnh
@@ -13,17 +13,19 @@ Claude Haiku 5.5 chưa sử dụng được do quota yêu cầu bị từ chối
 
 ## Kết quả thử nghiệm
 
-| Hạng mục | Kết quả | Ghi chú |
+| Hạng mục | Trạng thái đã quan sát | Phạm vi xác minh / lưu ý |
 |---|---|---|
-| Amazon Nova 2 Lite | Gọi được | Đã thử nghiệm qua inference profile |
-| Claude Haiku 4.5 | Gọi được | Sử dụng global cross-region inference profile |
-| Claude Haiku 5.5 | Chưa sử dụng được | Quota yêu cầu bị từ chối |
-| Bedrock Guardrails | Đã tạo bản nháp | Guardrail hiện ở trạng thái `DRAFT`; cần quản lý bằng CDK và publish version trước khi dùng cho production |
-| Knowledge Base với Cohere | Chưa triển khai được | Gặp lỗi `AccessDenied` liên quan đến Marketplace |
-| Titan Text Embeddings V2 | Chưa xác nhận được | Không thấy khả dụng cho cấu hình Knowledge Base tại Singapore trong lần kiểm tra |
+| Amazon Nova 2 Lite | Gọi thử model thành công | Chỉ xác nhận được lời gọi thử qua inference profile; chưa chứng minh toàn bộ chatbot hoạt động end-to-end |
+| Claude Haiku 4.5 | Gọi thử model thành công | Sử dụng global cross-region inference profile; không thể mặc định toàn bộ xử lý chỉ diễn ra tại Singapore |
+| Claude Haiku 5.5 | Chưa sử dụng được | Yêu cầu quota bị từ chối |
+| Bedrock Guardrails | Đã tạo bản nháp | Guardrail ở trạng thái `DRAFT`; chưa phải cấu hình production đã publish và xác minh trong luồng ứng dụng |
+| Knowledge Base với Cohere | Chưa triển khai/xác minh end-to-end | Lần thử gặp `AccessDenied` liên quan đến Marketplace. Chưa xác minh đầy đủ quy trình tạo Knowledge Base, ingestion, truy xuất và tích hợp chatbot |
+| Titan Text Embeddings V2 | Chưa xác nhận được | Không thấy khả dụng cho cấu hình Knowledge Base tại Singapore trong lần kiểm tra; chưa kết luận ngoài phạm vi lần kiểm tra đó |
 | Batch inference | Đã kiểm tra giới hạn | Chưa chạy batch inference job end-to-end |
 
 Chi tiết thử nghiệm được ghi tại [`docs/experiments/bedrock-model-test-2026-10.md`](../experiments/bedrock-model-test-2026-10.md).
+
+Các kết quả trên cần được hiểu theo đúng phạm vi quan sát: gọi thử model thành công hoặc tạo được một tài nguyên riêng lẻ không đồng nghĩa với việc toàn bộ workflow chatbot đã được kiểm thử end-to-end. Chỉ đánh dấu một bước là đã xác minh khi có kết quả thử nghiệm thực tế tương ứng. Tại thời điểm cập nhật ADR này, Knowledge Base chưa được xác minh hoàn chỉnh từ tạo tài nguyên đến ingestion, truy xuất và tích hợp chatbot.
 
 ## Quyết định
 
@@ -34,6 +36,8 @@ MVP sử dụng chiến lược định tuyến mô hình như sau:
 - **Nova 2 Lite:** xử lý câu hỏi đơn giản, yêu cầu ngắn và các tác vụ phân loại tin tức.
 - **Claude Haiku 4.5:** xử lý câu hỏi phức tạp hơn hoặc yêu cầu sử dụng tool.
 - **Mặc định:** nếu router không đủ tự tin để phân loại yêu cầu, chuyển sang Claude Haiku 4.5.
+
+Đây là quyết định thiết kế cho MVP, không phải bằng chứng rằng toàn bộ cơ chế định tuyến, fallback và sử dụng tool đã vượt qua kiểm thử end-to-end.
 
 Chiến lược này nhằm cân bằng chi phí và chất lượng phản hồi. Việc sử dụng Haiku 4.5 làm phương án mặc định khi không chắc chắn giúp hạn chế định tuyến nhầm các yêu cầu phức tạp sang mô hình nhẹ hơn.
 
@@ -70,7 +74,9 @@ Các giới hạn trên là cấu hình khởi đầu cho MVP và cần được
 
 Ưu tiên triển khai tài nguyên trong `ap-southeast-1` (Singapore) khi dịch vụ và mô hình cần thiết được hỗ trợ.
 
-Đối với mô hình chỉ truy cập được thông qua global cross-region inference profile, cần kiểm tra các yêu cầu về dữ liệu, quyền truy cập và chính sách triển khai trước khi sử dụng. Không giả định rằng global cross-region inference profile luôn xử lý dữ liệu hoàn toàn trong Singapore.
+Claude Haiku 4.5 hiện được gọi thông qua global cross-region inference profile. Với cấu hình này, không thể mặc định rằng mọi yêu cầu được xử lý hoàn toàn trong Singapore, dù ứng dụng hoặc các tài nguyên liên quan được đặt tại `ap-southeast-1`.
+
+Trước khi sử dụng, cần kiểm tra cấu hình inference profile thực tế, tài liệu AWS áp dụng và yêu cầu về dữ liệu, quyền truy cập cũng như chính sách triển khai. Không đưa ra cam kết về data residency hoặc xử lý chỉ trong một Region nếu chưa có cơ sở xác minh cho đúng cấu hình đang dùng.
 
 Claude Haiku 5.5 không nằm trong phạm vi triển khai MVP cho đến khi quota và quyền truy cập được xác nhận thành công.
 
@@ -91,11 +97,12 @@ Knowledge Base chưa thuộc phạm vi bắt buộc của MVP.
 
 Lý do:
 
-- Cấu hình Cohere gặp lỗi `AccessDenied` liên quan đến Marketplace.
+- Cấu hình Cohere đã gặp lỗi `AccessDenied` liên quan đến Marketplace trong lần thử trước.
+- Tài liệu AWS có thể xác nhận mức hỗ trợ của một embedding model tại Singapore, nhưng mức hỗ trợ được tài liệu nêu không chứng minh rằng Knowledge Base của dự án đã được tạo và chạy thành công trong tài khoản hiện tại.
 - Titan Text Embeddings V2 chưa được xác nhận khả dụng cho cấu hình Knowledge Base tại Singapore trong lần kiểm tra.
-- Chưa hoàn tất kiểm thử end-to-end.
+- Chưa xác minh hoàn chỉnh quy trình end-to-end gồm tạo Knowledge Base, cấu hình data source, ingestion, truy xuất kết quả và tích hợp với chatbot.
 
-MVP ưu tiên truy xuất tin tức từ nguồn dữ liệu đã thu thập và lưu trữ. Knowledge Base sẽ được xem xét lại sau khi xác minh quyền truy cập, tính khả dụng của embedding model và chi phí triển khai.
+MVP ưu tiên truy xuất tin tức từ nguồn dữ liệu đã thu thập và lưu trữ. Knowledge Base sẽ được xem xét lại sau khi xác minh quyền truy cập, tính khả dụng của embedding model và chi phí triển khai. Cho đến khi toàn bộ các bước được chạy và kiểm tra bằng bằng chứng thực tế, trạng thái Knowledge Base phải được ghi là chưa xác minh hoàn chỉnh, không phải đã triển khai thành công.
 
 ## Ước tính chi phí mô hình
 
