@@ -10,8 +10,7 @@ import math
 
 import numpy as np
 from scipy.stats import t as student_t
-
-QUANTILE_LEVELS = (0.05, 0.10, 0.25, 0.50, 0.75, 0.90, 0.95)
+from src.forecast.returns import QUANTILE_LEVELS
 
 
 def _paired_1d(a, b) -> tuple[np.ndarray, np.ndarray]:
@@ -62,8 +61,11 @@ def mae_ratio_vs_naive(y_true, y_pred, y_naive) -> float:
 def mase_returns(y_true, y_pred, train_returns) -> float:
     """MASE cho return: chia MAE cho sai số trung bình của naive (return = 0) trên tập train.
     < 1 nghĩa là thắng naive."""
-    scale = float(np.mean(np.abs(np.asarray(train_returns, dtype=float))))
-    return float(mae(y_true, y_pred) / scale) if scale > 0 else float("nan")
+    y, pred = _paired_1d(y_true, y_pred)
+    # The training series is validated independently; its length may differ.
+    train, _ = _paired_1d(train_returns, train_returns)
+    scale = float(np.mean(np.abs(train)))
+    return float(mae(y, pred) / scale) if scale > 0 else float("nan")
 
 
 def sign_accuracy(y_true, y_pred) -> float:
@@ -77,7 +79,8 @@ def sign_accuracy(y_true, y_pred) -> float:
 
 def pinball_loss(y_true, y_q, tau: float) -> float:
     """Quantile (pinball) loss cho phân vị tau. Càng nhỏ càng tốt."""
-    diff = np.asarray(y_true, dtype=float) - np.asarray(y_q, dtype=float)
+    y, q = _paired_1d(y_true, y_q)
+    diff = y - q
     return float(np.mean(np.maximum(tau * diff, (tau - 1) * diff)))
 
 
