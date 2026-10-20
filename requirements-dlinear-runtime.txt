@@ -1,0 +1,2 @@
+# Lightweight NumPy inference only; no feature building or training.
+numpy>=1.26,<3
