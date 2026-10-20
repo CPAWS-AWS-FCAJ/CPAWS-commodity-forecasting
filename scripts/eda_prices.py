@@ -101,7 +101,9 @@ def on_calendar(prices: pd.DataFrame, rejected: pd.DataFrame, asset: str) -> pd.
 def windows(tab: pd.DataFrame, h: int) -> pd.DataFrame:
     """Cửa sổ (t, t+h phiên) trên lịch: return và lý do NaN."""
     p = tab["price"].to_numpy(dtype=float)
-    r = horizon_log_returns(np.where(np.isnan(p), np.nan, p), h)
+    r = horizon_log_returns(
+        np.where(np.isnan(p), np.nan, p), h, assume_aligned=True
+    )  # p đã căn theo lịch (on_calendar)
     n = len(tab)
     end_idx = np.arange(n) + h
     valid_end = end_idx < n
