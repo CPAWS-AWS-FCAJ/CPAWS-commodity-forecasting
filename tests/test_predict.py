@@ -1,0 +1,710 @@
+"""Lambda predict (src/forecast/predict.py, lambda_predict.py): snapshot clean → bản ghi Forecasts.
+
+S3 và DynamoDB dùng moto (không gọi AWS thật); giá tổng hợp 2019 (không đụng dữ liệu 2020 → nay);
+mô hình giả thay DLinearNumpy (PR #18 chưa merge).
+"""
+
+import json
+import logging
+import subprocess
+import sys
+import textwrap
+import zlib
+from datetime import UTC, datetime
+from decimal import Decimal
+from pathlib import Path
+
+import boto3
+import numpy as np
+import pandas as pd
+import pytest
+from moto import mock_aws
+
+from src.data import calendars, clean, ingest_prices, storage
+from src.data.config import ASSETS
+from src.forecast import lambda_predict, predict
+from src.forecast.forecast_record import target_dates, to_decimal
+from src.forecast.returns import QUANTILE_LEVELS
+
+ROOT = Path(__file__).resolve().parents[1]
+REGION = "ap-southeast-1"
+BUCKET = "cpaws-test-lake"
+TABLE = "cpaws-test-forecasts"
+MV = "dlinear-test-2019"
+START, END, DT = "2019-01-02", "2019-06-28", "2019-06-29"  # dt = thứ Bảy sau phiên cuối
+BASE = "2019-06-28"
+NOW = datetime(2019, 6, 29, 12, 30, tzinfo=UTC)
+BASE_PRICE = {"gold": 120.0, "silver": 14.0, "brent": 65.0, "wti": 58.0, "usd_vnd": 23_200.0}
+FACTOR = {"gold": 10.5, "silver": 1.08}
+ITEM_KEYS = {
+    "asset",
+    "base_date",
+    "created_at",
+    "model_version",
+    "target_series",
+    "last_price",
+    "price_unit",
+    "quantile_levels",
+    "horizons",
+    "fx_usd_vnd",
+    "fx_date",
+    "stale_sources",
+    "roll_in_horizon",
+    "is_sample",
+}
+
+
+# ---------- dữ liệu và mô hình giả ----------
+
+
+def _prices(start: str = START, end: str = END) -> pd.DataFrame:
+    """Bảng clean dạng dài cho 4 tài sản + usd_vnd, mỗi tài sản trên lịch của nó."""
+    frames = []
+    for asset, p0 in BASE_PRICE.items():
+        d = calendars.sessions(ASSETS[asset].calendar, start, end)
+        rng = np.random.default_rng(zlib.crc32(asset.encode()))
+        vol = 0.001 if asset == "usd_vnd" else 0.01
+        frames.append(
+            pd.DataFrame(
+                {
+                    "date": d,
+                    "asset": asset,
+                    "price": p0 * np.exp(np.cumsum(rng.normal(0, vol, len(d)))),
+                    "unit": ASSETS[asset].unit,
+                    "source": "yfinance",
+                    "published_at": clean.published_at(d, "yfinance"),
+                    "ingested_at": pd.Timestamp("2019-07-01", tz="UTC"),
+                    "flag": "",
+                }
+            )
+        )
+    return clean.normalize_types(pd.concat(frames, ignore_index=True))
+
+
+def _factors(prices: pd.DataFrame) -> pd.DataFrame:
+    """Hệ số hiển thị theo ngày của GLD/SLV; mỗi ngày một giá trị khác để biết đã dùng ngày nào."""
+    rows = []
+    for asset, f0 in FACTOR.items():
+        d = prices.loc[prices["asset"] == asset, "date"].sort_values().to_numpy()
+        rows.append(
+            pd.DataFrame(
+                {
+                    "date": d,
+                    "asset": asset,
+                    "factor": f0 + 1e-4 * np.arange(len(d)),
+                    "reference": "gc_fut" if asset == "gold" else "si_fut",
+                    "reliability": "normal" if asset == "gold" else "low",
+                    "unit": "USD/oz per share",
+                }
+            )
+        )
+    return pd.concat(rows, ignore_index=True)
+
+
+def _write_lake(st, prices, *, rejected=None, factors="auto", report=None, dt=DT):
+    base = f"clean/prices/dt={dt}"
+    storage.write_parquet(st, f"{base}/prices.parquet", prices)
+    rej = clean.empty_frame() if rejected is None else clean.normalize_types(rejected)
+    storage.write_parquet(st, f"{base}/rejected.parquet", rej)
+    if isinstance(factors, str):
+        factors = _factors(prices)
+    if factors is not None:
+        storage.write_parquet(st, f"clean/display_factors/dt={dt}/display_factors.parquet", factors)
+    storage.write_json(st, f"{base}/quality.json", report or {"status": "ok", "stale_sources": {}})
+
+
+def _px(prices, asset, day) -> float:
+    m = (prices["asset"] == asset) & (prices["date"] == pd.Timestamp(day))
+    return float(prices.loc[m, "price"].iloc[0])
+
+
+class FakeModel:
+    """[B, 60, 1] → [B, 7, 7]: q = mean·h + sd·√h·z_τ, phụ thuộc cửa sổ (test rò rỉ có ý nghĩa).
+    cross_rows: các hàng h bị đảo thứ tự phân vị (mô phỏng phân vị cắt nhau)."""
+
+    Z = np.array([-1.645, -1.2816, -0.6745, 0.0, 0.6745, 1.2816, 1.645])
+
+    def __init__(self, cross_rows=()):
+        self.cross_rows = tuple(cross_rows)
+        self.calls: list[np.ndarray] = []
+
+    def predict(self, windows):
+        x = np.asarray(windows, dtype=float)
+        assert x.ndim == 3 and x.shape[1:] == (60, 1) and np.isfinite(x).all()
+        self.calls.append(x.copy())
+        mu, sd = x.mean(axis=(1, 2)), x.std(axis=(1, 2)) + 1e-4
+        h = np.arange(1, 8, dtype=float)
+        q = mu[:, None, None] * h[None, :, None] + (
+            sd[:, None, None] * np.sqrt(h)[None, :, None] * self.Z[None, None, :]
+        )
+        for r in self.cross_rows:
+            q[:, r, :] = q[:, r, ::-1]
+        return q.astype(np.float32)
+
+
+def _loader(model=None):
+    model = model or FakeModel()
+    return lambda asset: predict.LoadedModel(model, 60, {"asset": asset, "model_version": MV})
+
+
+def _run(st, sink=None, model=None, **kw) -> predict.PredictRun:
+    return predict.run_predict(st, sink, load_model=_loader(model), model_version=MV, now=NOW, **kw)
+
+
+def _by_asset(run: predict.PredictRun) -> dict[str, predict.AssetResult]:
+    return {r.asset: r for r in run.results}
+
+
+def _local(tmp_path, name="lake"):
+    return storage.LocalStorage(tmp_path / name)
+
+
+def _assert_contract(item: dict, asset: str, base: str = BASE) -> None:
+    assert set(item) == ITEM_KEYS
+    assert item["asset"] == asset and item["base_date"] == base
+    assert item["model_version"] == MV and item["is_sample"] is False
+    assert item["target_series"] == ASSETS[asset].primary.symbol
+    assert item["price_unit"] == ("USD/oz" if asset in ("gold", "silver") else "USD/bbl")
+    assert [float(x) for x in item["quantile_levels"]] == list(QUANTILE_LEVELS)
+    assert item["stale_sources"] == []
+    assert isinstance(item["roll_in_horizon"], bool)
+    assert item["roll_in_horizon"] == predict.roll_in_horizon(asset, base)
+    assert isinstance(item["last_price"], Decimal) and item["last_price"] > 0
+    assert isinstance(item["fx_usd_vnd"], Decimal) and item["fx_usd_vnd"] > 0
+    dates = target_dates(asset, base)
+    assert [h["h"] for h in item["horizons"]] == list(range(1, 8))
+    for h in item["horizons"]:
+        assert h["target_date"] == dates[int(h["h"]) - 1]
+        assert len(h["q"]) == 7 and all(isinstance(v, Decimal) for v in h["q"])
+        assert all(a <= b for a, b in zip(h["q"], h["q"][1:], strict=False))
+        assert isinstance(h["prob_up"], Decimal) and Decimal("0.05") <= h["prob_up"] <= 0.95
+
+
+def _no_floats(obj) -> bool:
+    if isinstance(obj, float):
+        return False
+    if isinstance(obj, dict):
+        return all(_no_floats(v) for v in obj.values())
+    if isinstance(obj, list):
+        return all(_no_floats(v) for v in obj)
+    return True
+
+
+# ---------- AWS giả ----------
+
+
+@pytest.fixture
+def aws(monkeypatch):
+    for k, v in {
+        "AWS_ACCESS_KEY_ID": "testing",
+        "AWS_SECRET_ACCESS_KEY": "testing",
+        "AWS_SESSION_TOKEN": "testing",
+        "AWS_DEFAULT_REGION": REGION,
+        "LAKE_BUCKET": BUCKET,
+        "FORECASTS_TABLE": TABLE,
+        "MODEL_VERSION": MV,
+    }.items():
+        monkeypatch.setenv(k, v)
+    for k in ("LAKE_PREFIX", "AWS_PROFILE", "AWS_DEFAULT_PROFILE"):
+        monkeypatch.delenv(k, raising=False)
+    with mock_aws():
+        s3 = boto3.client("s3", region_name=REGION)
+        s3.create_bucket(Bucket=BUCKET, CreateBucketConfiguration={"LocationConstraint": REGION})
+        table = boto3.resource("dynamodb", region_name=REGION).create_table(
+            TableName=TABLE,
+            KeySchema=[
+                {"AttributeName": "asset", "KeyType": "HASH"},
+                {"AttributeName": "base_date", "KeyType": "RANGE"},
+            ],
+            AttributeDefinitions=[
+                {"AttributeName": "asset", "AttributeType": "S"},
+                {"AttributeName": "base_date", "AttributeType": "S"},
+            ],
+            BillingMode="PAY_PER_REQUEST",
+        )
+        yield s3, table
+
+
+def _items(table, asset) -> list[dict]:
+    from boto3.dynamodb.conditions import Key
+
+    return table.query(KeyConditionExpression=Key("asset").eq(asset))["Items"]
+
+
+def _fake_loader(monkeypatch, model=None):
+    monkeypatch.setattr(predict, "make_model_loader", lambda mv, **k: _loader(model))
+
+
+# ---------- đầu-cuối ----------
+
+
+def test_handler_end_to_end_writes_contract_items(aws, monkeypatch):
+    s3, table = aws
+    _write_lake(storage.S3Storage(BUCKET, client=s3), _prices())
+    _fake_loader(monkeypatch)
+    out = lambda_predict.handler({}, None)
+    assert out["ok"] and out["written"] == 4 and not out["dry_run"]
+    json.dumps(out)  # tóm tắt trả về Lambda phải JSON được
+    for asset in predict.PREDICT_ASSETS:
+        items = _items(table, asset)
+        assert len(items) == 1
+        _assert_contract(items[0], asset)
+        assert items[0]["created_at"].endswith("Z")
+    assert _items(table, "gold")[0]["roll_in_horizon"] is False
+
+
+def test_record_numbers_are_decimal_before_put(tmp_path):
+    st = _local(tmp_path)
+    _write_lake(st, _prices())
+    run = _run(st, sink=None)
+    assert run.ok and run.dry_run
+    for r in run.results:
+        _assert_contract(r.record, r.asset)
+        assert _no_floats(r.record)
+
+
+def test_dry_run_writes_nothing(aws, monkeypatch):
+    s3, table = aws
+    _write_lake(storage.S3Storage(BUCKET, client=s3), _prices())
+    _fake_loader(monkeypatch)
+    out = lambda_predict.handler({"dry_run": True, "assets": ["gold", "wti"]}, None)
+    assert out["dry_run"] and out["ok"] and out["written"] == 0
+    assert set(out["assets"]) == {"gold", "wti"}
+    assert all(0.05 <= p <= 0.95 for p in out["assets"]["gold"]["prob_up"])
+    assert table.scan()["Count"] == 0
+
+
+def test_local_json_sink_writes_floats(tmp_path):
+    st = _local(tmp_path)
+    _write_lake(st, _prices())
+    run = _run(st, predict.LocalJsonSink(tmp_path / "out"), assets=["wti"])
+    assert run.ok
+    rec = json.loads((tmp_path / "out" / "wti.json").read_text(encoding="utf-8"))
+    assert rec["base_date"] == BASE and isinstance(rec["last_price"], float)
+    assert rec["is_sample"] is False and len(rec["horizons"]) == 7
+
+
+# ---------- cửa sổ không hợp lệ, thiếu phiên cuối ----------
+
+
+@pytest.mark.parametrize(
+    "asset,case",
+    [("silver", "rejected"), ("wti", "missing")],
+)
+def test_invalid_last_window_skips_asset_and_handler_raises(aws, monkeypatch, caplog, asset, case):
+    s3, table = aws
+    prices = _prices()
+    rejected = None
+    if case == "rejected":
+        # Dòng vẫn còn trong prices: chắc rằng predict truyền ngày bị loại vào build_feature_frame
+        m = (prices["asset"] == asset) & (prices["date"] == pd.Timestamp("2019-06-12"))
+        rejected = prices.loc[m].assign(flag="bad_value")
+    else:
+        m = (prices["asset"] == asset) & (prices["date"] == pd.Timestamp("2019-06-05"))
+        prices = prices.loc[~m].reset_index(drop=True)
+    _write_lake(storage.S3Storage(BUCKET, client=s3), prices, rejected=rejected)
+    old = {"asset": asset, "base_date": "2019-06-27", "model_version": "old"}
+    table.put_item(Item=old)
+    _fake_loader(monkeypatch)
+    caplog.set_level(logging.INFO, logger="cpaws.predict")
+
+    with pytest.raises(lambda_predict.PredictFailed, match=asset):
+        lambda_predict.handler({}, None)
+
+    assert _items(table, asset) == [old]  # không ghi bản ghi mới, bản ghi cũ giữ nguyên
+    for other in set(predict.PREDICT_ASSETS) - {asset}:
+        _assert_contract(_items(table, other)[0], other)
+    assert f"PREDICT_SKIPPED asset={asset} base_date={BASE} reason=invalid_input_window" in (
+        caplog.text
+    )
+
+
+def test_latest_session_missing_skips_without_falling_back(tmp_path, caplog):
+    prices = _prices()
+    m = (prices["asset"] == "gold") & (prices["date"] == pd.Timestamp(BASE))
+    st = _local(tmp_path)
+    _write_lake(st, prices.loc[~m].reset_index(drop=True))
+    caplog.set_level(logging.INFO, logger="cpaws.predict")
+    run = _run(st, predict.LocalJsonSink(tmp_path / "out"))
+    res = _by_asset(run)
+    assert res["gold"].status == "skipped" and res["gold"].reason == "latest_session_missing"
+    assert res["gold"].base_date == "2019-06-27" and res["gold"].record is None
+    assert not (tmp_path / "out" / "gold.json").exists()
+    assert all(res[a].status == "ok" for a in ("silver", "brent", "wti"))
+    assert not run.ok
+    assert "reason=latest_session_missing expected=2019-06-28" in caplog.text
+
+
+def test_holiday_is_not_a_missing_session(tmp_path):
+    # 4/7/2019: NYSE nghỉ, CME không có settlement; snapshot dt = 5/7 → phiên mong đợi là 3/7
+    st = _local(tmp_path)
+    _write_lake(st, _prices(end="2019-07-03"), dt="2019-07-05")
+    snap = predict.load_snapshot(st)
+    for asset in predict.PREDICT_ASSETS:
+        assert predict.expected_base_date(asset, snap) == pd.Timestamp("2019-07-03")
+    run = _run(st)
+    assert run.ok
+    assert {r.base_date for r in run.results} == {"2019-07-03"}
+
+
+def test_no_snapshot_raises(tmp_path):
+    with pytest.raises(predict.SnapshotMissing):
+        _run(_local(tmp_path))
+
+
+# ---------- phân vị cắt nhau ----------
+
+
+def test_crossing_quantiles_sorted_once_and_logged(tmp_path, monkeypatch, caplog):
+    st = _local(tmp_path)
+    _write_lake(st, _prices())
+    calls = []
+    real = predict.normalize_quantiles
+
+    def counting(q):
+        calls.append(np.array(q))
+        return real(q)
+
+    monkeypatch.setattr(predict, "normalize_quantiles", counting)
+    model = FakeModel(cross_rows=(0, 3))
+    caplog.set_level(logging.INFO, logger="cpaws.predict")
+    res = _by_asset(_run(st, model=model, assets=["gold"]))["gold"]
+
+    assert len(calls) == 1  # đúng một lần, trên đầu ra thô của mô hình
+    raw = FakeModel(cross_rows=(0, 3)).predict(model.calls[0])[0].astype(float)
+    np.testing.assert_array_equal(calls[0][0], raw)
+    assert int(np.any(np.diff(raw, axis=-1) < 0, axis=-1).sum()) == 2
+    assert res.status == "ok" and res.n_crossed == 2
+    got = np.array([[float(v) for v in h["q"]] for h in res.record["horizons"]])
+    np.testing.assert_allclose(got, np.sort(raw, axis=-1), atol=1e-6)
+    assert f"PREDICT_QUANTILE_CROSSING asset=gold base_date={BASE} n_crossed=2 n_rows=7" in (
+        caplog.text
+    )
+
+
+# ---------- chống rò rỉ ----------
+
+
+def test_base_date_result_independent_of_later_sessions(tmp_path, caplog):
+    d = pd.Timestamp("2019-05-15")
+    clean_prices = _prices()
+    full = clean_prices.copy()
+    later = full["date"] > d
+    full.loc[later, "price"] *= np.where(full.loc[later, "asset"] == "usd_vnd", 1.05, 1.3)
+    gold_rej = full.loc[(full["asset"] == "gold") & (full["date"] == pd.Timestamp("2019-05-20"))]
+    st_full, st_cut = _local(tmp_path, "full"), _local(tmp_path, "cut")
+    stale = {"gold": {"last_date": "2019-06-27"}, "usd_vnd": {"last_date": "2019-06-27"}}
+    _write_lake(
+        st_full,
+        full,
+        rejected=gold_rej.assign(flag="bad_value"),
+        report={"status": "partial", "stale_sources": stale},
+    )
+    cut = clean_prices.loc[clean_prices["date"] <= d].reset_index(drop=True)
+    _write_lake(st_cut, cut, factors=_factors(cut), dt="2019-05-16")
+
+    caplog.set_level(logging.INFO, logger="cpaws.predict")
+    m_full, m_cut, m_live = FakeModel(), FakeModel(), FakeModel()
+    r_full = _by_asset(_run(st_full, model=m_full, base_date="2019-05-15"))
+    r_cut = _by_asset(_run(st_cut, model=m_cut, base_date="2019-05-15"))
+    r_live = _by_asset(_run(st_cut, model=m_live))  # chạy thường vào đúng ngày đó
+    assert "PREDICT_BACKFILL base_date=2019-05-15" in caplog.text
+    for asset in predict.PREDICT_ASSETS:
+        assert r_full[asset].status == "ok", r_full[asset]
+        assert r_full[asset].record["base_date"] == "2019-05-15"
+        assert r_full[asset].record["stale_sources"] == []
+        assert r_full[asset].record == r_cut[asset].record == r_live[asset].record
+    for a, b in zip(m_full.calls, m_cut.calls, strict=True):
+        np.testing.assert_array_equal(a, b)
+
+
+# ---------- last_price, tỷ giá, stale_sources ----------
+
+
+def test_last_price_uses_display_factor_for_metals_only(tmp_path):
+    prices = _prices()
+    st = _local(tmp_path)
+    _write_lake(st, prices)
+    res = _by_asset(_run(st))
+    f = _factors(prices)
+    for asset in ("gold", "silver"):
+        fac = float(
+            f.loc[(f["asset"] == asset) & (f["date"] == pd.Timestamp(BASE)), "factor"].iloc[0]
+        )
+        want = _px(prices, asset, BASE) * fac
+        assert res[asset].record["last_price"] == to_decimal(want)
+    for asset in ("brent", "wti"):
+        assert res[asset].record["last_price"] == to_decimal(_px(prices, asset, BASE))
+    fx = prices.loc[prices["asset"] == "usd_vnd"].sort_values("date").iloc[-1]
+    assert res["wti"].record["fx_usd_vnd"] == to_decimal(fx["price"])
+    assert res["wti"].record["fx_date"] == str(fx["date"].date())
+
+
+@pytest.mark.parametrize("lag,status", [(0, "ok"), (2, "ok"), (5, "ok"), (6, "skipped")])
+def test_display_factor_lag(tmp_path, caplog, lag, status):
+    prices = _prices()
+    nyse = calendars.sessions("NYSE", START, BASE)
+    fdate = nyse[len(nyse) - 1 - lag]
+    f = _factors(prices)
+    f = f.loc[(f["asset"] != "gold") | (f["date"] <= fdate)].reset_index(drop=True)
+    st = _local(tmp_path)
+    _write_lake(st, prices, factors=f)
+    caplog.set_level(logging.INFO, logger="cpaws.predict")
+    res = _by_asset(_run(st))
+    assert res["silver"].status == "ok"
+    assert res["gold"].status == status
+    if status == "skipped":
+        assert res["gold"].reason == "display_factor_stale"
+        return
+    fac = float(f.loc[(f["asset"] == "gold") & (f["date"] == fdate), "factor"].iloc[0])
+    assert res["gold"].record["last_price"] == to_decimal(_px(prices, "gold", BASE) * fac)
+    warned = "PREDICT_DISPLAY_FACTOR_LAG asset=gold" in caplog.text
+    assert warned == (lag > 0)
+
+
+def test_missing_display_factors_skip_metals_only(tmp_path):
+    st = _local(tmp_path)
+    _write_lake(st, _prices(), factors=None)
+    res = _by_asset(_run(st))
+    assert {a: r.reason for a, r in res.items() if r.status != "ok"} == {
+        "gold": "display_factor_missing",
+        "silver": "display_factor_missing",
+    }
+
+
+def test_stale_sources_from_quality_json(tmp_path):
+    assert predict.stale_sources_for({"stale_sources": {}}, "gold") == []
+    report = {"stale_sources": {"usd_vnd": {}, "brent": {}, "gold": {}}}
+    assert predict.stale_sources_for(report, "gold") == ["gold", "usd_vnd"]
+    assert predict.stale_sources_for(report, "wti") == ["usd_vnd"]
+    st = _local(tmp_path)
+    _write_lake(st, _prices(), report={"status": "partial", "stale_sources": {"usd_vnd": {}}})
+    res = _by_asset(_run(st))
+    assert all(r.record["stale_sources"] == ["usd_vnd"] for r in res.values())
+
+
+# ---------- roll_in_horizon ----------
+
+
+@pytest.mark.parametrize("asset,expiries", [("wti", "cl_expiries"), ("brent", "bz_expiries")])
+def test_roll_in_horizon_window_edges(asset, expiries):
+    exp = getattr(calendars, expiries)("2019-01-01", "2019-12-31")
+    e = exp[exp >= pd.Timestamp("2019-03-01")][0]
+    cme = calendars.sessions("CME")
+    i = cme.get_loc(e)
+    assert predict.roll_in_horizon(asset, e) is True  # đáo hạn đúng base: phiên roll = base + 1
+    assert target_dates(asset, cme[i - 7])[-1] == str(e.date())
+    assert predict.roll_in_horizon(asset, cme[i - 7]) is False  # đáo hạn đúng t7
+    assert predict.roll_in_horizon(asset, cme[i - 6]) is True  # phiên roll đúng t7
+    assert predict.roll_in_horizon(asset, cme[i + 1]) is False  # base là phiên roll
+
+
+def test_roll_in_horizon_never_true_for_metals():
+    for d in calendars.sessions("NYSE", "2019-01-01", "2019-12-20"):
+        assert predict.roll_in_horizon("gold", d) is False
+        assert predict.roll_in_horizon("silver", d) is False
+
+
+# ---------- artifact mô hình ----------
+
+
+def _write_artifact(d: Path, asset="gold", version=MV, **manifest):
+    d.mkdir(parents=True, exist_ok=True)
+    np.savez(d / "weights.npz", w=np.zeros(1, dtype=np.float32))
+    (d / "config.json").write_text(json.dumps({"window": 60}), encoding="utf-8")
+    (d / "scaler.json").write_text(json.dumps({"mean": [0.0], "std": [1.0]}), encoding="utf-8")
+    m = {"asset": asset, "model_version": version, "integration_eligible": True}
+    m.update(manifest)
+    (d / "manifest.json").write_text(json.dumps(m), encoding="utf-8")
+    return d
+
+
+def _factory(d):
+    return FakeModel()
+
+
+def test_load_model_dir_accepts_eligible_artifact(tmp_path):
+    d = _write_artifact(tmp_path / "gold" / MV)
+    loaded = predict.load_model_dir(d, "gold", MV, factory=_factory)
+    assert loaded.window == 60 and loaded.manifest["asset"] == "gold"
+    assert isinstance(loaded.model, FakeModel)
+
+
+@pytest.mark.parametrize(
+    "manifest",
+    [{"integration_eligible": False}, {"integration_eligible": None}, {"asset": "silver"}],
+)
+def test_load_model_dir_rejects_bad_manifest(tmp_path, manifest):
+    d = _write_artifact(tmp_path / "a", **manifest)
+    with pytest.raises(predict.ModelArtifactError):
+        predict.load_model_dir(d, "gold", MV, factory=_factory)
+
+
+def test_load_model_dir_rejects_wrong_version_or_missing_file(tmp_path):
+    d = _write_artifact(tmp_path / "a", version="other")
+    with pytest.raises(predict.ModelArtifactError, match="model_version"):
+        predict.load_model_dir(d, "gold", MV, factory=_factory)
+    d = _write_artifact(tmp_path / "b")
+    (d / "scaler.json").unlink()
+    with pytest.raises(predict.ModelArtifactError, match="scaler.json"):
+        predict.load_model_dir(d, "gold", MV, factory=_factory)
+
+
+def test_allow_experimental_loads_with_warning(tmp_path, caplog):
+    d = _write_artifact(tmp_path / "a", integration_eligible=False, missing_metadata=["commit"])
+    caplog.set_level(logging.WARNING, logger="cpaws.predict")
+    loaded = predict.load_model_dir(d, "gold", MV, allow_experimental=True, factory=_factory)
+    assert loaded.window == 60
+    assert "PREDICT_EXPERIMENTAL_MODEL asset=gold" in caplog.text
+
+
+def test_default_factory_errors_are_artifact_errors(tmp_path):
+    # Không có DLinearNumpy (PR #18 chưa merge) hoặc artifact giả không đúng DLinear: đều là
+    # ModelArtifactError, không phải lỗi khác
+    d = _write_artifact(tmp_path / "a")
+    with pytest.raises(predict.ModelArtifactError):
+        predict.load_model_dir(d, "gold", MV)
+
+
+def test_invalid_model_version_rejected():
+    with pytest.raises(ValueError):
+        predict.make_model_loader("../x", model_dir=".")
+
+
+def test_handler_rejects_ineligible_artifact_and_writes_others(aws, monkeypatch, tmp_path):
+    s3, table = aws
+    st = storage.S3Storage(BUCKET, client=s3)
+    _write_lake(st, _prices())
+    for asset in predict.PREDICT_ASSETS:
+        src = _write_artifact(
+            tmp_path / "src" / asset, asset, integration_eligible=asset != "brent"
+        )
+        for f in predict.MODEL_FILES:
+            st.write_bytes(f"models/{asset}/{MV}/{f}", (src / f).read_bytes())
+    real = predict.make_model_loader
+    monkeypatch.setattr(
+        predict,
+        "make_model_loader",
+        lambda mv, **k: real(mv, cache_dir=tmp_path / "cache", factory=_factory, **k),
+    )
+    with pytest.raises(lambda_predict.PredictFailed, match="brent"):
+        lambda_predict.handler({}, None)
+    assert _items(table, "brent") == []
+    for asset in ("gold", "silver", "wti"):
+        _assert_contract(_items(table, asset)[0], asset)
+    assert (tmp_path / "cache" / "gold" / MV / "manifest.json").exists()
+
+
+def test_model_missing_in_lake_is_artifact_error(tmp_path):
+    st = _local(tmp_path)
+    _write_lake(st, _prices())
+    loader = predict.make_model_loader(MV, st=st, cache_dir=tmp_path / "cache", factory=_factory)
+    run = predict.run_predict(st, None, load_model=loader, model_version=MV, assets=["wti"])
+    res = run.results[0]
+    assert res.status == "error" and res.reason == "model_artifact"
+    assert f"models/wti/{MV}/weights.npz" in res.detail
+
+
+# ---------- handler: cấu hình ----------
+
+
+def test_handler_config_errors(aws, monkeypatch):
+    with pytest.raises(lambda_predict.PredictConfigError):
+        lambda_predict.handler({"assets": ["xau"]}, None)
+    with pytest.raises(lambda_predict.PredictConfigError):
+        lambda_predict.handler({"assets": "gold"}, None)
+    monkeypatch.delenv("FORECASTS_TABLE")
+    with pytest.raises(lambda_predict.PredictConfigError, match="FORECASTS_TABLE"):
+        lambda_predict.handler({}, None)
+    monkeypatch.delenv("MODEL_VERSION")
+    with pytest.raises(lambda_predict.PredictConfigError, match="MODEL_VERSION"):
+        lambda_predict.handler({"dry_run": True}, None)
+
+
+# ---------- CLI ----------
+
+
+def test_cli_local_with_base_date(tmp_path, monkeypatch):
+    st = _local(tmp_path)
+    _write_lake(st, _prices())
+    seen = {}
+
+    def fake_make_model_loader(mv, **kw):
+        seen.update(kw, mv=mv)
+        return _loader()
+
+    monkeypatch.setattr(predict, "make_model_loader", fake_make_model_loader)
+    out = tmp_path / "out"
+    argv = ["--source", "local", "--lake-dir", str(tmp_path / "lake"), "--dest", "local"]
+    argv += ["--out-dir", str(out), "--model-version", MV, "--assets", "gold", "brent"]
+    rc = predict.main([*argv, "--base-date", "2019-05-15", "--allow-experimental"])
+    assert rc == 0
+    assert sorted(p.name for p in out.iterdir()) == ["brent.json", "gold.json"]
+    assert json.loads((out / "gold.json").read_text(encoding="utf-8"))["base_date"] == "2019-05-15"
+    assert seen["mv"] == MV and seen["allow_experimental"] is True
+    assert seen["st"] is not None and seen["model_dir"] is None
+
+
+def test_cli_exit_code_1_when_asset_skipped(tmp_path, monkeypatch):
+    prices = _prices()
+    m = (prices["asset"] == "wti") & (prices["date"] == pd.Timestamp(BASE))
+    st = _local(tmp_path)
+    _write_lake(st, prices.loc[~m].reset_index(drop=True))
+    monkeypatch.setattr(predict, "make_model_loader", lambda mv, **k: _loader())
+    argv = ["--lake-dir", str(tmp_path / "lake"), "--out-dir", str(tmp_path / "out")]
+    assert predict.main([*argv, "--model-version", MV]) == 1
+    assert not (tmp_path / "out" / "wti.json").exists()
+    assert (tmp_path / "out" / "gold.json").exists()
+
+
+# ---------- module ----------
+
+
+def test_lake_keys_match_ingest():
+    assert predict.PRICES == ingest_prices.PRICES
+    assert predict.FACTORS == ingest_prices.FACTORS
+
+
+def test_predict_path_does_not_import_heavy_libraries(tmp_path):
+    """Import lambda_predict và chạy predict trên lake local trong tiến trình mới, chặn torch,
+    PyEMD, yfinance, requests, ...; sau đó các module này không có trong sys.modules."""
+    _write_lake(_local(tmp_path), _prices())
+    code = textwrap.dedent(
+        f"""
+        import sys
+        BLOCK = {{"torch", "PyEMD", "yfinance", "requests", "scipy", "sklearn", "statsmodels",
+                  "dotenv"}}
+
+        class Blocker:
+            def find_spec(self, name, path=None, target=None):
+                if name.split(".")[0] in BLOCK:
+                    raise ImportError("blocked " + name)
+                return None
+
+        sys.meta_path.insert(0, Blocker())
+        sys.path.insert(0, {str(ROOT)!r})
+        import numpy as np
+        import src.forecast.lambda_predict
+        from src.forecast import predict
+        from src.data import storage
+
+        class Model:
+            def predict(self, x):
+                return np.tile(np.linspace(-0.02, 0.02, 7), (len(x), 7, 1))
+
+        st = storage.LocalStorage({str(tmp_path / "lake")!r})
+        run = predict.run_predict(
+            st,
+            predict.LocalJsonSink({str(tmp_path / "out")!r}),
+            load_model=lambda a: predict.LoadedModel(Model(), 60, {{}}),
+            model_version="test",
+        )
+        assert run.ok, run.summary()
+        assert not BLOCK & {{m.split(".")[0] for m in sys.modules}}
+        print("OK")
+        """
+    )
+    out = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, cwd=ROOT, check=False
+    )
+    assert out.returncode == 0 and out.stdout.strip().endswith("OK"), out.stderr[-2000:]
