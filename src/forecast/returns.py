@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Iterable, Mapping, Sequence
+from numbers import Real
 
 import numpy as np
 import pandas as pd
@@ -235,7 +236,18 @@ def quantiles_to_prices(price_now: float, quantiles, levels: Sequence[float] = Q
     """Phân vị log return → phân vị giá: P = P_now × exp(r). exp đơn điệu nên giữ thứ tự.
 
     quantiles là Mapping {mức: return} → trả dict {mức: giá}; là dãy return theo `levels` → trả
-    np.ndarray. Phân vị phải không giảm (đã qua normalize_quantiles), nếu không báo ValueError."""
+    np.ndarray. Phân vị phải không giảm (đã qua normalize_quantiles), nếu không báo ValueError.
+    price_now phải là số thực hữu hạn > 0 (không nhận bool, NaN, ±Inf, 0, số âm), như điều kiện
+    last_price trong forecast_record.py; nếu không báo ValueError."""
+    # bool là lớp con của int nên phải loại riêng
+    ok = (
+        isinstance(price_now, Real)
+        and not isinstance(price_now, bool | np.bool_)
+        and bool(np.isfinite(price_now))
+        and price_now > 0
+    )
+    if not ok:
+        raise ValueError(f"price_now must be a finite positive real number, got {price_now!r}")
     lv, vals = _levels_values(quantiles, levels)
     prices = price_now * np.exp(vals)
     if isinstance(quantiles, Mapping):
