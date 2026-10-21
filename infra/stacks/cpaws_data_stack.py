@@ -11,6 +11,8 @@ from aws_cdk import aws_s3 as s3
 from aws_cdk import aws_scheduler as scheduler
 from constructs import Construct
 
+from .shared import INGEST_SCHEDULE_EXPRESSION, ingest_function_name
+
 
 class CpawsDataStack(Stack):
     def __init__(
@@ -100,7 +102,7 @@ class CpawsDataStack(Stack):
         ingest_log_group = logs.LogGroup(
             self,
             "IngestLogGroup",
-            log_group_name=f"/aws/lambda/cpaws-{env_name}-ingest",
+            log_group_name=f"/aws/lambda/{ingest_function_name(env_name)}",
             retention=logs.RetentionDays.ONE_MONTH,
             removal_policy=RemovalPolicy.DESTROY,
         )
@@ -109,7 +111,7 @@ class CpawsDataStack(Stack):
         self.ingest_fn = lambda_.DockerImageFunction(
             self,
             "IngestFunction",
-            function_name=f"cpaws-{env_name}-ingest",
+            function_name=ingest_function_name(env_name),
             description="Daily price ingest (yfinance) writing raw/clean to the CPAWS lake",
             code=lambda_.DockerImageCode.from_ecr(self.ingest_repo, tag_or_digest=ingest_image_tag),
             architecture=lambda_.Architecture.X86_64,
@@ -153,7 +155,7 @@ class CpawsDataStack(Stack):
             "IngestSchedule",
             name=f"cpaws-{env_name}-ingest-daily",
             description="Daily price ingest, 12:15 UTC Tue-Sat (after yfinance published_at)",
-            schedule_expression="cron(15 12 ? * TUE-SAT *)",
+            schedule_expression=INGEST_SCHEDULE_EXPRESSION,
             schedule_expression_timezone="UTC",
             flexible_time_window=scheduler.CfnSchedule.FlexibleTimeWindowProperty(mode="OFF"),
             state="ENABLED",

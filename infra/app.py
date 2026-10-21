@@ -6,6 +6,7 @@ import os
 import aws_cdk as cdk
 from stacks.cpaws_data_stack import CpawsDataStack
 from stacks.cpaws_ops_stack import CpawsOpsStack
+from stacks.shared import ingest_function_name
 
 # Tag image của Lambda ingest trong ECR = SHA ngắn của commit merge PR #9 trên developer
 # (Dockerfile đã ghim digest base). Không dùng 286846a: build trước khi ghim digest.
@@ -36,7 +37,7 @@ CpawsOpsStack(
     app,
     "CpawsOps",
     env_name=env_name,
-    ingest_function_name=f"cpaws-{env_name}-ingest",
+    ingest_function_name=ingest_function_name(env_name),
     alarm_email=alarm_email,
     env=aws_env,
 )
