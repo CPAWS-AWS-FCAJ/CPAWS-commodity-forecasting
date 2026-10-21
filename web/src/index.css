@@ -1,0 +1,40 @@
+@import "tailwindcss";
+
+/* Token màu theo skill forecast-charts (dùng chung web và slide) */
+@theme {
+  --color-price: #1f2328;
+  --color-forecast: #2563eb;
+  --color-up: #15803d;
+  --color-down: #b91c1c;
+  --color-muted: #6b7280;
+  --color-canvas: #f6f7f9;
+  --color-line: #e3e6ea;
+  --color-warn-bg: #fef6e7;
+  --color-warn-fg: #8a5a00;
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+    "Noto Sans", sans-serif;
+}
+
+html {
+  background: var(--color-canvas);
+  color: var(--color-price);
+  font-family: var(--font-sans);
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--color-canvas);
+}
+
+/* Vòng focus rõ cho điều hướng bằng bàn phím */
+:focus-visible {
+  outline: 2px solid var(--color-forecast);
+  outline-offset: 2px;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
