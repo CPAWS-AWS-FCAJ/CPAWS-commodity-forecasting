@@ -1,6 +1,7 @@
 """Dự báo hằng ngày cho vàng, bạc, Brent, WTI → bảng `Forecasts` (docs/api/contract.md, ADR-0008).
 
-Chạy sau Lambda ingest (nối tiếp trong Step Functions). Với mỗi tài sản:
+Chạy sau Lambda ingest (kích hoạt bởi Lambda destination OnSuccess của Lambda ingest; hạ tầng do
+Tiến cấu hình). Với mỗi tài sản:
   1. Đọc snapshot clean mới nhất: clean/prices/dt=D/ (có quality.json, file ingest ghi cuối) và
      clean/display_factors/dt=D/ cùng ngày.
   2. build_feature_frame(prices, asset, invalid_dates=<ngày bị loại>) → latest_base_date →
@@ -541,6 +542,7 @@ def run_predict(
     assets = check_assets(assets)
     _check_model_version(model_version)
     snap = load_snapshot(st)
+    created_at = now or datetime.now(UTC)
     if base_date is not None:
         snap = cut_snapshot(snap, base_date)
         log.info(
@@ -549,7 +551,11 @@ def run_predict(
             snap.base_date.date(),
             snap.dt,
         )
-    created_at = now or datetime.now(UTC)
+    else:
+        today = str(created_at.astimezone(UTC).date())
+        if snap.dt != today:
+            # Ingest hôm nay chưa ghi snapshot (lỗi hoặc chưa chạy): vẫn chạy trên snapshot cũ
+            log.warning("PREDICT_SNAPSHOT_STALE snapshot_dt=%s today=%s", snap.dt, today)
     results: list[AssetResult] = []
     for asset in assets:
         try:

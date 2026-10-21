@@ -1,7 +1,8 @@
 """Lambda predict: dự báo hằng ngày, ghi bảng DynamoDB `Forecasts` (docs/api/contract.md).
 
-Entrypoint: src.forecast.lambda_predict.handler. Chạy sau Lambda ingest (nối tiếp trong Step
-Functions, không đặt lịch riêng; xem config.INGEST_SCHEDULE_EXPRESSION).
+Entrypoint: src.forecast.lambda_predict.handler. Chạy sau Lambda ingest (kích hoạt bởi Lambda
+destination OnSuccess của Lambda ingest; hạ tầng do Tiến cấu hình), không đặt lịch riêng; xem
+config.INGEST_SCHEDULE_EXPRESSION.
 Biến môi trường: LAKE_BUCKET (bắt buộc trên AWS), LAKE_PREFIX (tùy chọn), FORECASTS_TABLE (bắt buộc
 trừ dry_run), MODEL_VERSION (bắt buộc; artifact ở models/<asset>/<MODEL_VERSION>/ trong lake),
 CPAWS_ENV.

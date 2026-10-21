@@ -352,6 +352,21 @@ def test_no_snapshot_raises(tmp_path):
         _run(_local(tmp_path))
 
 
+@pytest.mark.parametrize(
+    "now,stale",
+    [(NOW, False), (datetime(2019, 7, 1, 12, 30, tzinfo=UTC), True)],
+)
+def test_snapshot_older_than_today_warns_but_runs(tmp_path, caplog, now, stale):
+    st = _local(tmp_path)
+    _write_lake(st, _prices())  # dt = 2019-06-29
+    caplog.set_level(logging.INFO, logger="cpaws.predict")
+    run = predict.run_predict(st, None, load_model=_loader(), model_version=MV, now=now)
+    assert run.ok
+    msg = f"PREDICT_SNAPSHOT_STALE snapshot_dt={DT} today=2019-07-01"
+    assert (msg in caplog.text) == stale
+    assert ("PREDICT_SNAPSHOT_STALE" in caplog.text) == stale
+
+
 # ---------- phân vị cắt nhau ----------
 
 
