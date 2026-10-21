@@ -41,11 +41,7 @@ class CpawsApiStack(Stack):
     ) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
-        handler_dir = (
-            Path(__file__).resolve().parents[1]
-            / "lambda"
-            / "forecast_api"
-        )
+        handler_dir = Path(__file__).resolve().parents[1] / "lambda" / "forecast_api"
 
         forecast_api_lambda = lambda_.Function(
             self,

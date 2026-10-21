@@ -15,10 +15,7 @@ DEFAULT_INGEST_IMAGE_TAG = "6956620"
 app = cdk.App()
 env_name = app.node.try_get_context("env") or "dev"
 
-ingest_image_tag = (
-    app.node.try_get_context("ingest_image_tag")
-    or DEFAULT_INGEST_IMAGE_TAG
-)
+ingest_image_tag = app.node.try_get_context("ingest_image_tag") or DEFAULT_INGEST_IMAGE_TAG
 
 aws_env = cdk.Environment(
     account=os.getenv("CDK_DEFAULT_ACCOUNT"),

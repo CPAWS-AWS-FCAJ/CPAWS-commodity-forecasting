@@ -68,22 +68,15 @@ def next_trading_days(base_date, count, calendar_name):
     calendar = mcal.get_calendar(calendar_name)
     schedule = calendar.schedule(
         start_date=base_date.isoformat(),
-        end_date=date.fromordinal(
-            base_date.toordinal() + 45
-        ).isoformat(),
+        end_date=date.fromordinal(base_date.toordinal() + 45).isoformat(),
     )
 
     dates = [
-        session_date.date()
-        for session_date in schedule.index
-        if session_date.date() > base_date
+        session_date.date() for session_date in schedule.index if session_date.date() > base_date
     ]
 
     if len(dates) < count:
-        raise ValueError(
-            f"Not enough trading sessions for {calendar_name} "
-            f"after {base_date}."
-        )
+        raise ValueError(f"Not enough trading sessions for {calendar_name} after {base_date}.")
 
     return [day.isoformat() for day in dates[:count]]
 
@@ -93,10 +86,7 @@ def probability_up(quantiles):
     if len(quantiles) != len(QUANTILE_LEVELS):
         raise ValueError("Expected exactly seven quantiles.")
 
-    if any(
-        quantiles[i] > quantiles[i + 1]
-        for i in range(len(quantiles) - 1)
-    ):
+    if any(quantiles[i] > quantiles[i + 1] for i in range(len(quantiles) - 1)):
         raise ValueError("Quantiles must be nondecreasing.")
 
     if quantiles[0] >= 0:
@@ -124,19 +114,19 @@ def probability_up(quantiles):
                 cdf_zero = q_lower + fraction * (q_upper - q_lower)
 
             probability = Decimal(1) - cdf_zero
-            return rounded(max(
-                Decimal("0.05"),
-                min(Decimal("0.95"), probability),
-            ))
+            return rounded(
+                max(
+                    Decimal("0.05"),
+                    min(Decimal("0.95"), probability),
+                )
+            )
 
     raise ValueError("Could not interpolate probability.")
 
 
 def make_record(asset, config, created_at):
     """Create one synthetic forecast record."""
-    target_dates = next_trading_days(
-        SAMPLE_BASE_DATE, 7, config["calendar"]
-    )
+    target_dates = next_trading_days(SAMPLE_BASE_DATE, 7, config["calendar"])
     horizons = []
 
     for h, target_date in enumerate(target_dates, start=1):
@@ -154,12 +144,14 @@ def make_record(asset, config, created_at):
         ]
         quantiles = [rounded(value) for value in values]
 
-        horizons.append({
-            "h": h,
-            "target_date": target_date,
-            "q": quantiles,
-            "prob_up": probability_up(quantiles),
-        })
+        horizons.append(
+            {
+                "h": h,
+                "target_date": target_date,
+                "q": quantiles,
+                "prob_up": probability_up(quantiles),
+            }
+        )
 
     record = {
         "asset": asset,
@@ -169,9 +161,7 @@ def make_record(asset, config, created_at):
         "target_series": config["target_series"],
         "last_price": rounded(config["last_price"]),
         "price_unit": config["price_unit"],
-        "quantile_levels": [
-            Decimal(str(value)) for value in QUANTILE_LEVELS
-        ],
+        "quantile_levels": [Decimal(str(value)) for value in QUANTILE_LEVELS],
         "horizons": horizons,
         "fx_usd_vnd": Decimal(str(SAMPLE_FX_USD_VND)),
         "fx_date": SAMPLE_FX_DATE,
@@ -187,10 +177,20 @@ def make_record(asset, config, created_at):
 def validate_record(record):
     """Validate required fields and horizon structure."""
     required = {
-        "asset", "base_date", "created_at", "model_version",
-        "target_series", "last_price", "price_unit",
-        "quantile_levels", "horizons", "fx_usd_vnd", "fx_date",
-        "stale_sources", "roll_in_horizon", "is_sample",
+        "asset",
+        "base_date",
+        "created_at",
+        "model_version",
+        "target_series",
+        "last_price",
+        "price_unit",
+        "quantile_levels",
+        "horizons",
+        "fx_usd_vnd",
+        "fx_date",
+        "stale_sources",
+        "roll_in_horizon",
+        "is_sample",
     }
 
     missing = required - record.keys()
@@ -218,10 +218,7 @@ def validate_record(record):
         if len(horizon["q"]) != 7:
             raise ValueError("Each horizon must contain seven quantiles.")
 
-        if any(
-            horizon["q"][i] > horizon["q"][i + 1]
-            for i in range(6)
-        ):
+        if any(horizon["q"][i] > horizon["q"][i + 1] for i in range(6)):
             raise ValueError("Quantiles must be nondecreasing.")
 
         previous_date = horizon["target_date"]
@@ -257,17 +254,12 @@ def delete_samples(table, dry_run=False):
 
         if item is None:
             raise SystemExit(
-                f"ABORTED: sample record missing for {asset}. "
-                "No records were deleted."
+                f"ABORTED: sample record missing for {asset}. No records were deleted."
             )
 
-        if (
-            item.get("model_version") != "sample"
-            or item.get("is_sample") is not True
-        ):
+        if item.get("model_version") != "sample" or item.get("is_sample") is not True:
             raise SystemExit(
-                f"ABORTED: {asset} record is not identified as a sample. "
-                "No records were deleted."
+                f"ABORTED: {asset} record is not identified as a sample. No records were deleted."
             )
 
         records[asset] = item
@@ -286,15 +278,13 @@ def delete_samples(table, dry_run=False):
             table.delete_item(
                 Key=sample_key(asset),
                 ConditionExpression=(
-                    Attr("is_sample").eq(True)
-                    & Attr("model_version").eq("sample")
+                    Attr("is_sample").eq(True) & Attr("model_version").eq("sample")
                 ),
             )
             deleted += 1
     except ClientError as exc:
         raise SystemExit(
-            f"Delete stopped after {deleted} record(s): {exc}. "
-            "Inspect DynamoDB before retrying."
+            f"Delete stopped after {deleted} record(s): {exc}. Inspect DynamoDB before retrying."
         )
 
     print(f"Successfully deleted {deleted} sample records.")
@@ -329,24 +319,20 @@ def seed_samples(table, records, dry_run=False):
             table.put_item(
                 Item=record,
                 ConditionExpression=(
-                    "attribute_not_exists(asset) AND "
-                    "attribute_not_exists(base_date)"
+                    "attribute_not_exists(asset) AND attribute_not_exists(base_date)"
                 ),
             )
             written += 1
     except ClientError as exc:
         raise SystemExit(
-            f"Write stopped after {written} record(s): {exc}. "
-            "Inspect DynamoDB before retrying."
+            f"Write stopped after {written} record(s): {exc}. Inspect DynamoDB before retrying."
         )
 
     print(f"Successfully wrote {written} records.")
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Seed or delete sample forecasts in DynamoDB."
-    )
+    parser = argparse.ArgumentParser(description="Seed or delete sample forecasts in DynamoDB.")
     parser.add_argument(
         "--table",
         default="cpaws-dev-forecasts",
@@ -386,15 +372,8 @@ def main():
         delete_samples(get_table(args))
         return
 
-    created_at = (
-        datetime.now(UTC)
-        .isoformat(timespec="seconds")
-        .replace("+00:00", "Z")
-    )
-    records = [
-        make_record(asset, config, created_at)
-        for asset, config in ASSETS.items()
-    ]
+    created_at = datetime.now(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+    records = [make_record(asset, config, created_at) for asset, config in ASSETS.items()]
 
     print(f"Validated {len(records)} sample records.")
     for record in records:

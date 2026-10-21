@@ -8,11 +8,7 @@ import pytest
 # Nạp handler từ thư mục có tên "lambda".
 # Không import bằng cú pháp "from infra.lambda..." vì lambda là từ khóa Python.
 HANDLER_PATH = (
-    Path(__file__).resolve().parents[1]
-    / "infra"
-    / "lambda"
-    / "forecast_api"
-    / "handler.py"
+    Path(__file__).resolve().parents[1] / "infra" / "lambda" / "forecast_api" / "handler.py"
 )
 
 spec = importlib.util.spec_from_file_location("forecast_api_handler", HANDLER_PATH)
@@ -84,18 +80,14 @@ def setup_fake_table(monkeypatch, record=None):
     monkeypatch.setattr(
         api,
         "_latest_record",
-        lambda table, asset: (
-            record if record and record["asset"] == asset else None
-        ),
+        lambda table, asset: record if record and record["asset"] == asset else None,
     )
     monkeypatch.setattr(
         api,
         "_exact_record",
         lambda table, asset, base_date: (
             record
-            if record
-            and record["asset"] == asset
-            and record["base_date"] == base_date
+            if record and record["asset"] == asset and record["base_date"] == base_date
             else None
         ),
     )
@@ -114,17 +106,13 @@ def test_unknown_endpoint_returns_404():
 
 
 def test_post_returns_405():
-    status, body = decode(
-        api.handler(event("/health", method="POST"), None)
-    )
+    status, body = decode(api.handler(event("/health", method="POST"), None))
     assert status == 405
     assert body["error"] == "method_not_allowed"
 
 
 def test_invalid_asset_returns_400():
-    status, body = decode(
-        api.handler(event("/forecasts/copper", asset="copper"), None)
-    )
+    status, body = decode(api.handler(event("/forecasts/copper", asset="copper"), None))
     assert status == 400
     assert body["error"] == "invalid_asset"
 
@@ -154,17 +142,13 @@ def test_invalid_date_returns_400(monkeypatch, requested_date):
 def test_detail_returns_seven_horizons(monkeypatch):
     setup_fake_table(monkeypatch, make_record())
 
-    status, body = decode(
-        api.handler(event("/forecasts/gold", asset="gold"), None)
-    )
+    status, body = decode(api.handler(event("/forecasts/gold", asset="gold"), None))
 
     assert status == 200
     assert body["asset"] == "gold"
     assert len(body["horizons"]) == 7
     assert body["horizons"][0]["h"] == 1
-    assert body["horizons"][0]["prices"][3] == pytest.approx(
-        100 * __import__("math").exp(0.001)
-    )
+    assert body["horizons"][0]["prices"][3] == pytest.approx(100 * __import__("math").exp(0.001))
     assert body["fx"]["usd_vnd"] == 26310
     assert body["is_sample"] is True
     assert "disclaimer" in body
@@ -196,8 +180,6 @@ def test_summary_returns_latest_records(monkeypatch):
     assert status == 200
     assert len(body["items"]) == 1
     assert body["items"][0]["asset"] == "gold"
-    assert body["items"][0]["h1"]["p50"] == pytest.approx(
-        100 * __import__("math").exp(0.001)
-    )
+    assert body["items"][0]["h1"]["p50"] == pytest.approx(100 * __import__("math").exp(0.001))
     assert body["items"][0]["is_sample"] is True
     assert "disclaimer" in body

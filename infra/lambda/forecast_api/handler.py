@@ -66,9 +66,7 @@ def _latest_record(table, asset: str) -> dict | None:
 
 def _exact_record(table, asset: str, base_date: str) -> dict | None:
     result = table.query(
-        KeyConditionExpression=(
-            Key("asset").eq(asset) & Key("base_date").eq(base_date)
-        ),
+        KeyConditionExpression=(Key("asset").eq(asset) & Key("base_date").eq(base_date)),
         Limit=1,
     )
     items = result.get("Items", [])
@@ -124,13 +122,15 @@ def _detail_item(record: dict) -> dict:
 
     for item in sorted(record["horizons"], key=lambda x: int(x["h"])):
         q = [float(value) for value in item["q"]]
-        horizons.append({
-            "h": int(item["h"]),
-            "target_date": item["target_date"],
-            "returns": q,
-            "prices": [_price(last_price, value) for value in q],
-            "prob_up": float(item["prob_up"]),
-        })
+        horizons.append(
+            {
+                "h": int(item["h"]),
+                "target_date": item["target_date"],
+                "returns": q,
+                "prices": [_price(last_price, value) for value in q],
+                "prob_up": float(item["prob_up"]),
+            }
+        )
 
     asset = record["asset"]
     result = {
@@ -171,19 +171,25 @@ def handler(event, context):
     method = event.get("httpMethod", "GET").upper()
 
     if method != "GET":
-        return _response(405, {
-            "error": "method_not_allowed",
-            "message": "Only GET is supported.",
-        })
+        return _response(
+            405,
+            {
+                "error": "method_not_allowed",
+                "message": "Only GET is supported.",
+            },
+        )
 
     if path.rstrip("/") == "/health":
         return _response(200, {"status": "ok"})
 
     if path.rstrip("/") not in ("/forecasts",) and not path.startswith("/forecasts/"):
-        return _response(404, {
-            "error": "not_found",
-            "message": "Endpoint not found.",
-        })
+        return _response(
+            404,
+            {
+                "error": "not_found",
+                "message": "Endpoint not found.",
+            },
+        )
 
     path_params = event.get("pathParameters") or {}
     asset = path_params.get("asset")
@@ -192,22 +198,31 @@ def handler(event, context):
 
     if path.rstrip("/") == "/forecasts":
         if asset is not None:
-            return _response(400, {
-                "error": "invalid_asset",
-                "message": "Do not specify an asset on /forecasts.",
-            })
+            return _response(
+                400,
+                {
+                    "error": "invalid_asset",
+                    "message": "Do not specify an asset on /forecasts.",
+                },
+            )
     else:
         if not asset or asset not in ASSETS:
-            return _response(400, {
-                "error": "invalid_asset",
-                "message": f"asset must be one of: {', '.join(ASSETS)}.",
-            })
+            return _response(
+                400,
+                {
+                    "error": "invalid_asset",
+                    "message": f"asset must be one of: {', '.join(ASSETS)}.",
+                },
+            )
 
     if requested_date is not None and not _valid_date(requested_date):
-        return _response(400, {
-            "error": "invalid_date",
-            "message": "date must use the YYYY-MM-DD format and be a valid date.",
-        })
+        return _response(
+            400,
+            {
+                "error": "invalid_date",
+                "message": "date must use the YYYY-MM-DD format and be a valid date.",
+            },
+        )
 
     try:
         table = _table()
@@ -219,10 +234,13 @@ def handler(event, context):
                 if record is not None:
                     items.append(_summary_item(record))
 
-            return _response(200, {
-                "items": items,
-                "disclaimer": DISCLAIMER,
-            })
+            return _response(
+                200,
+                {
+                    "items": items,
+                    "disclaimer": DISCLAIMER,
+                },
+            )
 
         if requested_date is None:
             record = _latest_record(table, asset)
@@ -230,17 +248,23 @@ def handler(event, context):
             record = _exact_record(table, asset, requested_date)
 
         if record is None:
-            return _response(404, {
-                "error": "not_found",
-                "message": "No forecast found for the requested asset and date.",
-            })
+            return _response(
+                404,
+                {
+                    "error": "not_found",
+                    "message": "No forecast found for the requested asset and date.",
+                },
+            )
 
         return _response(200, _detail_item(record))
 
     except Exception:  # noqa: BLE001
         # Do not expose AWS details or internal exception messages to API clients.
         print("Forecast API request failed.")
-        return _response(500, {
-            "error": "internal_error",
-            "message": "Unable to retrieve forecasts.",
-        })
+        return _response(
+            500,
+            {
+                "error": "internal_error",
+                "message": "Unable to retrieve forecasts.",
+            },
+        )
