@@ -37,6 +37,18 @@ def test_quantiles_to_prices_example():
     assert out[0.1] < out[0.5] < out[0.9]
 
 
+@pytest.mark.parametrize("bad", [0, -1, -1.5, math.nan, math.inf, -math.inf, True, False, "100"])
+def test_quantiles_to_prices_rejects_invalid_price_now(bad):
+    with pytest.raises(ValueError, match="price_now"):
+        returns.quantiles_to_prices(bad, {0.1: -0.02, 0.5: 0.0, 0.9: 0.02})
+
+
+def test_quantiles_to_prices_valid_price_unchanged():
+    q = np.array([-0.03, -0.02, -0.01, 0.0, 0.01, 0.02, 0.03])
+    for p in (71.32, 2000, np.float64(31.5), np.int64(25)):
+        np.testing.assert_allclose(returns.quantiles_to_prices(p, q), float(p) * np.exp(q))
+
+
 def test_prob_up_interpolates_and_clips():
     assert returns.prob_up({0.1: -0.02, 0.5: 0.0, 0.9: 0.02}) == pytest.approx(0.5)
     p = returns.prob_up({0.1: -0.021, 0.5: 0.003, 0.9: 0.026})
