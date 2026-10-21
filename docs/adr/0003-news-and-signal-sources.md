@@ -23,20 +23,52 @@ Các nguồn này cung cấp tín hiệu bổ sung cho dữ liệu giá, không 
 
 ### 2. Nguồn tin tức
 
-Ưu tiên các nguồn có thể truy xuất và xác định thời điểm công bố:
+MVP ưu tiên các nguồn chính thức có thể truy xuất, xác minh nội dung và xác định thời điểm công bố:
 
-- Guardian API.
-- New York Times API.
-- Thông báo chính thức từ các tổ chức liên quan.
-- RSS tiếng Việt phù hợp với nhu cầu của chatbot.
+- **Federal Reserve (Fed):** FOMC statements và FOMC minutes để theo dõi quyết định chính sách tiền tệ và thông tin liên quan.
+- **U.S. Energy Information Administration (EIA):** Weekly Petroleum Status Report và Today in Energy để theo dõi tồn kho, cung cầu dầu và các diễn biến thị trường năng lượng.
+- **The Guardian:** tạm thời chưa đưa vào pipeline gắn nhãn bằng LLM cho đến khi xác minh được quyền sử dụng phù hợp.
+- **New York Times (NYT):** loại khỏi MVP. Không đưa nội dung bài viết NYT vào Bedrock hoặc pipeline xử lý bằng LLM; không lưu nội dung bài viết.
+- **OPEC:** chưa sử dụng trong MVP cho đến khi kiểm tra và ghi nhận điều khoản sử dụng chính thức.
 
-GDELT chỉ được dùng làm nguồn bổ sung khi có bộ lọc hoặc danh sách domain đáng tin cậy nhằm hạn chế tin nhiễu.
+GDELT chỉ được xem xét như nguồn bổ sung khi có bộ lọc hoặc danh sách domain đáng tin cậy.
+
+### Điều khoản sử dụng và lưu trữ nguồn tin
+
+Trước khi đưa nguồn vào pipeline, cần kiểm tra chính sách bản quyền và điều khoản sử dụng chính thức của nguồn. Không mặc định rằng nội dung truy cập công khai hoặc quyền truy cập API đồng nghĩa với quyền đưa nội dung vào LLM.
+
+Đối với dữ liệu Fed và EI A được chọn cho MVP:
+
+- Chỉ lưu tiêu đề, phần tóm tắt do nhóm tự viết và đường dẫn nguồn.
+- Ghi nhận nguồn và thời điểm công bố để có thể truy xuất, đối chiếu lại thông tin gốc.
+- Kiểm tra từng trang nguồn trước khi đưa tin vào bộ dữ liệu; không sử dụng đường dẫn do mô hình tự tạo nếu chưa xác minh.
+- Chỉ sử dụng nội dung phù hợp với chính sách bản quyền của nguồn; không mặc định quyền sử dụng đối với ảnh, biểu đồ hoặc nội dung của bên thứ ba.
+
+Đối với Guardian, tiếp tục chờ xác nhận về quyền sử dụng cho mục đích gắn nhãn bằng LLM. Trong thời gian chờ, không đưa bài Guardian vào LLM. NYT bị loại khỏi phạm vi MVP và không được sử dụng làm đầu vào cho Bedrock.
 
 ### 3. Phạm vi MVP
 
 MVP cung cấp hàm `get_news(asset, from_date, to_date, min_impact)` để truy xuất tin tức theo tài sản, khoảng thời gian và ngưỡng tác động tối thiểu.
 
 MVP chưa yêu cầu xây dựng Knowledge Base hoặc embedding vector cho toàn bộ tin tức. Trước tiên, hệ thống tập trung vào việc thu thập, gắn nhãn và truy xuất các bài viết có liên quan.
+### Điều khoản sử dụng nguồn tin
+
+### Điều khoản sử dụng nguồn tin
+
+Trước khi thu thập và đưa nội dung tin tức vào pipeline gắn nhãn bằng LLM, phải kiểm tra điều khoản sử dụng của từng nguồn và phạm vi quyền được cấp. Quyền truy cập website hoặc API không mặc nhiên cho phép sử dụng nội dung với dịch vụ AI bên thứ ba.
+
+- **Guardian Open Platform:** Loại khỏi pipeline thu thập và gắn nhãn bằng LLM trong MVP. Ngày 21/10/2026, Guardian News & Media xác nhận qua email rằng use case được đề xuất không được phép theo điều khoản Open Platform hiện hành. Điều khoản 6(g) hạn chế việc sử dụng nội dung cho mục đích AI/ML, text and data mining và tạo nội dung bằng công nghệ AI. Chỉ xem xét lại nếu nhóm có được quyền sử dụng riêng bằng văn bản. Tham khảo: https://www.theguardian.com/open-platform/terms-and-conditions.
+- **NYT Developer API:** Loại khỏi MVP. Không đưa nội dung bài viết NYT vào Bedrock hoặc pipeline xử lý bằng LLM, và không lưu nội dung bài viết cho mục đích của pipeline này.
+- **Nguồn thay thế đã chọn:** Ưu tiên tài liệu chính thức từ Federal Reserve, gồm FOMC statements và minutes, cùng U.S. Energy Information Administration (EIA), gồm Weekly Petroleum Status Report và Today in Energy. Trước khi sử dụng, kiểm tra điều khoản bản quyền và các giới hạn áp dụng cho từng tài liệu; với Federal Reserve, thông tin trên website nhìn chung thuộc phạm vi public domain trừ khi có ghi chú khác hoặc chứa tài liệu của bên thứ ba. Tham khảo:
+  - Federal Reserve copyright disclaimer: https://www.federalreserve.gov/disclaimer.htm
+  - FOMC statements và minutes: https://www.federalreserve.gov/monetarypolicy.htm
+  - EIA copyright and reuse: https://www.eia.gov/about/copyrights_reuse.php
+  - EIA Weekly Petroleum Status Report: https://www.eia.gov/petroleum/supply/weekly/
+  - EIA Today in Energy: https://www.eia.gov/todayinEnergy/
+- **OPEC:** Chưa đưa vào pipeline cho đến khi kiểm tra điều khoản sử dụng chính thức và ghi nhận kết luận trong ADR.
+- **Nguyên tắc lưu trữ và xử lý:** Chỉ lưu tiêu đề, phần tóm tắt do nhóm tự viết và đường dẫn nguồn, sau khi xác minh các trường này được phép sử dụng. Không mặc định rằng quyền truy cập API đồng nghĩa với quyền sao chép, lưu trữ lâu dài hoặc gửi nội dung cho dịch vụ AI bên thứ ba. Khi chatbot trích dẫn tin, phải kiểm tra URL và nội dung nguồn thực tế trước khi trả lời.
+
+**Trạng thái:** Guardian và NYT bị loại khỏi pipeline gắn nhãn bằng LLM trong MVP. Bộ 50 tin thật dự kiến được xây dựng từ các nguồn chính thức đã chọn, ưu tiên Federal Reserve và EIA, sau khi kiểm tra điều khoản áp dụng cho từng nguồn và tài liệu. Không sử dụng nội dung Guardian, NYT hoặc OPEC trong pipeline khi chưa có quyền sử dụng phù hợp.
 
 ### 4. Schema gắn nhãn tin tức
 
@@ -44,14 +76,14 @@ Mỗi bài viết có trường `relevant` ở cấp bài viết để xác đ�
 
 Mức độ tác động được đánh giá riêng cho từng tài sản:
 
-- `asset`: Gold, Silver, Brent hoặc WTI.
-- `impact_score`: số nguyên từ 0 đến 3.
-- `direction`: hướng tác động được đánh giá, chẳng hạn `positive`, `negative`, `mixed` hoặc `neutral`.
-- `confidence`: mức độ tin cậy của nhãn.
-- `event_type`: loại sự kiện.
+- `asset`: `gold`, `silver`, `brent` hoặc `wti`, thống nhất với mã tài sản và partition key `asset` của bảng `NewsLabels`.
+- `impact_score`: số nguyên từ 0 đến 3. Giá trị 0 bao gồm trường hợp không có ảnh hưởng đáng kể hoặc bài viết không liên quan.
+- `direction`: `bullish`, `bearish`, `mixed` hoặc `uncertain`.
+- `confidence`: `high`, `medium` hoặc `low`.
+- `event_type`: loại sự kiện chính.
 - `prompt_version`: phiên bản prompt đã dùng để gắn nhãn.
 
-Metadata bổ sung gồm `published_at`, `labeled_at` và `model_id`. Prompt gắn nhãn được quản lý tại [`docs/prompts/news-labeling-v1.md`](../prompts/news-labeling-v1.md).
+Metadata bổ sung gồm `published_at`, `fetched_at`, `labeled_at` và `model_id`. Prompt gắn nhãn được quản lý tại [`docs/prompts/news-labeling-v1.md`](../prompts/news-labeling-v1.md).
 
 Nhãn phản ánh nội dung và đánh giá của mô hình tại thời điểm xử lý, không khẳng định bài viết đã gây ra biến động giá.
 

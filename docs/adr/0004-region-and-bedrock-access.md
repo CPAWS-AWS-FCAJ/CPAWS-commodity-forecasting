@@ -31,7 +31,7 @@ Các kết quả trên cần được hiểu theo đúng phạm vi quan sát: g�
 
 ### 1. Lựa chọn mô hình cho chatbot
 
-MVP sử dụng chiến lược định tuyến mô hình như sau:
+MVP sử dụng chiến lược định tuyến mô hình như sau: Router sử dụng các luật xác định trước, không gọi LLM để phân loại yêu cầu. Nếu luật không xác định được nhánh xử lý phù hợp, hệ thống chuyển yêu cầu sang Claude Haiku 4.5.
 
 - **Nova 2 Lite:** xử lý câu hỏi đơn giản, yêu cầu ngắn và các tác vụ phân loại tin tức.
 - **Claude Haiku 4.5:** xử lý câu hỏi phức tạp hơn hoặc yêu cầu sử dụng tool.
@@ -80,6 +80,20 @@ Trước khi sử dụng, cần kiểm tra cấu hình inference profile thực 
 
 Claude Haiku 5.5 không nằm trong phạm vi triển khai MVP cho đến khi quota và quyền truy cập được xác nhận thành công.
 
+#### Quyền IAM cho global inference profile
+
+Khi sử dụng global cross-region inference profile, execution role cần có quyền gọi inference profile và các tài nguyên model liên quan theo yêu cầu của Amazon Bedrock.
+
+Policy cần xem xét các tài nguyên:
+
+- ARN của inference profile được ứng dụng sử dụng.
+- ARN của foundation model tương ứng tại Region nguồn.
+- ARN foundation model global tương ứng khi được yêu cầu bởi cấu hình global profile.
+
+Với global inference profile, cần cho phép `aws:RequestedRegion = "unspecified"` trong điều kiện IAM phù hợp với yêu cầu của Bedrock.
+
+Chỉ cấp quyền cho các model và inference profile cần thiết. ARN cụ thể phải lấy từ cấu hình triển khai thực tế và đối chiếu tài liệu IAM chính thức của AWS trước khi áp dụng policy.
+
 ### 5. Bedrock Guardrails
 
 Guardrails cần được quản lý bằng AWS CDK thay vì tạo thủ công rồi phụ thuộc vào một ID cố định trong tài liệu.
@@ -124,29 +138,38 @@ Giả định:
 
 ### 2. Chatbot và định tuyến mô hình
 
-Giả định:
+Router của MVP sử dụng luật xác định trước, không gọi LLM và không phát sinh chi phí token.
+
+Giả định lập kế hoạch:
 
 - 1.000 yêu cầu mỗi tháng.
-- Mỗi yêu cầu sử dụng 1.000 input tokens và 100 output tokens cho bước định tuyến bằng Nova 2 Lite.
-- 30% yêu cầu được chuyển sang Haiku 4.5.
-- Mỗi yêu cầu được chuyển tiếp sử dụng trung bình 3.000 input tokens và 500 output tokens.
+- Các yêu cầu đơn giản được Nova 2 Lite xử lý trực tiếp.
+- Các yêu cầu phức tạp hoặc cần sử dụng tool được chuyển sang Claude Haiku 4.5.
+- Giả định 30% yêu cầu được chuyển sang Haiku 4.5.
+- Mỗi yêu cầu Haiku sử dụng trung bình 3.000 input tokens và 500 output tokens.
 - Giá tham chiếu Haiku 4.5: 1 USD / 1 triệu input tokens và 5 USD / 1 triệu output tokens.
 
-Ước tính:
+Chi phí Haiku 4.5 ước tính:
 
-- Nova 2 Lite cho router: khoảng 0,55 USD/tháng.
-- Haiku 4.5 cho các yêu cầu được chuyển tiếp: khoảng 1,65 USD/tháng.
-- **Tổng chi phí chatbot và router ước tính: 2,20 USD/tháng.**
+- Input: 1.000 × 30% × 3.000 × 1 / 1.000.000 = 0,90 USD/tháng.
+- Output: 1.000 × 30% × 500 × 5 / 1.000.000 = 0,75 USD/tháng.
+- Tổng Haiku 4.5: 1,65 USD/tháng.
+
+Chi phí Nova 2 Lite phải được tính riêng cho số yêu cầu đơn giản thực sự được chuyển đến model, dựa trên token đầu vào và đầu ra đo được. Không tính chi phí token cho router theo luật.
+
+Ước tính này chưa bao gồm retry, tool calls bổ sung hoặc các dịch vụ AWS khác.
 
 ### 3. Tổng chi phí token ước tính
 
-Theo các giả định trên:
+Theo các giả định lập kế hoạch hiện tại:
 
-- Gắn nhãn tin tức: 9,50 USD/tháng.
-- Chatbot và router: 2,20 USD/tháng.
-- **Tổng: khoảng 11,70 USD/tháng.**
+- Gắn nhãn tin tức bằng Nova 2 Lite: khoảng **9,50 USD/tháng**.
+- Chatbot sử dụng Claude Haiku 4.5: khoảng **1,65 USD/tháng** cho phần yêu cầu được chuyển sang Haiku, giả định tỷ lệ chuyển là 30%.
+- Chatbot sử dụng Nova 2 Lite: **chưa đủ dữ liệu để ước tính**, cần đo số lượng yêu cầu đơn giản thực tế và lượng token đầu vào/đầu ra trung bình.
 
-Ước tính chưa bao gồm chi phí Guardrails, lưu trữ, thu thập tin tức, truyền dữ liệu, retry, logging hoặc các dịch vụ AWS khác. Giá thực tế cần được xác minh theo model, inference profile và bảng giá hiện hành tại thời điểm triển khai.
+Do đó, **chưa thể chốt tổng chi phí token hằng tháng của MVP**. Tổng tạm tính của phần gắn nhãn tin tức và phần Haiku trong chatbot là 11,15 USD/tháng, chưa bao gồm chi phí Nova cho câu hỏi đơn giản.
+
+Ước tính chưa bao gồm Guardrails, lưu trữ, thu thập tin tức, truyền dữ liệu, retry, logging hoặc các dịch vụ AWS khác. Giá thực tế cần được xác minh theo model, inference profile và bảng giá hiện hành tại thời điểm triển khai.
 
 ## Hệ quả
 
@@ -172,3 +195,5 @@ Theo các giả định trên:
 - [ ] Triển khai Guardrails bằng CDK và publish version.
 - [ ] Kiểm tra yêu cầu về Region và luồng dữ liệu.
 - [ ] Đo chi phí thực tế bằng CloudWatch và AWS Cost Explorer.
+
+
