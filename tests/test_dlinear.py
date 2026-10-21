@@ -10,9 +10,8 @@ import pandas as pd
 import pytest
 import torch
 
-from src.features.build import build_feature_frame, make_windows
-
 from src.data import calendars
+from src.features.build import build_feature_frame, make_windows
 from src.forecast import dlinear_data as D
 from src.forecast.dlinear import DLinear, pinball_training_loss
 from src.forecast.dlinear_data import InputScaler, prepare_training_data
