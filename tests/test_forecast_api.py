@@ -5,7 +5,6 @@ from pathlib import Path
 
 import pytest
 
-
 # Nạp handler từ thư mục có tên "lambda".
 # Không import bằng cú pháp "from infra.lambda..." vì lambda là từ khóa Python.
 HANDLER_PATH = (

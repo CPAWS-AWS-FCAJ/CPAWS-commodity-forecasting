@@ -6,6 +6,8 @@ from aws_cdk import (
     CfnOutput,
     RemovalPolicy,
     Stack,
+)
+from aws_cdk import (
     aws_dynamodb as dynamodb,
 )
 from constructs import Construct

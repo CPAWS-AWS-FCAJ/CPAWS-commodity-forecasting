@@ -7,10 +7,20 @@ from aws_cdk import (
     CfnOutput,
     Duration,
     Stack,
+)
+from aws_cdk import (
     aws_apigateway as apigateway,
+)
+from aws_cdk import (
     aws_cognito as cognito,
+)
+from aws_cdk import (
     aws_dynamodb as dynamodb,
+)
+from aws_cdk import (
     aws_iam as iam,
+)
+from aws_cdk import (
     aws_lambda as lambda_,
 )
 from constructs import Construct

@@ -1,14 +1,13 @@
 """Seed or delete synthetic sample forecasts in DynamoDB."""
 
 import argparse
-from datetime import date, datetime, timezone
-from decimal import Decimal, ROUND_HALF_UP
+from datetime import UTC, date, datetime
+from decimal import ROUND_HALF_UP, Decimal
 
 import boto3
+import pandas_market_calendars as mcal
 from boto3.dynamodb.conditions import Attr
 from botocore.exceptions import ClientError
-import pandas_market_calendars as mcal
-
 
 ASSETS = {
     "gold": {
@@ -115,16 +114,16 @@ def probability_up(quantiles):
             q_upper = Decimal(str(QUANTILE_LEVELS[i + 1]))
 
             if lower == 0 and upper == 0:
-                cdf_zero = (q_lower + q_upper) / Decimal("2")
+                cdf_zero = (q_lower + q_upper) / Decimal(2)
             elif lower == 0:
                 cdf_zero = q_lower
             elif upper == 0:
                 cdf_zero = q_upper
             else:
-                fraction = (Decimal("0") - lower) / (upper - lower)
+                fraction = (Decimal(0) - lower) / (upper - lower)
                 cdf_zero = q_lower + fraction * (q_upper - q_lower)
 
-            probability = Decimal("1") - cdf_zero
+            probability = Decimal(1) - cdf_zero
             return rounded(max(
                 Decimal("0.05"),
                 min(Decimal("0.95"), probability),
@@ -388,7 +387,7 @@ def main():
         return
 
     created_at = (
-        datetime.now(timezone.utc)
+        datetime.now(UTC)
         .isoformat(timespec="seconds")
         .replace("+00:00", "Z")
     )

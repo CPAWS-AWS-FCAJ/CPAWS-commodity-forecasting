@@ -4,11 +4,10 @@
 import os
 
 import aws_cdk as cdk
-
+from stacks.cpaws_api_stack import CpawsApiStack
+from stacks.cpaws_auth_stack import CpawsAuthStack
 from stacks.cpaws_data_stack import CpawsDataStack
 from stacks.cpaws_serving_stack import CpawsServingStack
-from stacks.cpaws_auth_stack import CpawsAuthStack
-from stacks.cpaws_api_stack import CpawsApiStack
 
 # Tag image của Lambda ingest trong ECR.
 DEFAULT_INGEST_IMAGE_TAG = "6956620"

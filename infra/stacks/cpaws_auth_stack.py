@@ -6,6 +6,8 @@ from aws_cdk import (
     CfnOutput,
     RemovalPolicy,
     Stack,
+)
+from aws_cdk import (
     aws_cognito as cognito,
 )
 from constructs import Construct

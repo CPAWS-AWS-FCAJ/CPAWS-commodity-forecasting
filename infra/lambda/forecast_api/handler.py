@@ -12,7 +12,6 @@ from decimal import Decimal
 import boto3
 from boto3.dynamodb.conditions import Key
 
-
 ASSETS = ("gold", "silver", "brent", "wti")
 QUANTILE_LEVELS = (0.05, 0.10, 0.25, 0.50, 0.75, 0.90, 0.95)
 PRICE_INDEX = {"p10": 1, "p50": 3, "p90": 5}
@@ -238,7 +237,7 @@ def handler(event, context):
 
         return _response(200, _detail_item(record))
 
-    except Exception:
+    except Exception:  # noqa: BLE001
         # Do not expose AWS details or internal exception messages to API clients.
         print("Forecast API request failed.")
         return _response(500, {
