@@ -9,6 +9,8 @@ Tiến cấu hình). Với mỗi tài sản:
   3. Không ghi bản ghi cho tài sản đó (bản ghi cũ giữ nguyên, không lùi ngày), log PREDICT_SKIPPED:
      - latest_session_missing: base_date sớm hơn phiên mong đợi (thiếu hoặc bị loại giá phiên cuối);
      - invalid_input_window / insufficient_input_history: cửa sổ input không hợp lệ;
+     - input_publication_unavailable: batch.max_input_published_at là NaT hoặc muộn hơn as_of
+       (cùng quy tắc với training, src/forecast/dlinear_data.py);
      - display_factor_missing / display_factor_stale (vàng, bạc), fx_missing.
   4. model.predict → normalize_quantiles() đúng một lần ngay sau mô hình; log
      PREDICT_QUANTILE_CROSSING với số hàng h phải sắp xếp.
@@ -16,6 +18,10 @@ Tiến cấu hình). Với mỗi tài sản:
 
 Phiên mong đợi: chạy thường = phiên cuối của lịch tài sản đứng trước ngày dt của snapshot (ingest
 chạy 12:15 UTC nên phiên của ngày dt chưa chốt); với --base-date D = phiên cuối <= D.
+
+as_of (thời điểm dự báo được dùng dữ liệu): chạy thường = thời điểm chạy (now, UTC); với
+--base-date D = D + PUBLISHED_AT_RULES[nguồn chính của tài sản] (yfinance: D+1 12:00 UTC), tức thời
+điểm sớm nhất dự báo cho D được phép chạy.
 
 Chạy:
   python -m src.forecast.predict --source local --dest local --out-dir data/forecasts \\
@@ -52,7 +58,7 @@ import numpy as np
 import pandas as pd
 
 from src.data import calendars, clean, quality, storage
-from src.data.config import ASSETS
+from src.data.config import ASSETS, PUBLISHED_AT_RULES
 from src.features.build import build_feature_frame, latest_base_date, make_windows
 from src.forecast.forecast_record import HORIZONS, OIL_ASSETS, target_dates, to_forecast_record
 from src.forecast.returns import QUANTILE_LEVELS, normalize_quantiles
@@ -75,6 +81,7 @@ REASON_LATEST_SESSION_MISSING = "latest_session_missing"
 REASON_DISPLAY_FACTOR_MISSING = "display_factor_missing"
 REASON_DISPLAY_FACTOR_STALE = "display_factor_stale"
 REASON_FX_MISSING = "fx_missing"
+REASON_INPUT_PUBLICATION = "input_publication_unavailable"  # cùng tên với dlinear_data.py
 REASON_MODEL_ARTIFACT = "model_artifact"
 REASON_EXCEPTION = "exception"
 
@@ -241,6 +248,17 @@ def roll_in_horizon(asset: str, base_date) -> bool:
     return bool(((rolls > base) & (rolls <= t7)).any())
 
 
+def publication_as_of(asset: str, snap: Snapshot, now: datetime) -> pd.Timestamp:
+    """Thời điểm (UTC) mà mọi giá trong cửa sổ input phải đã công bố.
+
+    Chạy thường: now. Backfill tại D: D + PUBLISHED_AT_RULES[nguồn chính của tài sản], giống as_of
+    của training (src/forecast/dlinear_data.py)."""
+    if snap.base_date is None:
+        return pd.Timestamp(now).tz_convert("UTC")
+    days, hours = PUBLISHED_AT_RULES[ASSETS[asset].primary.source]
+    return (snap.base_date + pd.Timedelta(days=days, hours=hours)).tz_localize("UTC")
+
+
 # ---------- một tài sản ----------
 
 
@@ -268,8 +286,10 @@ def predict_asset(
     model_version: str,
     created_at: datetime | None = None,
 ) -> AssetResult:
-    """Một bản ghi Forecasts cho asset, hoặc kết quả skipped kèm lý do (không ghi gì)."""
+    """Một bản ghi Forecasts cho asset, hoặc kết quả skipped kèm lý do (không ghi gì).
+    created_at: thời điểm chạy (mặc định now, UTC), cũng là as_of khi chạy thường."""
     base: pd.Timestamp | None = None
+    created_at = created_at or datetime.now(UTC)
     try:
         if not (snap.prices["asset"] == asset).any():
             raise _Skip(REASON_NO_PRICES)
@@ -283,6 +303,15 @@ def predict_asset(
         batch = make_windows(frame, [base], window=loaded.window)
         if not batch.valid[0]:
             raise _Skip(str(batch.reason[0]))
+        # Cùng quy tắc với training: mọi giá của cửa sổ phải công bố trước as_of
+        # (max_input_published_at không múi giờ nhưng mang giá trị UTC)
+        as_of = publication_as_of(asset, snap, created_at)
+        max_pub = batch.max_input_published_at[0]
+        if np.isnat(max_pub) or max_pub > as_of.tz_localize(None).to_datetime64():
+            raise _Skip(
+                REASON_INPUT_PUBLICATION,
+                f"max_input_published_at={max_pub} as_of={as_of.isoformat()}",
+            )
 
         raw = np.asarray(loaded.model.predict(batch.X), dtype=float)
         if raw.shape != (1, len(HORIZONS), len(QUANTILE_LEVELS)):
@@ -518,8 +547,8 @@ class PredictRun:
 
 
 def check_assets(assets: Iterable[str]) -> list[str]:
-    if isinstance(assets, str):
-        raise TypeError("assets must be a list of asset codes")
+    if assets is None or isinstance(assets, str):
+        raise TypeError(f"assets must be a list of asset codes, got {assets!r}")
     out = list(assets)
     bad = [a for a in out if a not in PREDICT_ASSETS]
     if bad or not out or len(set(out)) != len(out):
@@ -672,6 +701,7 @@ __all__ = [
     "make_model_loader",
     "make_storage",
     "predict_asset",
+    "publication_as_of",
     "roll_in_horizon",
     "run_predict",
     "stale_sources_for",

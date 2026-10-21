@@ -1,7 +1,8 @@
 """Lambda predict (src/forecast/predict.py, lambda_predict.py): snapshot clean → bản ghi Forecasts.
 
-S3 và DynamoDB dùng moto (không gọi AWS thật); giá tổng hợp 2019 (không đụng dữ liệu 2020 → nay);
-mô hình giả thay DLinearNumpy (PR #18 chưa merge).
+S3 và DynamoDB dùng moto (không gọi AWS thật); giá tổng hợp 2019 (không đụng dữ liệu 2020 → nay).
+Phần lớn test dùng mô hình giả; test tích hợp cuối file huấn luyện DLinear thật 1 epoch trên giá
+tổng hợp 2013–2018 rồi nạp bằng DLinearNumpy.load.
 """
 
 import json
@@ -9,6 +10,7 @@ import logging
 import subprocess
 import sys
 import textwrap
+import time
 import zlib
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -147,8 +149,8 @@ def _loader(model=None):
     return lambda asset: predict.LoadedModel(model, 60, {"asset": asset, "model_version": MV})
 
 
-def _run(st, sink=None, model=None, **kw) -> predict.PredictRun:
-    return predict.run_predict(st, sink, load_model=_loader(model), model_version=MV, now=NOW, **kw)
+def _run(st, sink=None, model=None, now=NOW, **kw) -> predict.PredictRun:
+    return predict.run_predict(st, sink, load_model=_loader(model), model_version=MV, now=now, **kw)
 
 
 def _by_asset(run: predict.PredictRun) -> dict[str, predict.AssetResult]:
@@ -342,7 +344,7 @@ def test_holiday_is_not_a_missing_session(tmp_path):
     snap = predict.load_snapshot(st)
     for asset in predict.PREDICT_ASSETS:
         assert predict.expected_base_date(asset, snap) == pd.Timestamp("2019-07-03")
-    run = _run(st)
+    run = _run(st, now=datetime(2019, 7, 5, 12, 30, tzinfo=UTC))
     assert run.ok
     assert {r.base_date for r in run.results} == {"2019-07-03"}
 
@@ -628,6 +630,11 @@ def test_handler_config_errors(aws, monkeypatch):
         lambda_predict.handler({"assets": ["xau"]}, None)
     with pytest.raises(lambda_predict.PredictConfigError):
         lambda_predict.handler({"assets": "gold"}, None)
+    # [] hoặc null không được ngầm hiểu là "cả 4 tài sản"
+    with pytest.raises(lambda_predict.PredictConfigError):
+        lambda_predict.handler({"assets": []}, None)
+    with pytest.raises(lambda_predict.PredictConfigError, match="None"):
+        lambda_predict.handler(json.loads('{"assets": null}'), None)
     monkeypatch.delenv("FORECASTS_TABLE")
     with pytest.raises(lambda_predict.PredictConfigError, match="FORECASTS_TABLE"):
         lambda_predict.handler({}, None)
@@ -723,3 +730,156 @@ def test_predict_path_does_not_import_heavy_libraries(tmp_path):
         [sys.executable, "-c", code], capture_output=True, text=True, cwd=ROOT, check=False
     )
     assert out.returncode == 0 and out.stdout.strip().endswith("OK"), out.stderr[-2000:]
+
+
+# ---------- thời điểm công bố của input ----------
+
+
+def _late_publication(prices, asset, day, published_at):
+    """Đổi published_at của một phiên (mô phỏng thanh giá công bố trễ hơn quy tắc)."""
+    out = prices.copy()
+    m = (out["asset"] == asset) & (out["date"] == pd.Timestamp(day))
+    out.loc[m, "published_at"] = pd.Timestamp(published_at, tz="UTC")
+    return out
+
+
+@pytest.mark.parametrize(
+    "now,ok",
+    [
+        (datetime(2019, 6, 29, 11, 59, tzinfo=UTC), False),  # thanh 28/6 công bố 29/6 12:00
+        (datetime(2019, 6, 29, 12, 0, tzinfo=UTC), True),
+    ],
+)
+def test_run_before_publication_time_skips(tmp_path, caplog, now, ok):
+    st = _local(tmp_path)
+    _write_lake(st, _prices())
+    caplog.set_level(logging.INFO, logger="cpaws.predict")
+    res = _by_asset(_run(st, now=now))
+    for asset in predict.PREDICT_ASSETS:
+        if ok:
+            assert res[asset].status == "ok"
+        else:
+            assert res[asset].status == "skipped"
+            assert res[asset].reason == "input_publication_unavailable"
+            assert res[asset].record is None
+    assert ("reason=input_publication_unavailable" in caplog.text) == (not ok)
+
+
+def test_last_session_published_late_skips_only_that_asset(tmp_path):
+    prices = _late_publication(_prices(), "gold", BASE, "2019-06-30 12:00")
+    st = _local(tmp_path)
+    _write_lake(st, prices)
+    out = tmp_path / "out"
+    res = _by_asset(_run(st, predict.LocalJsonSink(out)))  # now = 29/6 12:30
+    assert res["gold"].status == "skipped"
+    assert res["gold"].reason == "input_publication_unavailable"
+    assert "as_of=2019-06-29T12:30:00+00:00" in res["gold"].detail
+    assert not (out / "gold.json").exists()
+    assert all(res[a].status == "ok" for a in ("silver", "brent", "wti"))
+
+
+def test_backfill_as_of_follows_published_at_rule(tmp_path):
+    d = "2019-05-15"
+    snap = predict.cut_snapshot(predict.Snapshot(DT, _prices(), clean.empty_frame(), {}, None), d)
+    # yfinance: D+1 12:00 UTC, không phụ thuộc thời điểm chạy thật
+    assert predict.publication_as_of("gold", snap, NOW) == pd.Timestamp("2019-05-16 12:00Z")
+    live = predict.Snapshot(DT, _prices(), clean.empty_frame(), {}, None)
+    assert predict.publication_as_of("wti", live, NOW) == pd.Timestamp(NOW)
+
+    # Thanh vàng của D công bố muộn hơn quy tắc 1 giờ: backfill bỏ qua dù now (29/6) muộn hơn nhiều
+    late = _late_publication(_prices(), "gold", d, "2019-05-16 13:00")
+    st = _local(tmp_path)
+    _write_lake(st, late)
+    res = _by_asset(_run(st, base_date=d))
+    assert res["gold"].status == "skipped"
+    assert res["gold"].reason == "input_publication_unavailable"
+    assert all(res[a].status == "ok" for a in ("silver", "brent", "wti"))
+    st2 = _local(tmp_path, "on_time")
+    _write_lake(st2, _late_publication(_prices(), "gold", d, "2019-05-16 12:00"))
+    assert _by_asset(_run(st2, base_date=d))["gold"].status == "ok"
+
+
+# ---------- tích hợp với DLinear thật (PR #18) ----------
+
+COMMIT = "0123456789abcdef0123456789abcdef01234567"  # commit giả → integration_eligible = true
+TRAIN_START = "2013-06-03"  # khởi động cửa sổ 60 phiên cho origin đầu 2014
+
+
+@pytest.fixture(scope="module")
+def dlinear_artifacts(tmp_path_factory):
+    """Huấn luyện DLinear 1 epoch cho 4 tài sản trên giá tổng hợp 2013–2018 và xuất artifact thật
+    (eligible); thêm một bản vàng không có source_commit (experimental)."""
+    pytest.importorskip("torch")
+    from src.forecast.dlinear_data import prepare_training_data
+    from src.forecast.train_dlinear import export_artifact, train_model
+
+    root = tmp_path_factory.mktemp("dlinear")
+    prices = _prices(start=TRAIN_START)
+    rejected = clean.empty_frame()
+    t0 = time.perf_counter()
+    for asset in predict.PREDICT_ASSETS:
+        data = prepare_training_data(prices, rejected, asset)
+        model, scaler, _ = train_model(data, epochs=1, batch_size=256, device="cpu")
+        export_artifact(
+            model,
+            scaler,
+            data,
+            root / "eligible",
+            asset=asset,
+            model_version=MV,
+            source_commit=COMMIT,
+        )
+        if asset == "gold":
+            export_artifact(
+                model, scaler, data, root / "experimental", asset=asset, model_version=MV
+            )
+    print(f"dlinear_artifacts: trained and exported in {time.perf_counter() - t0:.1f}s")
+    return root, prices
+
+
+def test_real_dlinear_artifact_end_to_end(tmp_path, dlinear_artifacts):
+    from src.features.build import build_feature_frame, make_windows
+    from src.forecast.dlinear_numpy import DLinearNumpy
+
+    root, prices = dlinear_artifacts
+    st = _local(tmp_path)
+    _write_lake(st, prices)
+    loader = predict.make_model_loader(MV, model_dir=root / "eligible")  # không truyền factory
+    run = predict.run_predict(st, None, load_model=loader, model_version=MV, now=NOW)
+    assert run.ok, run.summary()
+    res = _by_asset(run)
+    for asset in predict.PREDICT_ASSETS:
+        _assert_contract(res[asset].record, asset)
+        assert _no_floats(res[asset].record)
+
+    # Bản ghi vàng đúng bằng đầu ra DLinearNumpy trên cửa sổ của build.py, đã sắp xếp
+    loaded = loader("gold")
+    assert isinstance(loaded.model, DLinearNumpy)
+    assert loaded.manifest["integration_eligible"] is True and loaded.manifest["commit"] == COMMIT
+    frame = build_feature_frame(prices, "gold", invalid_dates=[])
+    batch = make_windows(frame, [pd.Timestamp(BASE)], window=60)
+    want = np.sort(DLinearNumpy.load(root / "eligible" / "gold" / MV).predict(batch.X)[0], axis=-1)
+    got = np.array([[float(v) for v in h["q"]] for h in res["gold"].record["horizons"]])
+    np.testing.assert_allclose(got, want, atol=1e-6)
+
+
+def test_real_artifact_without_commit_needs_allow_experimental(tmp_path, dlinear_artifacts, caplog):
+    root, prices = dlinear_artifacts
+    st = _local(tmp_path)
+    _write_lake(st, prices)
+    strict = predict.make_model_loader(MV, model_dir=root / "experimental")
+    with pytest.raises(predict.ModelArtifactError, match="integration_eligible=False"):
+        strict("gold")
+    run = predict.run_predict(
+        st, None, load_model=strict, model_version=MV, assets=["gold"], now=NOW
+    )
+    assert run.results[0].status == "error" and run.results[0].reason == "model_artifact"
+
+    caplog.set_level(logging.WARNING, logger="cpaws.predict")
+    loose = predict.make_model_loader(MV, model_dir=root / "experimental", allow_experimental=True)
+    run = predict.run_predict(
+        st, None, load_model=loose, model_version=MV, assets=["gold"], now=NOW
+    )
+    assert run.ok
+    _assert_contract(run.results[0].record, "gold")
+    assert "PREDICT_EXPERIMENTAL_MODEL asset=gold" in caplog.text

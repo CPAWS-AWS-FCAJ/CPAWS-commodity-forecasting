@@ -9,7 +9,7 @@ CPAWS_ENV.
 
 event:
   {}                         dự báo 4 tài sản từ snapshot clean mới nhất, ghi DynamoDB
-  {"assets": ["gold", ...]}  chỉ các tài sản này
+  {"assets": ["gold", ...]}  chỉ các tài sản này ([] hoặc null → PredictConfigError)
   {"dry_run": true}          tính nhưng không ghi; trả bản tóm tắt (không raise khi có tài sản lỗi)
 Tài sản bị bỏ qua (cửa sổ không hợp lệ, thiếu phiên cuối, ...) hoặc lỗi (thiếu artifact, artifact
 có manifest.integration_eligible khác true, ...) không chặn các tài sản khác; sau khi ghi xong
@@ -48,7 +48,8 @@ def handler(event: dict | None, context=None) -> dict:
     model_version = _env("MODEL_VERSION")
     dry_run = bool(event.get("dry_run"))
     try:
-        assets = predict.check_assets(event.get("assets") or predict.PREDICT_ASSETS)
+        # Không có khóa "assets" → cả 4 tài sản; [] hoặc null là event sai, không ngầm chạy hết
+        assets = predict.check_assets(event.get("assets", predict.PREDICT_ASSETS))
     except (TypeError, ValueError) as e:
         raise PredictConfigError(str(e)) from e
     st = predict.make_storage("s3")
