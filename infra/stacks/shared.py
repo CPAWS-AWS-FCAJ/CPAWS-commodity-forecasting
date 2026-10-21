@@ -4,6 +4,11 @@
 # 12:15 UTC thứ Ba-thứ Bảy = 19:15 giờ VN, sau mốc công bố D+1 12:00 UTC của yfinance.
 INGEST_SCHEDULE_EXPRESSION = "cron(15 12 ? * TUE-SAT *)"
 
+# Schedule group chứa lịch ingest. Role Scheduler giới hạn aws:SourceArn theo ARN của group này
+# (AWS yêu cầu ARN của schedule group, không phải của từng schedule); schedule phải đặt group_name
+# bằng cùng giá trị, nếu lệch thì Scheduler không assume được role.
+INGEST_SCHEDULE_GROUP = "default"
+
 
 def ingest_function_name(env_name: str) -> str:
     """Tên Lambda ingest. CpawsData đặt function_name và log group theo tên này, CpawsOps dùng nó

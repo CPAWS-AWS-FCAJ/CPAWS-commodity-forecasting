@@ -11,7 +11,7 @@ from aws_cdk import aws_s3 as s3
 from aws_cdk import aws_scheduler as scheduler
 from constructs import Construct
 
-from .shared import INGEST_SCHEDULE_EXPRESSION, ingest_function_name
+from .shared import INGEST_SCHEDULE_EXPRESSION, INGEST_SCHEDULE_GROUP, ingest_function_name
 
 
 class CpawsDataStack(Stack):
@@ -130,14 +130,25 @@ class CpawsDataStack(Stack):
         # Lịch chạy hằng ngày: 12:15 UTC, thứ Ba-thứ Bảy (19:15 giờ VN). Phải KHỚP
         # INGEST_SCHEDULE_EXPRESSION trong src/data/config.py: dữ liệu phiên D chỉ có từ 12:00 UTC
         # ngày D+1. Khải đồng ý bật ngay (20/10); EIA không chặn ingest nên không cần chờ.
+
+        # ARN của schedule group (dạng arn:aws:scheduler:<region>:<account>:schedule-group/<tên>)
+        schedule_group_arn = self.format_arn(
+            service="scheduler", resource="schedule-group", resource_name=INGEST_SCHEDULE_GROUP
+        )
         scheduler_role = iam.Role(
             self,
             "IngestScheduleRole",
             role_name=f"cpaws-{env_name}-ingest-schedule-role",
-            # Chỉ Scheduler của chính tài khoản này được assume (chống confused deputy)
+            # Chỉ Scheduler của chính tài khoản này, và chỉ lịch thuộc đúng schedule group trên,
+            # được assume (chống confused deputy; Tuấn review PR #17).
             assumed_by=iam.PrincipalWithConditions(
                 iam.ServicePrincipal("scheduler.amazonaws.com"),
-                {"StringEquals": {"aws:SourceAccount": self.account}},
+                {
+                    "StringEquals": {
+                        "aws:SourceAccount": self.account,
+                        "aws:SourceArn": schedule_group_arn,
+                    }
+                },
             ),
         )
         # Chỉ lambda:InvokeFunction trên đúng ARN Lambda ingest (không gồm version/alias)
@@ -154,6 +165,7 @@ class CpawsDataStack(Stack):
             self,
             "IngestSchedule",
             name=f"cpaws-{env_name}-ingest-daily",
+            group_name=INGEST_SCHEDULE_GROUP,
             description="Daily price ingest, 12:15 UTC Tue-Sat (after yfinance published_at)",
             schedule_expression=INGEST_SCHEDULE_EXPRESSION,
             schedule_expression_timezone="UTC",
