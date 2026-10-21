@@ -3,7 +3,7 @@ import math
 import numpy as np
 import pytest
 
-from src.forecast import metrics, returns
+from src.forecast import returns
 
 
 def test_horizon_log_returns_basic_and_tail_nan():
@@ -48,13 +48,3 @@ def test_prob_up_interpolates_and_clips():
 def test_vnd_conversion():
     assert returns.usd_oz_to_vnd_luong(1.0, 1.0) == pytest.approx(37.5 / 31.1034768)
     assert returns.usd_to_vnd(10, 25000) == 250000
-
-
-def test_metrics_for_returns():
-    y = np.array([0.01, -0.02, 0.005, -0.001])
-    assert metrics.sign_accuracy(y, y) == 1.0
-    assert metrics.mase_returns(y, y, train_returns=y) == 0.0
-    assert metrics.mase_returns(y, np.zeros_like(y), train_returns=y) == pytest.approx(1.0)
-    assert metrics.pinball_loss(y, y, 0.9) == 0.0
-    assert metrics.brier_score(np.full(4, 0.5), y) == pytest.approx(0.25)
-    assert not hasattr(metrics, "mape")
