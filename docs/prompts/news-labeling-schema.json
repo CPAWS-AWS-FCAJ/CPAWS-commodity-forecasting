@@ -1,0 +1,212 @@
+{
+  "type": "object",
+  "properties": {
+    "relevant": {
+      "type": "boolean",
+      "description": "Tính liên quan ở cấp bài viết; true nếu có liên hệ hợp lý với ít nhất một tài sản trong phạm vi dự án."
+    },
+    "asset_labels": {
+      "type": "object",
+      "description": "Nhãn riêng cho từng tài sản. Mức ảnh hưởng 0 được dùng cả khi tài sản không có ảnh hưởng đáng kể và khi bài viết không liên quan.",
+      "properties": {
+        "gold": {
+          "type": "object",
+          "properties": {
+            "impact_score": {
+              "type": "integer",
+              "enum": [
+                0,
+                1,
+                2,
+                3
+              ]
+            },
+            "direction": {
+              "type": "string",
+              "enum": [
+                "bullish",
+                "bearish",
+                "mixed",
+                "uncertain"
+              ]
+            },
+            "confidence": {
+              "type": "string",
+              "enum": [
+                "high",
+                "medium",
+                "low"
+              ]
+            },
+            "evidence": {
+              "type": "string",
+              "description": "Bằng chứng ngắn bằng tiếng Việt; chuỗi rỗng nếu relevant=false ở cấp bài viết."
+            }
+          },
+          "required": [
+            "impact_score",
+            "direction",
+            "confidence",
+            "evidence"
+          ],
+          "additionalProperties": false
+        },
+        "silver": {
+          "type": "object",
+          "properties": {
+            "impact_score": {
+              "type": "integer",
+              "enum": [
+                0,
+                1,
+                2,
+                3
+              ]
+            },
+            "direction": {
+              "type": "string",
+              "enum": [
+                "bullish",
+                "bearish",
+                "mixed",
+                "uncertain"
+              ]
+            },
+            "confidence": {
+              "type": "string",
+              "enum": [
+                "high",
+                "medium",
+                "low"
+              ]
+            },
+            "evidence": {
+              "type": "string",
+              "description": "Bằng chứng ngắn bằng tiếng Việt; chuỗi rỗng nếu relevant=false ở cấp bài viết."
+            }
+          },
+          "required": [
+            "impact_score",
+            "direction",
+            "confidence",
+            "evidence"
+          ],
+          "additionalProperties": false
+        },
+        "brent": {
+          "type": "object",
+          "properties": {
+            "impact_score": {
+              "type": "integer",
+              "enum": [
+                0,
+                1,
+                2,
+                3
+              ]
+            },
+            "direction": {
+              "type": "string",
+              "enum": [
+                "bullish",
+                "bearish",
+                "mixed",
+                "uncertain"
+              ]
+            },
+            "confidence": {
+              "type": "string",
+              "enum": [
+                "high",
+                "medium",
+                "low"
+              ]
+            },
+            "evidence": {
+              "type": "string",
+              "description": "Bằng chứng ngắn bằng tiếng Việt; chuỗi rỗng nếu relevant=false ở cấp bài viết."
+            }
+          },
+          "required": [
+            "impact_score",
+            "direction",
+            "confidence",
+            "evidence"
+          ],
+          "additionalProperties": false
+        },
+        "wti": {
+          "type": "object",
+          "properties": {
+            "impact_score": {
+              "type": "integer",
+              "enum": [
+                0,
+                1,
+                2,
+                3
+              ]
+            },
+            "direction": {
+              "type": "string",
+              "enum": [
+                "bullish",
+                "bearish",
+                "mixed",
+                "uncertain"
+              ]
+            },
+            "confidence": {
+              "type": "string",
+              "enum": [
+                "high",
+                "medium",
+                "low"
+              ]
+            },
+            "evidence": {
+              "type": "string",
+              "description": "Bằng chứng ngắn bằng tiếng Việt; chuỗi rỗng nếu relevant=false ở cấp bài viết."
+            }
+          },
+          "required": [
+            "impact_score",
+            "direction",
+            "confidence",
+            "evidence"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "gold",
+        "silver",
+        "brent",
+        "wti"
+      ],
+      "additionalProperties": false
+    },
+    "event_type": {
+      "type": "string",
+      "enum": [
+        "monetary_policy",
+        "geopolitics",
+        "opec_supply",
+        "inventory",
+        "macro_data",
+        "other"
+      ]
+    },
+    "notes": {
+      "type": "string",
+      "description": "Ghi chú bằng tiếng Việt về sự mơ hồ hoặc giới hạn thông tin; chuỗi rỗng nếu không cần ghi chú."
+    }
+  },
+  "required": [
+    "relevant",
+    "asset_labels",
+    "event_type",
+    "notes"
+  ],
+  "additionalProperties": false
+}
