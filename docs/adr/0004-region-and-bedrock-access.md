@@ -155,7 +155,10 @@ Chi phí Haiku 4.5 ước tính:
 - Output: 1.000 × 30% × 500 × 5 / 1.000.000 = 0,75 USD/tháng.
 - Tổng Haiku 4.5: 1,65 USD/tháng.
 
-Chi phí Nova 2 Lite phải được tính riêng cho số yêu cầu đơn giản thực sự được chuyển đến model, dựa trên token đầu vào và đầu ra đo được. Không tính chi phí token cho router theo luật.
+Chi phí Nova 2 Lite cho yêu cầu đơn giản: 
+
+- Chi phí Nova 2 Lite phải được tính riêng cho số yêu cầu đơn giản thực sự được chuyển đến model, dựa trên token đầu vào và đầu ra đo được. Không tính chi phí token cho router theo luật.
+- Ước tính sơ bộ theo giả định 700 yêu cầu/tháng, trung bình 1.500 token input và 200 token output mỗi yêu cầu: chi phí khoảng 0,7 USD/tháng. Đây là số liệu tạm tính, cần đối chiếu với đơn giá Bedrock áp dụng cho model và inference profile được sử dụng, sau đó đo lại bằng benchmark.
 
 Ước tính này chưa bao gồm retry, tool calls bổ sung hoặc các dịch vụ AWS khác.
 

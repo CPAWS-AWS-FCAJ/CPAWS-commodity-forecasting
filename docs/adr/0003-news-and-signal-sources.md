@@ -27,31 +27,11 @@ MVP ưu tiên các nguồn chính thức có thể truy xuất, xác minh nội 
 
 - **Federal Reserve (Fed):** FOMC statements và FOMC minutes để theo dõi quyết định chính sách tiền tệ và thông tin liên quan.
 - **U.S. Energy Information Administration (EIA):** Weekly Petroleum Status Report và Today in Energy để theo dõi tồn kho, cung cầu dầu và các diễn biến thị trường năng lượng.
-- **The Guardian:** tạm thời chưa đưa vào pipeline gắn nhãn bằng LLM cho đến khi xác minh được quyền sử dụng phù hợp.
+- **The Guardian:** loại khỏi MVP (Open Platform terms 6(g), email xác nhận ngày 21/10/2026).
 - **New York Times (NYT):** loại khỏi MVP. Không đưa nội dung bài viết NYT vào Bedrock hoặc pipeline xử lý bằng LLM; không lưu nội dung bài viết.
 - **OPEC:** chưa sử dụng trong MVP cho đến khi kiểm tra và ghi nhận điều khoản sử dụng chính thức.
 
 GDELT chỉ được xem xét như nguồn bổ sung khi có bộ lọc hoặc danh sách domain đáng tin cậy.
-
-### Điều khoản sử dụng và lưu trữ nguồn tin
-
-Trước khi đưa nguồn vào pipeline, cần kiểm tra chính sách bản quyền và điều khoản sử dụng chính thức của nguồn. Không mặc định rằng nội dung truy cập công khai hoặc quyền truy cập API đồng nghĩa với quyền đưa nội dung vào LLM.
-
-Đối với dữ liệu Fed và EI A được chọn cho MVP:
-
-- Chỉ lưu tiêu đề, phần tóm tắt do nhóm tự viết và đường dẫn nguồn.
-- Ghi nhận nguồn và thời điểm công bố để có thể truy xuất, đối chiếu lại thông tin gốc.
-- Kiểm tra từng trang nguồn trước khi đưa tin vào bộ dữ liệu; không sử dụng đường dẫn do mô hình tự tạo nếu chưa xác minh.
-- Chỉ sử dụng nội dung phù hợp với chính sách bản quyền của nguồn; không mặc định quyền sử dụng đối với ảnh, biểu đồ hoặc nội dung của bên thứ ba.
-
-Đối với Guardian, tiếp tục chờ xác nhận về quyền sử dụng cho mục đích gắn nhãn bằng LLM. Trong thời gian chờ, không đưa bài Guardian vào LLM. NYT bị loại khỏi phạm vi MVP và không được sử dụng làm đầu vào cho Bedrock.
-
-### 3. Phạm vi MVP
-
-MVP cung cấp hàm `get_news(asset, from_date, to_date, min_impact)` để truy xuất tin tức theo tài sản, khoảng thời gian và ngưỡng tác động tối thiểu.
-
-MVP chưa yêu cầu xây dựng Knowledge Base hoặc embedding vector cho toàn bộ tin tức. Trước tiên, hệ thống tập trung vào việc thu thập, gắn nhãn và truy xuất các bài viết có liên quan.
-### Điều khoản sử dụng nguồn tin
 
 ### Điều khoản sử dụng nguồn tin
 
@@ -68,7 +48,13 @@ Trước khi thu thập và đưa nội dung tin tức vào pipeline gắn nhãn
 - **OPEC:** Chưa đưa vào pipeline cho đến khi kiểm tra điều khoản sử dụng chính thức và ghi nhận kết luận trong ADR.
 - **Nguyên tắc lưu trữ và xử lý:** Chỉ lưu tiêu đề, phần tóm tắt do nhóm tự viết và đường dẫn nguồn, sau khi xác minh các trường này được phép sử dụng. Không mặc định rằng quyền truy cập API đồng nghĩa với quyền sao chép, lưu trữ lâu dài hoặc gửi nội dung cho dịch vụ AI bên thứ ba. Khi chatbot trích dẫn tin, phải kiểm tra URL và nội dung nguồn thực tế trước khi trả lời.
 
-**Trạng thái:** Guardian và NYT bị loại khỏi pipeline gắn nhãn bằng LLM trong MVP. Bộ 50 tin thật dự kiến được xây dựng từ các nguồn chính thức đã chọn, ưu tiên Federal Reserve và EIA, sau khi kiểm tra điều khoản áp dụng cho từng nguồn và tài liệu. Không sử dụng nội dung Guardian, NYT hoặc OPEC trong pipeline khi chưa có quyền sử dụng phù hợp.
+**Trạng thái:** Guardian và NYT bị loại khỏi pipeline gắn nhãn bằng LLM trong MVP. Bộ 50 tin thật dự kiến được xây dựng từ các nguồn chính thức đã chọn, ưu tiên Federal Reserve và EIA, sau khi kiểm tra điều khoản áp dụng cho từng nguồn và tài liệu. 
+
+### 3. Phạm vi MVP
+
+MVP cung cấp hàm `get_news(asset, from_date, to_date, min_impact)` để truy xuất tin tức theo tài sản, khoảng thời gian và ngưỡng tác động tối thiểu.
+
+MVP chưa yêu cầu xây dựng Knowledge Base hoặc embedding vector cho toàn bộ tin tức. Trước tiên, hệ thống tập trung vào việc thu thập, gắn nhãn và truy xuất các bài viết có liên quan.
 
 ### 4. Schema gắn nhãn tin tức
 
