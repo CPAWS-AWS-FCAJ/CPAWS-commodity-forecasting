@@ -73,7 +73,7 @@ def test_whole_series_decomposition_leaks():
     s = _series()
 
     def whole(x):
-        c = CEEMDAN(trials=5)
+        c = CEEMDAN(trials=5, parallel=False)
         c.noise_seed(7)
         return c(x, max_imf=5)[0]  # first IMF
 
