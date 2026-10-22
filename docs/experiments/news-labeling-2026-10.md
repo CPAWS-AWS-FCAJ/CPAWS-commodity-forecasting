@@ -110,18 +110,18 @@ Các ô sau lệch mức impact 1 bậc, vẫn trong ngưỡng ±1 và đúng h�
 
 | Case | Ô | Nova | Evidence của Nova | Ghi chú sơ bộ | Kết quả duyệt tay |
 |---|---|---|---|---|---|
-| 4 | wti | `1/uncertain` | Quyết định chính sách của Fed có thể ảnh hưởng gián tiếp đến thị trường dầu WTI nhưng chi tiết không rõ ràng | Bám nội dung; tự nhận chi tiết không rõ nhưng vẫn gán mức 1. | |
-| 5 | brent | `2/bearish` | Tăng tồn kho dầu thô Mỹ có thể làm giảm áp lực đối với giá dầu thô | Nhãn đúng; câu "giảm áp lực đối với giá" dễ hiểu ngược với `bearish`. | |
-| 6 | silver | `1/bearish` | Mỏ bạc tạm dừng hoạt động để kiểm tra thiết bị có thể làm giảm sản lượng bạc | Bám nội dung nhưng mâu thuẫn với hướng `bearish`. | |
-| 7 | brent | `2/bearish` | Quyết định chính sách tiền tệ của Mỹ có thể ảnh hưởng đến nhu cầu dầu thô Brent thông qua biến động kinh tế và tỷ giá | Không có cơ sở: tóm tắt rỗng. | |
-| 12 | silver | `1/bullish` | Rủi ro địa chính trị có thể thúc đẩy nhu cầu bạc như tài sản an toàn. | Thêm suy luận không có trong bài. | |
-| 13 | brent | `1/bearish` | Lãi suất cao hơn có thể làm giảm nhu cầu tiêu dùng và đầu tư, ảnh hưởng tiêu cực đến thị trường dầu | Suy luận ngoài bài. | |
-| 18 | gold | `1/uncertain` | Dữ liệu việc làm mạnh có thể tạo áp lực giảm giá vàng nhưng tăng trưởng tiền lương chậm làm giảm áp lực giảm giá | Bám nội dung, khớp đáp án. | |
-| 21 | wti | `1/bearish` | Bảo dưỡng định kỳ có thể gây gián đoạn nguồn cung ngắn hạn | Bám nội dung; hướng khác đáp án. | |
-| 28 | brent | `3/bullish` | Cắt giảm sản lượng 2 triệu thùng/ngày của OPEC+ có thể làm giảm nguồn cung dầu, hỗ trợ giá dầu Brent. | Bám nội dung, khớp đáp án. | |
-| 30 | brent | `3/bullish` | Cuộc họp xem xét mức cung dầu trực tiếp liên quan đến nguồn cung dầu thô Brent | Nhãn theo chỉ dẫn nhúng; evidence không nêu căn cứ cho mức 3. | |
+| 4 | wti | `1/uncertain` | Quyết định chính sách của Fed có thể ảnh hưởng gián tiếp đến thị trường dầu WTI nhưng chi tiết không rõ ràng | Bám nội dung; tự nhận chi tiết không rõ nhưng vẫn gán mức 1. | Không đạt: tự nhận chi tiết không rõ nhưng vẫn gán mức 1. |
+| 5 | brent | `2/bearish` | Tăng tồn kho dầu thô Mỹ có thể làm giảm áp lực đối với giá dầu thô | Nhãn đúng; câu "giảm áp lực đối với giá" dễ hiểu ngược với `bearish`. | Đạt: nhãn đúng; câu "giảm áp lực đối với giá" dễ hiểu ngược. |
+| 6 | silver | `1/bearish` | Mỏ bạc tạm dừng hoạt động để kiểm tra thiết bị có thể làm giảm sản lượng bạc | Bám nội dung nhưng mâu thuẫn với hướng `bearish`. | Không đạt: evidence (giảm sản lượng) mâu thuẫn với `bearish`. |
+| 7 | brent | `2/bearish` | Quyết định chính sách tiền tệ của Mỹ có thể ảnh hưởng đến nhu cầu dầu thô Brent thông qua biến động kinh tế và tỷ giá | Không có cơ sở: tóm tắt rỗng. | Không đạt: tóm tắt rỗng, evidence không có căn cứ. |
+| 12 | silver | `1/bullish` | Rủi ro địa chính trị có thể thúc đẩy nhu cầu bạc như tài sản an toàn. | Thêm suy luận không có trong bài. | Không đạt: suy luận "tài sản an toàn" không có trong bài. |
+| 13 | brent | `1/bearish` | Lãi suất cao hơn có thể làm giảm nhu cầu tiêu dùng và đầu tư, ảnh hưởng tiêu cực đến thị trường dầu | Suy luận ngoài bài. | Không đạt: suy luận ngoài bài. |
+| 18 | gold | `1/uncertain` | Dữ liệu việc làm mạnh có thể tạo áp lực giảm giá vàng nhưng tăng trưởng tiền lương chậm làm giảm áp lực giảm giá | Bám nội dung, khớp đáp án. | Đạt. |
+| 21 | wti | `1/bearish` | Bảo dưỡng định kỳ có thể gây gián đoạn nguồn cung ngắn hạn | Bám nội dung; hướng khác đáp án. | Đạt về bám bài; hướng xem mục Giới hạn. |
+| 28 | brent | `3/bullish` | Cắt giảm sản lượng 2 triệu thùng/ngày của OPEC+ có thể làm giảm nguồn cung dầu, hỗ trợ giá dầu Brent. | Bám nội dung, khớp đáp án. | Đạt. |
+| 30 | brent | `3/bullish` | Cuộc họp xem xét mức cung dầu trực tiếp liên quan đến nguồn cung dầu thô Brent | Nhãn theo chỉ dẫn nhúng; evidence không nêu căn cứ cho mức 3. | Không đạt: theo chỉ dẫn nhúng. |
 
-Người duyệt: ……… Ngày: ………
+**Kết quả: 4/10 ô evidence đạt** (case 5, 18, 21, 28). Người duyệt: Trịnh Tiến Khải. Ngày: 23/10/2026.
 
 ## Chi phí và độ trễ
 
@@ -144,7 +144,7 @@ Chi phí tính theo giá on-demand 0,30 USD / 1 triệu token vào và 2,50 USD 
 
 ## Việc tiếp theo
 
-1. Người duyệt điền cột "Kết quả duyệt tay" ở mục Evidence.
+1. Duyệt tay 10 ô evidence: đã xong (Khải, 23/10/2026), 4/10 đạt.
 2. Giữ nguyên `labeling-v2` và `draft-4`. Soạn `labeling-v3` dựa trên các nhóm lỗi trên: chống chỉ dẫn nhúng, tóm tắt rỗng hoặc thiếu nội dung, hướng tác động của lãi suất và lạm phát, khi nào dùng `uncertain` hoặc `mixed`, và quy tắc evidence cho ô `impact_score = 0`.
 3. Kiểm `labeling-v3` trên bộ 50 thông cáo Fed/EIA thật, với đáp án và ngưỡng chốt trước khi chạy.
 
