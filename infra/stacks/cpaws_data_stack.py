@@ -1,4 +1,4 @@
-"""Stack CpawsData: S3 data lake, ECR và Lambda ingest."""
+"""Stack CpawsData: S3 data lake, ECR, Lambda ingest và lịch chạy hằng ngày."""
 
 from typing import Any
 
@@ -8,7 +8,10 @@ from aws_cdk import aws_iam as iam
 from aws_cdk import aws_lambda as lambda_
 from aws_cdk import aws_logs as logs
 from aws_cdk import aws_s3 as s3
+from aws_cdk import aws_scheduler as scheduler
 from constructs import Construct
+
+from .shared import INGEST_SCHEDULE_EXPRESSION, INGEST_SCHEDULE_GROUP, ingest_function_name
 
 
 class CpawsDataStack(Stack):
@@ -99,17 +102,16 @@ class CpawsDataStack(Stack):
         ingest_log_group = logs.LogGroup(
             self,
             "IngestLogGroup",
-            log_group_name=f"/aws/lambda/cpaws-{env_name}-ingest",
+            log_group_name=f"/aws/lambda/{ingest_function_name(env_name)}",
             retention=logs.RetentionDays.ONE_MONTH,
             removal_policy=RemovalPolicy.DESTROY,
         )
 
         # Lambda từ image trong ECR: x86_64, 1.024 MB, timeout 300 s, ngoài VPC.
-        # Chưa có Scheduler: chạy dry_run trước, bật lịch sau khi Khải xác nhận.
         self.ingest_fn = lambda_.DockerImageFunction(
             self,
             "IngestFunction",
-            function_name=f"cpaws-{env_name}-ingest",
+            function_name=ingest_function_name(env_name),
             description="Daily price ingest (yfinance) writing raw/clean to the CPAWS lake",
             code=lambda_.DockerImageCode.from_ecr(self.ingest_repo, tag_or_digest=ingest_image_tag),
             architecture=lambda_.Architecture.X86_64,
@@ -125,6 +127,59 @@ class CpawsDataStack(Stack):
             },
         )
 
+        # Lịch chạy hằng ngày: 12:15 UTC, thứ Ba-thứ Bảy (19:15 giờ VN). Phải KHỚP
+        # INGEST_SCHEDULE_EXPRESSION trong src/data/config.py: dữ liệu phiên D chỉ có từ 12:00 UTC
+        # ngày D+1. Khải đồng ý bật ngay (20/10); EIA không chặn ingest nên không cần chờ.
+
+        # ARN của schedule group (dạng arn:aws:scheduler:<region>:<account>:schedule-group/<tên>)
+        schedule_group_arn = self.format_arn(
+            service="scheduler", resource="schedule-group", resource_name=INGEST_SCHEDULE_GROUP
+        )
+        scheduler_role = iam.Role(
+            self,
+            "IngestScheduleRole",
+            role_name=f"cpaws-{env_name}-ingest-schedule-role",
+            # Chỉ Scheduler của chính tài khoản này, và chỉ lịch thuộc đúng schedule group trên,
+            # được assume (chống confused deputy; Tuấn review PR #17).
+            assumed_by=iam.PrincipalWithConditions(
+                iam.ServicePrincipal("scheduler.amazonaws.com"),
+                {
+                    "StringEquals": {
+                        "aws:SourceAccount": self.account,
+                        "aws:SourceArn": schedule_group_arn,
+                    }
+                },
+            ),
+        )
+        # Chỉ lambda:InvokeFunction trên đúng ARN Lambda ingest (không gồm version/alias)
+        scheduler_role.add_to_policy(
+            iam.PolicyStatement(
+                sid="InvokeIngestFunction",
+                actions=["lambda:InvokeFunction"],
+                resources=[self.ingest_fn.function_arn],
+            )
+        )
+
+        # Retry của Scheduler = 0: Lambda đã có retry_attempts=1, không nhân số lần gọi Yahoo.
+        self.ingest_schedule = scheduler.CfnSchedule(
+            self,
+            "IngestSchedule",
+            name=f"cpaws-{env_name}-ingest-daily",
+            group_name=INGEST_SCHEDULE_GROUP,
+            description="Daily price ingest, 12:15 UTC Tue-Sat (after yfinance published_at)",
+            schedule_expression=INGEST_SCHEDULE_EXPRESSION,
+            schedule_expression_timezone="UTC",
+            flexible_time_window=scheduler.CfnSchedule.FlexibleTimeWindowProperty(mode="OFF"),
+            state="ENABLED",
+            target=scheduler.CfnSchedule.TargetProperty(
+                arn=self.ingest_fn.function_arn,
+                role_arn=scheduler_role.role_arn,
+                input="{}",
+                retry_policy=scheduler.CfnSchedule.RetryPolicyProperty(maximum_retry_attempts=0),
+            ),
+        )
+
         CfnOutput(self, "LakeBucketName", value=self.lake.bucket_name)
         CfnOutput(self, "IngestRepoUri", value=self.ingest_repo.repository_uri)
         CfnOutput(self, "IngestFunctionName", value=self.ingest_fn.function_name)
+        CfnOutput(self, "IngestScheduleName", value=self.ingest_schedule.name or "")
