@@ -18,7 +18,6 @@ credentials*
 data/raw/
 data/cache/
 data/lake/
-data/forecasts/
 data/*.csv
 !data/sample_*.csv
 models/
