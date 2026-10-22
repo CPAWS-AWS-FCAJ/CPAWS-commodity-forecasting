@@ -481,7 +481,7 @@ def test_real_artifacts_and_snapshot_integration(tmp_path):
             "provide CPAWS_WF_CLEAN_DIR and CPAWS_WF_MODEL_ROOT for real-artifact integration"
         )
     cfg = W.EvaluationConfig(
-        run_id="real-integration-test-v2", evaluation_as_of_time="2026-10-22T00:00:00Z"
+        run_id="real-integration-test-diagnostics", evaluation_as_of_time="2026-10-22T00:00:00Z"
     )
     prices, rejected, _, hashes, bundles, checks = W.check_inputs(clean, models, cfg)
     assert hashes == W.SNAPSHOT_HASHES and len(checks) == 4
@@ -498,6 +498,14 @@ def test_real_artifacts_and_snapshot_integration(tmp_path):
     assert len(result.model_comparison) == 42
     saved = pd.read_parquet(tmp_path / "evaluation/accuracy.parquet")
     assert len(saved) == 798
+    diagnostics = pd.read_csv(tmp_path / "evaluation/forecast_diagnostics.csv")
+    report = pd.read_csv(tmp_path / "evaluation/validation_2019_report.csv")
+    assert len(diagnostics) == 78 and len(report) == 42
+    assert result.log["forecast_diagnostics"]["report_rows"] == 42
+    assert not saved.metric.str.startswith("prob_up_").any()
+    coverage = diagnostics.loc[diagnostics.diagnostic.eq("coverage_80")]
+    expected = saved.loc[saved.metric.eq("coverage_80")]
+    np.testing.assert_array_equal(coverage.value.to_numpy(), expected.value.to_numpy())
     json.loads((tmp_path / "evaluation/evaluation_manifest.json").read_text(encoding="utf-8"))
 
 
@@ -751,3 +759,225 @@ def test_dm_internal_session_gap_is_not_silently_compressed(result, cfg, monkeyp
 def test_dm_excluded_edges_do_not_create_internal_gap(result, cfg):
     group = result.detail.loc[(result.detail.asset == "gold") & (result.detail.h == 7)]
     assert W._dm_session_gaps(group.loc[group.common_mask_all].iloc[5:-3], "gold", cfg) == 0
+
+
+@pytest.fixture
+def empty_report_accuracy():
+    return pd.DataFrame(
+        columns=[
+            "run_id",
+            "model_version",
+            "evaluation_kind",
+            "asset",
+            "h",
+            "sample",
+            "metric",
+            "value",
+            "n_obs",
+            "status",
+            "ci_low",
+            "ci_high",
+            "undefined_reason",
+        ]
+    )
+
+
+def _diagnostic_forecasts(rows):
+    return pd.DataFrame(rows, columns=["asset", "base_date", "h", "prob_up", "forecast_status"])
+
+
+def _diagnostic_row(frame, name, asset="gold", h=None):
+    mask = frame.diagnostic.eq(name) & frame.asset.eq(asset)
+    mask &= frame.h.isna() if h is None else frame.h.eq(h)
+    return frame.loc[mask].iloc[0]
+
+
+@pytest.mark.parametrize("right, expected", [(0.4, 0), (0.5, 1), (np.nextafter(0.4, 1.0), 1)])
+def test_diagnostic_jump_strict_unrounded_boundary(right, expected, cfg, empty_report_accuracy):
+    f = _diagnostic_forecasts(
+        [("gold", "2019-01-02", 1, 0.2, "ok"), ("gold", "2019-01-02", 2, right, "ok")]
+    )
+    d = W.summarize_forecast_diagnostics(f, empty_report_accuracy, cfg)
+    row = _diagnostic_row(d, "prob_up_jump_rate_gt_0.2")
+    assert row.n_valid_pairs == 1 and row.n_jump_pairs == expected
+    assert row.value == expected
+    assert row.n_expected_pairs == 252 * 6
+    assert row.n_missing_pairs == row.n_expected_pairs - 1
+
+
+@pytest.mark.parametrize(
+    "rows",
+    [
+        [("gold", "2019-01-02", 1, 0.1, "ok"), ("gold", "2019-01-02", 3, 0.9, "ok")],
+        [("gold", "2019-01-02", 1, 0.1, "ok"), ("gold", "2019-01-03", 2, 0.9, "ok")],
+        [("gold", "2019-01-02", 1, 0.1, "ok"), ("silver", "2019-01-02", 2, 0.9, "ok")],
+        [("gold", "2019-01-02", 1, 0.1, "ok"), ("gold", "2019-01-02", 2, 0.9, "generation_error")],
+    ],
+)
+def test_diagnostic_missing_nonadjacent_dates_assets_and_failed_pairs(
+    rows, cfg, empty_report_accuracy
+):
+    d = W.summarize_forecast_diagnostics(_diagnostic_forecasts(rows), empty_report_accuracy, cfg)
+    row = _diagnostic_row(d, "prob_up_jump_rate_gt_0.2")
+    assert row.denominator == 0 and row.n_valid_pairs == 0
+    assert row.status == "undefined" and pd.isna(row.value)
+    assert row.n_missing_pairs == row.n_expected_pairs
+
+
+def test_diagnostic_jump_pools_pairs_not_daily_means(cfg, empty_report_accuracy):
+    f = _diagnostic_forecasts(
+        [
+            ("gold", "2019-01-02", 1, 0.1, "ok"),
+            ("gold", "2019-01-02", 2, 0.5, "ok"),
+            ("gold", "2019-01-02", 3, 0.1, "ok"),
+            ("gold", "2019-01-03", 1, 0.4, "ok"),
+            ("gold", "2019-01-03", 2, 0.4, "ok"),
+        ]
+    )
+    row = _diagnostic_row(
+        W.summarize_forecast_diagnostics(f, empty_report_accuracy, cfg), "prob_up_jump_rate_gt_0.2"
+    )
+    assert row.n_jump_pairs == 2 and row.n_valid_pairs == 3
+    assert row.value == pytest.approx(2 / 3)
+
+
+def test_diagnostic_clip_counts_by_asset_and_horizon(cfg, empty_report_accuracy):
+    f = _diagnostic_forecasts(
+        [
+            ("gold", "2019-01-02", 1, 0.05, "ok"),
+            ("gold", "2019-01-02", 2, 0.95, "ok"),
+            ("gold", "2019-01-03", 1, 0.5, "ok"),
+            ("gold", "2019-01-03", 2, 0.05, "invalid_input_window"),
+            ("silver", "2019-01-02", 1, 0.95, "ok"),
+        ]
+    )
+    d = W.summarize_forecast_diagnostics(f, empty_report_accuracy, cfg)
+    gold = _diagnostic_row(d, "prob_up_clip_rate")
+    assert gold.n_valid_forecasts == 3 and gold.n_clip_low == 1 and gold.n_clip_high == 1
+    assert gold.value == pytest.approx(2 / 3)
+    assert _diagnostic_row(d, "prob_up_clip_rate", h=1).value == 0.5
+    silver = _diagnostic_row(d, "prob_up_clip_rate", "silver")
+    assert silver.denominator == 1 and silver.value == 1
+    assert gold.n_missing_forecasts == 1764 - 3
+
+
+@pytest.mark.parametrize(
+    "value, clipped",
+    [(0.05, 1), (0.95, 1), (0.5, 0), (0.0500001, 0), (0.9499999, 0), (0.05 + 5e-13, 1)],
+)
+def test_diagnostic_clip_tolerance_is_narrow(value, clipped, cfg, empty_report_accuracy):
+    f = _diagnostic_forecasts([("gold", "2019-01-02", 1, value, "ok")])
+    row = _diagnostic_row(
+        W.summarize_forecast_diagnostics(f, empty_report_accuracy, cfg), "prob_up_clip_rate"
+    )
+    assert row.denominator == 1 and row.numerator == clipped
+
+
+@pytest.mark.parametrize("value", [None, np.nan, np.inf, -np.inf, 0.01, 0.99, -1, 2, "0.5", True])
+def test_diagnostic_invalid_probabilities_are_excluded(value, cfg, empty_report_accuracy):
+    f = _diagnostic_forecasts([("gold", "2019-01-02", 1, value, "ok")])
+    d = W.summarize_forecast_diagnostics(f, empty_report_accuracy, cfg)
+    row = _diagnostic_row(d, "prob_up_clip_rate")
+    assert row.denominator == 0 and row.n_valid_forecasts == 0
+    assert row.status == "undefined" and pd.isna(row.value)
+
+
+def test_diagnostic_no_forecasts_and_outside_validation(cfg, empty_report_accuracy):
+    empty = _diagnostic_forecasts([])
+    d = W.summarize_forecast_diagnostics(empty, empty_report_accuracy, cfg)
+    f = _diagnostic_forecasts([("gold", "2020-01-02", 1, 0.05, "ok")])
+    pd.testing.assert_frame_equal(
+        d, W.summarize_forecast_diagnostics(f, empty_report_accuracy, cfg)
+    )
+    assert len(d) == 78 and d.status.eq("undefined").all()
+    assert d.value.isna().all()
+
+
+def test_diagnostic_coverage_and_validation_report_copy_accuracy(
+    result, forecasts, cfg, monkeypatch
+):
+    monkeypatch.setattr(M, "coverage_80", lambda *args: pytest.fail("must copy Accuracy"))
+    d = W.summarize_forecast_diagnostics(forecasts, result.accuracy, cfg)
+    coverage = d.loc[d.diagnostic.eq("coverage_80")].set_index(["asset", "h", "sample"])
+    original = result.accuracy.loc[result.accuracy.metric.eq("coverage_80")].set_index(
+        ["asset", "h", "sample"]
+    )
+    assert set(coverage.index) == set(original.index) and len(coverage) == 42
+    for key in original.index:
+        assert coverage.loc[key, "value"] == original.loc[key, "value"]
+        assert coverage.loc[key, "n_obs"] == original.loc[key, "n_obs"]
+        assert coverage.loc[key, "status"] == original.loc[key, "status"]
+    assert coverage.numerator.isna().all()
+    report = W.build_validation_report(result.accuracy, cfg).set_index(["asset", "h", "sample"])
+    assert len(report) == 42
+    for asset in W.ASSET_NAMES:
+        samples = set(report.loc[asset].index.get_level_values("sample"))
+        assert samples == ({"all", "excl_roll"} if asset in ("brent", "wti") else {"all"})
+    for row in result.accuracy.itertuples():
+        if row.metric in (
+            "pinball_skill",
+            "coverage_80",
+            "width_80",
+            "brier_skill",
+            "mae_ratio_vs_naive",
+        ):
+            value = report.loc[(row.asset, row.h, row.sample), row.metric]
+            assert (pd.isna(value) and pd.isna(row.value)) or value == row.value
+    skills = result.accuracy.loc[result.accuracy.metric.eq("pinball_skill")].set_index(
+        ["asset", "h", "sample"]
+    )
+    np.testing.assert_array_equal(report.pinball_skill_ci_low, skills.ci_low)
+    np.testing.assert_array_equal(report.pinball_skill_ci_high, skills.ci_high)
+
+
+def test_diagnostic_null_metrics_and_positive_ci_flag(result, cfg):
+    a = result.accuracy.copy()
+    key = a.asset.eq("gold") & a.h.eq(1) & a["sample"].eq("all")
+    a.loc[key, ["value", "ci_low", "ci_high"]] = np.nan
+    a.loc[key, "status"] = "undefined"
+    a.loc[key, "n_obs"] = 0
+    a.loc[key, "undefined_reason"] = "no_evaluable_obs"
+    positive = a.asset.eq("silver") & a.h.eq(1) & a.metric.eq("pinball_skill")
+    a.loc[positive, ["ci_low", "ci_high"]] = [0.01, 0.1]
+    report = W.build_validation_report(a, cfg)
+    gold = report.loc[report.asset.eq("gold") & report.h.eq(1)].iloc[0]
+    assert pd.isna(gold.pinball_skill) and pd.isna(gold.coverage_80)
+    assert gold.pinball_skill_status == "undefined" and gold.n_obs == 0
+    assert not gold.pinball_skill_ci_excludes_zero_positive
+    assert report.loc[
+        report.asset.eq("silver") & report.h.eq(1), "pinball_skill_ci_excludes_zero_positive"
+    ].all()
+
+
+def test_diagnostics_are_read_only_no_inference_or_metric_recalculation(
+    result, forecasts, cfg, monkeypatch
+):
+    originals = [
+        f.copy(deep=True)
+        for f in [forecasts, result.detail, result.accuracy, result.model_comparison]
+    ]
+    old_hash = result.manifest["config_hash"]
+
+    def fail(*args, **kwargs):
+        pytest.fail("diagnostics must not invoke inference/evaluation/statistics")
+
+    for name in ("generate_forecasts", "evaluate", "_summarize", "_skill_ci"):
+        monkeypatch.setattr(W, name, fail)
+    monkeypatch.setattr(W.DLinearNumpy, "predict", fail)
+    monkeypatch.setattr(M, "diebold_mariano", fail)
+    monkeypatch.setattr(M, "holm_adjust", fail)
+    W.summarize_forecast_diagnostics(forecasts, result.accuracy, cfg)
+    W.build_validation_report(result.accuracy, cfg)
+    for before, after in zip(
+        originals, [forecasts, result.detail, result.accuracy, result.model_comparison], strict=True
+    ):
+        pd.testing.assert_frame_equal(before, after)
+    assert result.manifest["config_hash"] == old_hash
+
+
+def test_diagnostic_duplicate_keys_rejected(cfg, empty_report_accuracy, result):
+    f = _diagnostic_forecasts([("gold", "2019-01-02", 1, 0.5, "ok")] * 2)
+    with pytest.raises(ValueError, match="duplicate Forecasts"):
+        W.summarize_forecast_diagnostics(f, empty_report_accuracy, cfg)
+    with pytest.raises(ValueError, match="duplicate Accuracy"):
+        W.build_validation_report(pd.concat([result.accuracy, result.accuracy.iloc[:1]]), cfg)
