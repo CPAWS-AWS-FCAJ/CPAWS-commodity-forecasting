@@ -1,6 +1,7 @@
 import { useForecasts } from "../api/hooks";
 import { AssetCard } from "../components/AssetCard";
 import { ErrorBlock, LoadingBlock } from "../components/StateViews";
+import { isPriceHidden } from "../lib/assets";
 
 export default function Home() {
   const { data, isPending, isError, error, refetch } = useForecasts();
@@ -20,7 +21,7 @@ export default function Home() {
           <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {data.items.map((item) => (
               <li key={item.asset} className="h-full">
-                <AssetCard item={item} />
+                <AssetCard item={item} hidePrice={isPriceHidden(item.asset)} />
               </li>
             ))}
           </ul>

@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { config } from "./config";
 import { getForecast, getForecasts, getHistory } from "./forecasts";
 import type { AssetId } from "./types";
 
@@ -15,11 +16,15 @@ export function useForecast(asset: AssetId) {
   });
 }
 
-/** Lỗi lịch sử không chặn trang: biểu đồ vẫn vẽ phần dự báo. */
+/**
+ * Chỉ chạy khi có lịch sử (hiện: dữ liệu mẫu) vì API chưa có GET /history/{asset}.
+ * Lỗi lịch sử không chặn trang: biểu đồ vẫn vẽ phần dự báo.
+ */
 export function useHistory(asset: AssetId) {
   return useQuery({
     queryKey: ["history", asset],
     queryFn: ({ signal }) => getHistory(asset, signal),
+    enabled: config.historyAvailable,
     retry: false,
   });
 }

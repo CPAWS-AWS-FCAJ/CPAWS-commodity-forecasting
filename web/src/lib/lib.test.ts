@@ -9,6 +9,7 @@ import {
   probUpFromQuantiles,
   weekdaysSince,
 } from "./forecast";
+import { isPriceHidden } from "./assets";
 import { LUONG_GRAMS, TROY_OUNCE_GRAMS, usdToVnd } from "./units";
 
 describe("units", () => {
@@ -129,5 +130,18 @@ describe("dữ liệu mẫu tuân thủ contract", () => {
     const last = history.points[history.points.length - 1];
     expect(last.date).toBe(detail.base_date);
     expect(last.price).toBeCloseTo(detail.last_price, 2);
+  });
+});
+
+describe("isPriceHidden", () => {
+  it("chỉ ẩn vàng và bạc khi tắt cờ hiển thị giá kim loại", () => {
+    expect(isPriceHidden("gold", false)).toBe(true);
+    expect(isPriceHidden("silver", false)).toBe(true);
+    expect(isPriceHidden("brent", false)).toBe(false);
+    expect(isPriceHidden("wti", false)).toBe(false);
+  });
+
+  it("không ẩn gì khi bật cờ", () => {
+    for (const asset of ASSET_IDS) expect(isPriceHidden(asset, true)).toBe(false);
   });
 });

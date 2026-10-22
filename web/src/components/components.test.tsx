@@ -1,6 +1,12 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
+import { sampleDetail, sampleList } from "../api/sample";
+import { formatReturnPercent } from "../lib/format";
+import { AssetCard } from "./AssetCard";
 import { PriceRange } from "./PriceRange";
 import { ProbabilityBadge } from "./ProbabilityBadge";
+import { QuantileTable } from "./QuantileTable";
+import { ReturnRange } from "./ReturnRange";
 import { ModeToggle } from "./Toggles";
 
 describe("ProbabilityBadge", () => {
@@ -63,5 +69,58 @@ describe("ModeToggle", () => {
     expect(screen.getByRole("button", { name: "Cơ bản" })).toHaveAttribute("aria-pressed", "true");
     fireEvent.click(screen.getByRole("button", { name: "Nâng cao" }));
     expect(onChange).toHaveBeenCalledWith("advanced");
+  });
+});
+
+describe("AssetCard", () => {
+  const gold = sampleList().items.find((item) => item.asset === "gold")!;
+  const renderCard = (hidePrice: boolean) =>
+    render(
+      <MemoryRouter>
+        <AssetCard item={gold} hidePrice={hidePrice} />
+      </MemoryRouter>,
+    );
+
+  it("hiện giá cuối và khoảng giá khi không ẩn giá", () => {
+    renderCard(false);
+    expect(screen.getByText(/Giá cuối ngày/)).toBeInTheDocument();
+    expect(screen.getByText(/Khoảng giá 80% sau 7 ngày/)).toBeInTheDocument();
+    expect(screen.getByText("USD/oz")).toBeInTheDocument();
+  });
+
+  it("ẩn giá, chỉ hiện % thay đổi và xác suất tăng khi hidePrice", () => {
+    renderCard(true);
+    expect(screen.queryByText(/Giá cuối ngày/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Khoảng giá 80%/)).not.toBeInTheDocument();
+    expect(screen.queryByText("USD/oz")).not.toBeInTheDocument();
+    expect(screen.getByText(/Thay đổi 80% sau 7 ngày/)).toBeInTheDocument();
+    expect(screen.getByText(/Khả năng (tăng|giảm)/)).toBeInTheDocument();
+  });
+});
+
+describe("ReturnRange", () => {
+  it("hiện khoảng log return theo %, không có giá", () => {
+    render(<ReturnRange low={-0.0123} mid={0.001} high={0.0145} horizonDays={7} />);
+    expect(
+      screen.getByText(`${formatReturnPercent(-0.0123)} đến ${formatReturnPercent(0.0145)}`),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Sau 7 ngày/)).toBeInTheDocument();
+    expect(screen.queryByText(/USD|VND/)).not.toBeInTheDocument();
+  });
+});
+
+describe("QuantileTable", () => {
+  const detail = sampleDetail("gold");
+
+  it("mặc định có cột giá", () => {
+    render(<QuantileTable asset="gold" detail={detail} currency="USD" />);
+    expect(screen.getByText("Giá q10–q90")).toBeInTheDocument();
+  });
+
+  it("bỏ cột giá khi showPrices = false nhưng vẫn giữ phân vị return", () => {
+    render(<QuantileTable asset="gold" detail={detail} currency="USD" showPrices={false} />);
+    expect(screen.queryByText("Giá q10–q90")).not.toBeInTheDocument();
+    expect(screen.getByText("q50")).toBeInTheDocument();
+    expect(screen.getByText("Phân vị của log return")).toBeInTheDocument();
   });
 });

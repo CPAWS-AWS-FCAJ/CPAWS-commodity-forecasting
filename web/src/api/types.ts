@@ -51,8 +51,9 @@ export interface ForecastDetail {
   asset: AssetId;
   target_series: string;
   base_date: string;
-  created_at: string;
-  model_version: string;
+  /** Contract có hai trường này ở chi tiết, nhưng API (PR #22) tạm chưa trả: coi là tùy chọn. */
+  created_at?: string;
+  model_version?: string;
   last_price: number;
   price_unit: PriceUnit;
   quantile_levels: number[];

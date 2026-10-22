@@ -7,17 +7,21 @@ interface Props {
   asset: AssetId;
   detail: ForecastDetail;
   currency: Currency;
+  /** false → bỏ cột giá (vàng/bạc khi VITE_SHOW_METAL_PRICES=false). */
+  showPrices?: boolean;
 }
 
 /** Bảng chế độ nâng cao: h = 1…7, q10 / q50 / q90 (log return %), khoảng giá và xác suất tăng. */
-export function QuantileTable({ asset, detail, currency }: Props) {
+export function QuantileTable({ asset, detail, currency, showPrices = true }: Props) {
   const rate = detail.fx.usd_vnd;
   const price = (usd: number) => formatPrice(asset, convertPrice(asset, usd, currency, rate), currency);
   return (
     <div className="overflow-x-auto rounded-lg border border-line bg-white">
-      <table className="tabular w-full min-w-[640px] text-sm">
+      <table className="tabular w-full min-w-[560px] text-sm">
         <caption className="px-4 py-3 text-left text-sm font-medium">
-          Phân vị của log return và khoảng giá ({displayUnit(asset, currency)})
+          {showPrices
+            ? `Phân vị của log return và khoảng giá (${displayUnit(asset, currency)})`
+            : "Phân vị của log return"}
         </caption>
         <thead className="bg-canvas text-left text-xs text-muted">
           <tr>
@@ -26,7 +30,9 @@ export function QuantileTable({ asset, detail, currency }: Props) {
             <th scope="col" className="px-4 py-2 text-right font-medium">q10</th>
             <th scope="col" className="px-4 py-2 text-right font-medium">q50</th>
             <th scope="col" className="px-4 py-2 text-right font-medium">q90</th>
-            <th scope="col" className="px-4 py-2 text-right font-medium">Giá q10–q90</th>
+            {showPrices ? (
+              <th scope="col" className="px-4 py-2 text-right font-medium">Giá q10–q90</th>
+            ) : null}
             <th scope="col" className="px-4 py-2 text-right font-medium">Xác suất tăng</th>
           </tr>
         </thead>
@@ -40,9 +46,11 @@ export function QuantileTable({ asset, detail, currency }: Props) {
                 <td className="px-4 py-2 text-right">{formatReturnPercent(view.returnLow)}</td>
                 <td className="px-4 py-2 text-right">{formatReturnPercent(view.returnMid)}</td>
                 <td className="px-4 py-2 text-right">{formatReturnPercent(view.returnHigh)}</td>
-                <td className="px-4 py-2 text-right">
-                  {price(view.low)}–{price(view.high)}
-                </td>
+                {showPrices ? (
+                  <td className="px-4 py-2 text-right">
+                    {price(view.low)}–{price(view.high)}
+                  </td>
+                ) : null}
                 <td className="px-4 py-2 text-right">{view.probability.probUpLabel}</td>
               </tr>
             );
