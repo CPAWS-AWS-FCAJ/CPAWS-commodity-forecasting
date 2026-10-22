@@ -7,5 +7,5 @@ ruff==0.16.10            # same version as CI, so format/lint results match
 pre-commit>=3.7
 matplotlib>=3.8          # scripts/eda_prices.py, report and slide figures
 scipy>=1.11              # scripts/eda_prices.py (descriptive statistics)
-moto[s3]>=5.0            # S3 tests without calling AWS (tests/test_lambda_ingest.py)
+moto[s3,dynamodb]>=5.0   # S3/DynamoDB tests without calling AWS (test_lambda_ingest, test_predict)
 psutil>=5.9              # scripts/measure_ingest.py (peak memory)
