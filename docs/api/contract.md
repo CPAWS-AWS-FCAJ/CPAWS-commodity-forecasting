@@ -46,7 +46,7 @@ Vàng và bạc: mô hình dự báo return của quỹ GLD, SLV (chuỗi đại
 | `fx_usd_vnd` | N | Tỷ giá USD/VND dùng để hiển thị |
 | `fx_date` | S | Ngày của tỷ giá |
 | `stale_sources` | L of S | Nguồn bị lỗi lần chạy này (lấy từ `quality.json`); rỗng nếu không có |
-| `roll_in_horizon` | BOOL | Chỉ dầu: `true` khi có phiên roll (phiên đầu tiên sau một ngày đáo hạn hợp đồng) nằm trong (`base_date`, `target_date` của h = 7], tức ít nhất một return trong kỳ dự báo nối hai hợp đồng. Đáo hạn đúng `base_date` → `true`; đáo hạn đúng `target_date` của h = 7 → `false`. Web hiện dòng lưu ý; vàng, bạc luôn `false` |
+| `roll_in_horizon` | BOOL | Chỉ dầu: kỳ dự báo chứa ngày đáo hạn hợp đồng (web hiện dòng lưu ý); vàng, bạc luôn `false` |
 | `is_sample` | BOOL | `true` nếu là dữ liệu mẫu để test; web phải hiện nhãn "dữ liệu mẫu" |
 
 Mỗi phần tử của `horizons`:
