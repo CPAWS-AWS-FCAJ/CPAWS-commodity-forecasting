@@ -33,6 +33,8 @@ khi đó stale_sources = [] vì quality.json là của snapshot hiện tại, kh
 Model: artifact models/<asset>/<model_version>/ (weights.npz, config.json, scaler.json,
 manifest.json) trong lake, hoặc thư mục --model-dir/<asset>/<model_version>/. Artifact có
 manifest.integration_eligible khác true bị từ chối, trừ khi CLI có --allow-experimental.
+--model-version baseline-q252: mốc phân vị 252 phiên (baselines.Quantile252Model, ADR-0008 mục 4),
+không có artifact; cửa sổ input 252 phiên qua cùng make_windows và các bước như DLinear.
 
 Không import torch, yfinance, PyEMD, requests (image Lambda chỉ có requirements-predict.txt): boto3
 và DLinearNumpy chỉ import trong hàm.
@@ -60,6 +62,7 @@ import pandas as pd
 from src.data import calendars, clean, quality, storage
 from src.data.config import ASSETS, PUBLISHED_AT_RULES
 from src.features.build import build_feature_frame, latest_base_date, make_windows
+from src.forecast.baselines import Quantile252Model
 from src.forecast.forecast_record import HORIZONS, OIL_ASSETS, target_dates, to_forecast_record
 from src.forecast.returns import QUANTILE_LEVELS, normalize_quantiles
 
@@ -69,6 +72,7 @@ PRICES = "clean/prices"
 FACTORS = "clean/display_factors"
 MODELS = "models"  # models/<asset>/<model_version>/ (skill aws-serverless-platform)
 MODEL_FILES = ("weights.npz", "config.json", "scaler.json", "manifest.json")
+BASELINE_MODEL_VERSION = "baseline-q252"  # mốc 252 phiên, không có artifact
 
 PREDICT_ASSETS: tuple[str, ...] = ("gold", "silver", "brent", "wti")
 FX_ASSET = "usd_vnd"
@@ -443,8 +447,13 @@ def make_model_loader(
     factory: Callable[[Path], ForecastModel] | None = None,
 ) -> Callable[[str], LoadedModel]:
     """loader(asset) → LoadedModel. Nguồn: lake (st, tải models/<asset>/<version>/ về cache_dir,
-    mặc định <tempdir>/cpaws-models, tức /tmp trong Lambda) hoặc model_dir/<asset>/<version>/."""
+    mặc định <tempdir>/cpaws-models, tức /tmp trong Lambda) hoặc model_dir/<asset>/<version>/.
+    BASELINE_MODEL_VERSION: trả Quantile252Model, không đọc file, không qua manifest."""
     _check_model_version(model_version)
+    if model_version == BASELINE_MODEL_VERSION:
+        baseline = Quantile252Model()
+        manifest = {"model_version": model_version}
+        return lambda asset: LoadedModel(baseline, baseline.window, {**manifest, "asset": asset})
     if (st is None) == (model_dir is None):
         raise ValueError("pass exactly one of st or model_dir")
     cache_root = Path(cache_dir) if cache_dir else Path(tempfile.gettempdir()) / "cpaws-models"
@@ -680,6 +689,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 __all__ = [
+    "BASELINE_MODEL_VERSION",
     "FACTOR_MAX_LAG_SESSIONS",
     "PREDICT_ASSETS",
     "AssetResult",
