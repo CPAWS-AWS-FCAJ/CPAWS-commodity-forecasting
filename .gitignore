@@ -23,6 +23,7 @@ data/*.csv
 !data/sample_*.csv
 models/
 results/
+!docs/experiments/results/
 *.npz
 *.pth
 
