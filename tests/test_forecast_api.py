@@ -151,6 +151,8 @@ def test_detail_returns_seven_horizons(monkeypatch):
     assert body["horizons"][0]["prices"][3] == pytest.approx(100 * __import__("math").exp(0.001))
     assert body["fx"]["usd_vnd"] == 26310
     assert body["is_sample"] is True
+    assert body["created_at"] == "2026-10-15T12:00:00Z"
+    assert body["model_version"] == "test"
     assert "disclaimer" in body
 
 
@@ -183,3 +185,13 @@ def test_summary_returns_latest_records(monkeypatch):
     assert body["items"][0]["h1"]["p50"] == pytest.approx(100 * __import__("math").exp(0.001))
     assert body["items"][0]["is_sample"] is True
     assert "disclaimer" in body
+
+
+def test_response_includes_cors_headers(monkeypatch):
+    monkeypatch.setenv("ALLOWED_ORIGIN", "http://localhost:5173")
+
+    response = api._response(200, {"status": "ok"})
+
+    assert response["headers"]["Access-Control-Allow-Origin"] == ("http://localhost:5173")
+    assert response["headers"]["Access-Control-Allow-Headers"] == ("Content-Type,Authorization")
+    assert response["headers"]["Access-Control-Allow-Methods"] == "GET,OPTIONS"

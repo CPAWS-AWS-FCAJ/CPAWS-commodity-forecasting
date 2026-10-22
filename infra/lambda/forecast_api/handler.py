@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import math
 import os
 import re
@@ -22,13 +23,20 @@ PROXY_NOTE = (
     "không phải giá giao ngay trực tiếp của kim loại."
 )
 
+logger = logging.getLogger(__name__)
+
 
 def _response(status_code: int, body: dict) -> dict:
     """API Gateway REST API proxy response."""
+    allowed_origin = os.environ.get("ALLOWED_ORIGIN", "*")
+
     return {
         "statusCode": status_code,
         "headers": {
             "Content-Type": "application/json; charset=utf-8",
+            "Access-Control-Allow-Origin": allowed_origin,
+            "Access-Control-Allow-Headers": "Content-Type,Authorization",
+            "Access-Control-Allow-Methods": "GET,OPTIONS",
         },
         "body": json.dumps(body, ensure_ascii=False, separators=(",", ":")),
     }
@@ -137,6 +145,8 @@ def _detail_item(record: dict) -> dict:
         "asset": asset,
         "target_series": record["target_series"],
         "base_date": record["base_date"],
+        "created_at": record["created_at"],
+        "model_version": record["model_version"],
         "last_price": last_price,
         "price_unit": record["price_unit"],
         "quantile_levels": _json_value(record["quantile_levels"]),
@@ -258,9 +268,9 @@ def handler(event, context):
 
         return _response(200, _detail_item(record))
 
-    except Exception:  # noqa: BLE001
-        # Do not expose AWS details or internal exception messages to API clients.
-        print("Forecast API request failed.")
+    except Exception:
+        # Log traceback for operators without exposing internal details to clients.
+        logger.exception("Forecast API request failed.")
         return _response(
             500,
             {
