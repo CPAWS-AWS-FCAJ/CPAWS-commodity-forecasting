@@ -69,7 +69,7 @@ Mức độ tác động được đánh giá riêng cho từng tài sản:
 - `event_type`: loại sự kiện chính.
 - `prompt_version`: phiên bản prompt đã dùng để gắn nhãn.
 
-Metadata bổ sung gồm `published_at`, `fetched_at`, `labeled_at` và `model_id`. Prompt gắn nhãn được quản lý tại [`docs/prompts/news-labeling-v1.md`](../prompts/news-labeling-v1.md).
+Metadata bổ sung gồm `published_at`, `fetched_at`, `labeled_at` và `model_id`. Prompt gắn nhãn hiện hành được quản lý tại [`docs/prompts/news-labeling-v2.md`](../prompts/news-labeling-v2.md). Bản [`docs/prompts/news-labeling-v1.md`](../prompts/news-labeling-v1.md) được giữ lại làm mốc so sánh và để truy vết các nhãn đã gắn với `prompt_version = "labeling-v1"`.
 
 Nhãn phản ánh nội dung và đánh giá của mô hình tại thời điểm xử lý, không khẳng định bài viết đã gây ra biến động giá.
 
