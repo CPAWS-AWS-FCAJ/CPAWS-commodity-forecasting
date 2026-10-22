@@ -134,11 +134,12 @@ def test_cli_dest_s3(s3, monkeypatch):
     assert code == 0 and "clean/prices/dt=2020-05-29/quality.json" in _keys(s3)
 
 
-def test_eia_key_from_env_and_secret_id_todo(monkeypatch, caplog):
+def test_eia_key_from_env_and_missing_config(monkeypatch, caplog):
+    # Nhánh EIA_SECRET_ID (SSM) được test với client giả trong tests/test_secret_store.py
+    monkeypatch.delenv("EIA_SECRET_ID", raising=False)
     monkeypatch.setenv("EIA_API_KEY", "abc123")
     assert secret_store.get_eia_api_key() == "abc123"
     monkeypatch.delenv("EIA_API_KEY")
-    monkeypatch.setenv("EIA_SECRET_ID", "cpaws/dev/eia")
     with pytest.raises(secret_store.SecretUnavailable):
         secret_store.get_eia_api_key()
     # build_sources bỏ EIA (nguồn tham chiếu) thay vì dừng, và không in key ra log
