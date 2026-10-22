@@ -1,7 +1,7 @@
 # Schema `Accuracy` — CPAWS
 
 - **Trạng thái:** **Đề xuất đã duyệt cho MVP** theo quyết định review của Khải trên PR #10 và Walk-forward PR #12. Các chi tiết hạ tầng/production Phase 2 (đặc biệt DynamoDB PK/SK, IAM và lịch `rolling_8w`) tiếp tục chờ Tuấn; trạng thái tài liệu không đồng nghĩa PR đã merge.
-- **Nguồn quyết định:** [ADR-0008](../adr/0008-target-quantiles-evaluation.md), [hợp đồng API `contract.md`](contract.md), phản hồi Khải trên PR #10. Bản ZIP `docs/adr-0008-review-fixes` đã có quy tắc ranh giới tại ADR-0008 §7; đường dẫn tương đối tới ADR hoạt động trên branch chứa tài liệu đích và cần kiểm tra lại sau khi [PR #8](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/8) được merge.
+- **Nguồn quyết định:** [ADR-0008](../adr/0008-target-quantiles-evaluation.md), [hợp đồng API `contract.md`](contract.md), phản hồi Khải và Tuấn trên PR #10. ADR-0008 đã được tích hợp vào `developer`.
 - **Phạm vi:** Định dạng logic lưu kết quả đánh giá và so sánh mô hình; **không** tự thiết kế DynamoDB PK/SK, quyền IAM hoặc toàn bộ API.
 
 ## 1. Mục đích và khóa logic
@@ -250,7 +250,7 @@ src/
     ...                        # Walk-forward, tạo dòng Accuracy (triển khai sau)
 ```
 
-**Quan trọng:** Trong ZIP cũ, `metrics.py` đang ở `src/forecast/metrics.py` và các test đang import theo đường dẫn cũ. Khi chuyển về `src/eval/metrics.py`, cần tạo `src/eval/__init__.py`, **giữ `src/forecast/metrics.py` làm lớp chuyển tiếp mỏng** (re-export những hàm đang được code/test cũ dùng), rồi cập nhật dần import trong `tests/test_returns.py`, `tests/test_no_leakage.py` và các file khác. Không sao chép hai bản công thức độc lập, và **không xóa file cũ trước khi toàn bộ test/CI hoạt động**.
+**Tích hợp metrics:** Sử dụng `src/eval/metrics.py` theo implementation đã được review ở PR #11. Không tạo bản sao công thức đánh giá ở module khác. Các import và khả năng tương thích với code cũ phải được xác nhận bằng tests và CI.
 
 Các hàm của `src/eval/metrics.py` chỉ tính toán (mảng → số/NaN), không trực tiếp trả schema. Lớp tổng hợp thuộc `src/eval/` áp dụng `common_mask`, tính `n_obs`, tạo `status`, CI và xuất một dòng `Accuracy`. `crossing_rate` lấy dữ liệu đầu ra thô và là ngoại lệ được xử lý riêng.
 
@@ -273,7 +273,7 @@ Những điểm đã được Khải xác nhận về `common_mask`, `crossing_r
 - [x] Xác định DM hai phía, cặp DLinear–baseline 252 và họ Holm `sample=all` gồm 4 tài sản × 7 h = 28; **họ `excl_roll` còn chờ Khải chốt 14 hay 28**.
 - [x] Loại ARIMA khỏi **MVP theo phản hồi Khải** và không lưu `mase_returns` trong bảng metric.
 - [ ] **[CẦN CHỐT — Khải]** Đồng bộ `tasks.md`: đầu việc cũ "Baseline naive và ARIMA" và các so sánh có ARIMA chưa được sửa. Xác nhận nghiệm thu/khối lượng thay thế (ví dụ tích hợp naive làm mốc MAE, so sánh DLinear với baseline-252 đã có, test walk-forward) và cập nhật phân công sau demo.
-- [ ] Cập nhật file này lên branch PR #10, kiểm tra CI và chuyển **Ready for review** (nếu đang Draft) để Khải approve; merge theo quy trình GitHub của nhóm.
+- [x] Hoàn tất review PR #10; commit `179db6f` đã được Tuấn approve. Chờ merge theo quy trình GitHub.
 - [ ] Nhờ **@hngtuan2kar5-prog** review **mục 1–2 (khóa/kiểu dữ liệu ở góc độ lưu trữ) và mục 8 (S3/Parquet, IAM, DynamoDB và truy vấn API)**; xác nhận quyền S3 `cpaws-ml`, thiết kế DynamoDB PK/SK, cập nhật/TTL. **Không mở lại quyết định prefix S3 `eval/` đã chốt.**
 - [ ] Thêm link schema vào `contract.md` trên PR phù hợp để hai tài liệu không phân kỳ.
 - [ ] Khi triển khai code, chuyển/đặt metric ở `src/eval/metrics.py`, xử lý toàn bộ import và chạy unit test + CI.
