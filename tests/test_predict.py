@@ -25,8 +25,9 @@ from moto import mock_aws
 from src.data import calendars, clean, ingest_prices, storage
 from src.data.config import ASSETS
 from src.forecast import lambda_predict, predict
+from src.forecast.baselines import Quantile252Model, quantile_baseline
 from src.forecast.forecast_record import target_dates, to_decimal
-from src.forecast.returns import QUANTILE_LEVELS
+from src.forecast.returns import QUANTILE_LEVELS, horizon_log_returns
 
 ROOT = Path(__file__).resolve().parents[1]
 REGION = "ap-southeast-1"
@@ -161,10 +162,10 @@ def _local(tmp_path, name="lake"):
     return storage.LocalStorage(tmp_path / name)
 
 
-def _assert_contract(item: dict, asset: str, base: str = BASE) -> None:
+def _assert_contract(item: dict, asset: str, base: str = BASE, mv: str = MV) -> None:
     assert set(item) == ITEM_KEYS
     assert item["asset"] == asset and item["base_date"] == base
-    assert item["model_version"] == MV and item["is_sample"] is False
+    assert item["model_version"] == mv and item["is_sample"] is False
     assert item["target_series"] == ASSETS[asset].primary.symbol
     assert item["price_unit"] == ("USD/oz" if asset in ("gold", "silver") else "USD/bbl")
     assert [float(x) for x in item["quantile_levels"]] == list(QUANTILE_LEVELS)
@@ -677,6 +678,160 @@ def test_cli_exit_code_1_when_asset_skipped(tmp_path, monkeypatch):
     assert predict.main([*argv, "--model-version", MV]) == 1
     assert not (tmp_path / "out" / "wti.json").exists()
     assert (tmp_path / "out" / "gold.json").exists()
+
+
+# ---------- mốc 252 phiên (baseline-q252) ----------
+
+BL = predict.BASELINE_MODEL_VERSION
+BL_START = "2018-01-02"  # đủ 252 phiên trước BASE
+
+
+def _bl_run(st, **kw) -> predict.PredictRun:
+    loader = predict.make_model_loader(BL, st=st)
+    return predict.run_predict(st, None, load_model=loader, model_version=BL, now=NOW, **kw)
+
+
+def _q(record: dict) -> np.ndarray:
+    return np.array([[float(v) for v in h["q"]] for h in record["horizons"]])
+
+
+def _q252_direct(prices: pd.DataFrame, asset: str, base: str = BASE) -> np.ndarray:
+    """quantile_baseline gọi trực tiếp trên r_h của toàn bộ chuỗi giá (theo lịch tài sản)."""
+    s = prices.loc[prices["asset"] == asset].set_index("date")["price"]
+    cal = ASSETS[asset].calendar
+    return np.array(
+        [
+            quantile_baseline(horizon_log_returns(s, h, calendar=cal), h).loc[base].to_numpy()
+            for h in range(1, 8)
+        ]
+    )
+
+
+def test_quantile252_model_shape_and_order():
+    rng = np.random.default_rng(0)
+    q = Quantile252Model().predict(rng.normal(0, 0.01, (3, 252, 1)))
+    assert q.shape == (3, 7, 7)
+    assert (np.diff(q, axis=-1) >= 0).all()
+    with pytest.raises(ValueError):
+        Quantile252Model().predict(np.zeros((1, 60, 1)))
+    with pytest.raises(ValueError):
+        Quantile252Model().predict(np.full((1, 252, 1), np.nan))
+
+
+def test_baseline_loader_reads_no_artifact(tmp_path):
+    loaded = predict.make_model_loader(BL, model_dir=tmp_path / "missing")("gold")
+    assert isinstance(loaded.model, Quantile252Model) and loaded.window == 252
+    assert loaded.manifest == {"model_version": BL, "asset": "gold"}
+
+
+def test_baseline_record_matches_quantile_baseline(tmp_path):
+    prices = _prices(BL_START)
+    st = _local(tmp_path)
+    _write_lake(st, prices)
+    run = _bl_run(st)
+    assert run.ok, run.summary()
+    res = _by_asset(run)
+    for asset in predict.PREDICT_ASSETS:
+        rec = res[asset].record
+        _assert_contract(rec, asset, mv=BL)
+        np.testing.assert_allclose(_q(rec), _q252_direct(prices, asset), atol=1e-6)
+
+
+def test_baseline_unchanged_by_future_data(tmp_path):
+    cut = _prices(BL_START)
+    full = _prices(BL_START, "2019-09-30")
+    later = full["date"] > pd.Timestamp(BASE)
+    full.loc[later, "price"] *= np.where(full.loc[later, "asset"] == "usd_vnd", 1.05, 1.3)
+    st_cut, st_full = _local(tmp_path, "cut"), _local(tmp_path, "full")
+    _write_lake(st_cut, cut)
+    _write_lake(st_full, full, dt="2019-10-01")
+    r_cut = _by_asset(_bl_run(st_cut))  # chạy thường vào đúng ngày BASE
+    r_full = _by_asset(_bl_run(st_full, base_date=BASE))
+    for asset in predict.PREDICT_ASSETS:
+        assert r_cut[asset].status == r_full[asset].status == "ok"
+        assert r_cut[asset].record == r_full[asset].record
+        # quantile_baseline trên chuỗi có tương lai vẫn cho cùng giá trị tại BASE
+        np.testing.assert_allclose(_q(r_full[asset].record), _q252_direct(full, asset), atol=1e-6)
+
+
+@pytest.mark.parametrize(
+    "day, reason",
+    [(BASE, "latest_session_missing"), ("2018-10-15", "invalid_input_window")],
+)
+def test_baseline_missing_session_skips(tmp_path, caplog, day, reason):
+    prices = _prices(BL_START)
+    m = (prices["asset"] == "gold") & (prices["date"] == pd.Timestamp(day))
+    st = _local(tmp_path)
+    _write_lake(st, prices.loc[~m].reset_index(drop=True))
+    caplog.set_level(logging.INFO, logger="cpaws.predict")
+    res = _by_asset(_bl_run(st))
+    assert res["gold"].status == "skipped" and res["gold"].reason == reason
+    assert res["gold"].record is None
+    assert all(res[a].status == "ok" for a in ("silver", "brent", "wti"))
+    assert "PREDICT_SKIPPED asset=gold" in caplog.text and f"reason={reason}" in caplog.text
+
+
+def test_cli_baseline_runs_selected_assets_only(tmp_path):
+    _write_lake(_local(tmp_path), _prices(BL_START))
+    out = tmp_path / "out"
+    argv = ["--source", "local", "--lake-dir", str(tmp_path / "lake"), "--dest", "local"]
+    argv += ["--out-dir", str(out), "--model-version", BL, "--assets", "gold", "silver"]
+    assert predict.main([*argv, "--base-date", BASE]) == 0
+    assert sorted(p.name for p in out.iterdir()) == ["gold.json", "silver.json"]
+    for name in ("gold", "silver"):
+        rec = json.loads((out / f"{name}.json").read_text(encoding="utf-8"))
+        assert rec["model_version"] == BL and rec["base_date"] == BASE
+
+
+# Event Lambda destination OnSuccess của Lambda ingest (định dạng invocation record của AWS)
+DESTINATION_EVENT = {
+    "version": "1.0",
+    "timestamp": "2019-06-29T12:16:03.512Z",
+    "requestContext": {
+        "requestId": "c6af9ac6-7b61-11e6-9a41-93e8deadbeef",
+        "functionArn": "arn:aws:lambda:ap-southeast-1:000000000000:function:cpaws-dev-ingest:$LATEST",
+        "condition": "Success",
+        "approximateInvokeCount": 1,
+    },
+    "requestPayload": {},
+    "responseContext": {"statusCode": 200, "executedVersion": "$LATEST"},
+    "responsePayload": {"run_dt": DT, "status": "ok", "stale_sources": {}, "written": 12},
+}
+
+
+def _forbid_artifact_download(monkeypatch):
+    def fail(*args, **kwargs):
+        raise AssertionError("baseline-q252 must not read models/ from the lake")
+
+    monkeypatch.setattr(predict, "_download_model", fail)
+
+
+def test_handler_baseline_dry_run_all_assets_without_artifact(aws, monkeypatch):
+    s3, table = aws
+    monkeypatch.setenv("MODEL_VERSION", BL)
+    _forbid_artifact_download(monkeypatch)
+    _write_lake(storage.S3Storage(BUCKET, client=s3), _prices(BL_START))
+    out = lambda_predict.handler({"dry_run": True}, None)
+    assert out["ok"] and out["dry_run"] and out["written"] == 0
+    assert out["model_version"] == BL
+    assert set(out["assets"]) == set(predict.PREDICT_ASSETS)
+    assert all(a["status"] == "ok" for a in out["assets"].values())
+    assert "Contents" not in s3.list_objects_v2(Bucket=BUCKET, Prefix="models/")
+    assert table.scan()["Count"] == 0
+
+
+def test_handler_destination_event_runs_all_assets(aws, monkeypatch):
+    s3, table = aws
+    monkeypatch.setenv("MODEL_VERSION", BL)
+    _forbid_artifact_download(monkeypatch)
+    _write_lake(storage.S3Storage(BUCKET, client=s3), _prices(BL_START))
+    out = lambda_predict.handler(DESTINATION_EVENT, None)
+    assert out["ok"] and not out["dry_run"] and out["written"] == 4
+    assert set(out["assets"]) == set(predict.PREDICT_ASSETS)
+    for asset in predict.PREDICT_ASSETS:
+        items = _items(table, asset)
+        assert len(items) == 1
+        _assert_contract(items[0], asset, mv=BL)
 
 
 # ---------- module ----------

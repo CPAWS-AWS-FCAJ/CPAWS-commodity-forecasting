@@ -7,14 +7,17 @@ không hợp lệ). Tại phiên t, mốc chỉ dùng các r_h(s) với s thuộ
 hợp lệ, nếu không trả NaN (điểm đánh giá đó bị bỏ cho mọi chỉ số dùng mốc này).
 
 Hàm công khai dùng chung với metrics/backtest (Long) và Lambda predict (Tiến): giữ tên và kiểu.
+Quantile252Model bọc quantile_baseline để predict ghi mốc này như một model ("baseline-q252").
 """
 
 from __future__ import annotations
 
 from collections.abc import Sequence
 
+import numpy as np
 import pandas as pd
 
+from src.forecast.forecast_record import HORIZONS
 from src.forecast.returns import QUANTILE_LEVELS
 
 WINDOW = 252
@@ -65,6 +68,31 @@ def constant_prob_baseline(index: pd.Index, p: float = 0.5) -> pd.Series:
     return pd.Series(float(p), index=index, name="const_prob")
 
 
+class Quantile252Model:
+    """Mốc 252 phiên dưới dạng model của Lambda predict (model_version "baseline-q252").
+
+    windows [B, 252, 1]: log return 1 phiên đã căn theo lịch (cũ → mới), đúng đầu ra của
+    make_windows. Cộng dồn thành log giá (gốc 0 trước return đầu), r_h(s) = logp[s + h] − logp[s]
+    theo vị trí rồi lấy dòng cuối (phiên t) của quantile_baseline(r_h, h); không thêm công thức nào.
+    Tại t có 252 − h ≥ 245 return đã hoàn tất, đủ MIN_OBS. Đầu ra [B, 7 h, 7 phân vị]."""
+
+    window = WINDOW
+
+    def predict(self, windows) -> np.ndarray:
+        x = np.asarray(windows, dtype=np.float64)
+        if x.ndim != 3 or x.shape[1:] != (self.window, 1) or not np.isfinite(x).all():
+            raise ValueError(f"windows must be finite [B,{self.window},1]")
+        out = np.empty((len(x), len(HORIZONS), len(QUANTILE_LEVELS)))
+        for b, r1 in enumerate(x[:, :, 0]):
+            logp = pd.Series(np.concatenate([[0.0], np.cumsum(r1)]))
+            for i, h in enumerate(HORIZONS):
+                r_h = logp.shift(-h) - logp
+                out[b, i] = quantile_baseline(r_h, h).iloc[-1].to_numpy()
+        if not np.isfinite(out).all():
+            raise ValueError("baseline has fewer than MIN_OBS completed returns")
+        return out
+
+
 def baseline_valid(r_h: pd.Series, h: int, window: int = WINDOW, min_obs: int = MIN_OBS):
     """Mask bool: tại t mốc 252 phiên hợp lệ (đủ min_obs return đã hoàn tất)."""
     shifted, w = _completed_window(r_h, h, window)
@@ -75,6 +103,7 @@ def baseline_valid(r_h: pd.Series, h: int, window: int = WINDOW, min_obs: int = 
 __all__ = [
     "MIN_OBS",
     "WINDOW",
+    "Quantile252Model",
     "baseline_valid",
     "constant_prob_baseline",
     "quantile_baseline",
