@@ -39,7 +39,7 @@ SNAPSHOT_HASHES = {
     "rejected": "753b747d294bd309fdb90e80c5c2f4104f0a48f000337eb576e9ff92390e984f",
 }
 PROVENANCE = "backtest_publication_rule"
-IMPLEMENTATION_VERSION = "walk-forward-mvp-2"
+IMPLEMENTATION_VERSION = "walk-forward-mvp-2-diagnostics-1"
 DM_GAP_POLICY = "block_internal_session_gaps_for_h_gt_1_pending_Khai_review"
 LIMITATION = "Latest clean snapshot + publication rules; historical vintage/revisions NOT verified; not a verified point-in-time backtest."
 FORECAST_COLUMNS = (
@@ -1212,6 +1212,216 @@ def check_inputs(clean_dir, model_root, cfg):
     return prices, rejected, quality, hashes, models, checks
 
 
+def _report_accuracy(accuracy, cfg):
+    """Select this run's Accuracy without recalculating or changing any metric."""
+    keys = ["asset", "h", "sample", "metric"]
+    required = [
+        "run_id",
+        "model_version",
+        "evaluation_kind",
+        *keys,
+        "value",
+        "n_obs",
+        "status",
+        "ci_low",
+        "ci_high",
+        "undefined_reason",
+    ]
+    if missing := set(required) - set(accuracy.columns):
+        raise ValueError(f"missing Accuracy columns: {sorted(missing)}")
+    selected = accuracy.loc[
+        accuracy.run_id.eq(cfg.run_id)
+        & accuracy.model_version.eq(cfg.model_version)
+        & accuracy.evaluation_kind.eq(cfg.evaluation_kind)
+    ].copy()
+    for column in ("evaluation_start", "evaluation_end", "target_cutoff_date"):
+        if column in selected and not selected[column].eq(getattr(cfg, column)).all():
+            raise ValueError("Accuracy evaluation window does not match report config")
+    if selected.duplicated(keys).any():
+        raise ValueError("duplicate Accuracy report key")
+    return selected.set_index(keys)
+
+
+def _report_groups():
+    return [
+        (asset, h, sample)
+        for asset in ASSET_NAMES
+        for h in HORIZONS
+        for sample in (("all", "excl_roll") if asset in ("brent", "wti") else ("all",))
+    ]
+
+
+def summarize_forecast_diagnostics(forecasts, accuracy, cfg):
+    """Report probability behavior over expected 2019 origins, independently of targets.
+
+    Probabilities use the contract's [0.05, 0.95] range. Missing/invalid pairs do
+    not count as non-jumps. Coverage is copied from Accuracy; its n_obs, rather
+    than a reconstructed hit count, is the audit denominator.
+    """
+    required = {"asset", "base_date", "h", "prob_up", "forecast_status"}
+    if missing := required - set(forecasts.columns):
+        raise ValueError(f"missing Forecasts columns: {sorted(missing)}")
+    f = forecasts.copy()
+    for column in ("model_version", "forecast_run_id"):
+        if column in f and not f[column].eq(getattr(cfg, column)).all():
+            raise ValueError("Forecasts lineage does not match report config")
+    f["base_date"] = f.base_date.map(_day)
+    f = f.loc[f.base_date.between(cfg.evaluation_start, cfg.evaluation_end)]
+    if not f.asset.isin(ASSET_NAMES).all() or not f.h.isin(HORIZONS).all():
+        raise ValueError("unsupported diagnostic asset/horizon")
+    if f.duplicated(["asset", "base_date", "h"]).any():
+        raise ValueError("duplicate Forecasts diagnostic key")
+    selected = _report_accuracy(accuracy, cfg)
+    rows = []
+
+    def rate(asset, h, name, numerator, denominator, **counts):
+        return {
+            "run_id": cfg.run_id,
+            "model_version": cfg.model_version,
+            "evaluation_kind": cfg.evaluation_kind,
+            "asset": asset,
+            "h": h,
+            "sample": "all",
+            "diagnostic": name,
+            "value": numerator / denominator if denominator else None,
+            "numerator": numerator,
+            "denominator": denominator,
+            "status": "ok" if denominator else "undefined",
+            "undefined_reason": None if denominator else "no_valid_forecasts",
+            **counts,
+        }
+
+    for asset in ASSET_NAMES:
+        origins = calendars.sessions(
+            ASSETS[asset].calendar, cfg.evaluation_start, cfg.evaluation_end
+        ).strftime("%Y-%m-%d")
+        frame = f.loc[f.asset.eq(asset)].set_index(["base_date", "h"])
+        grid = pd.MultiIndex.from_product([origins, HORIZONS], names=["base_date", "h"])
+        if not frame.index.isin(grid).all():
+            raise ValueError("Forecasts diagnostic origin is not an asset session")
+        frame = frame.reindex(grid)
+        numeric = frame.prob_up.map(
+            lambda x: (
+                isinstance(x, (int, float, np.integer, np.floating))
+                and not isinstance(x, (bool, np.bool_))
+            )
+        )
+        p = (
+            pd.to_numeric(frame.prob_up, errors="coerce")
+            .to_numpy(dtype=float, na_value=np.nan)
+            .reshape(len(origins), 7)
+        )
+        valid = (
+            frame.forecast_status.eq("ok").to_numpy().reshape(p.shape)
+            & numeric.to_numpy().reshape(p.shape)
+            & np.isfinite(p)
+            & (p >= 0.05)
+            & (p <= 0.95)
+        )
+        paired = valid[:, :-1] & valid[:, 1:]
+        # Compare unrounded probabilities directly: strictly >, with no jump tolerance.
+        differences = np.abs(np.diff(np.where(valid, p, np.nan), axis=1))
+        n_pairs = int(paired.sum())
+        n_jumps = int((paired & (differences > 0.2)).sum())
+        n_expected = len(origins) * 6
+        rows.append(
+            rate(
+                asset,
+                None,
+                "prob_up_jump_rate_gt_0.2",
+                n_jumps,
+                n_pairs,
+                n_valid_pairs=n_pairs,
+                n_jump_pairs=n_jumps,
+                n_expected_pairs=n_expected,
+                n_missing_pairs=n_expected - n_pairs,
+            )
+        )
+        low = valid & np.isclose(p, 0.05, atol=1e-12, rtol=0)
+        high = valid & np.isclose(p, 0.95, atol=1e-12, rtol=0)
+        for h in (None, *HORIZONS):
+            mask = slice(None) if h is None else h - 1
+            n = int(valid[:, mask].sum())
+            n_low, n_high = int(low[:, mask].sum()), int(high[:, mask].sum())
+            expected = len(origins) * (7 if h is None else 1)
+            rows.append(
+                rate(
+                    asset,
+                    h,
+                    "prob_up_clip_rate",
+                    n_low + n_high,
+                    n,
+                    n_valid_forecasts=n,
+                    n_clip_low=n_low,
+                    n_clip_high=n_high,
+                    n_expected_forecasts=expected,
+                    n_missing_forecasts=expected - n,
+                )
+            )
+    for asset, h, sample in _report_groups():
+        key = (asset, h, sample, "coverage_80")
+        row = selected.loc[key] if key in selected.index else None
+        rows.append(
+            {
+                "run_id": cfg.run_id,
+                "model_version": cfg.model_version,
+                "evaluation_kind": cfg.evaluation_kind,
+                "asset": asset,
+                "h": h,
+                "sample": sample,
+                "diagnostic": "coverage_80",
+                "value": row["value"] if row is not None else None,
+                "numerator": None,
+                "denominator": row["n_obs"] if row is not None else None,
+                "n_obs": row["n_obs"] if row is not None else None,
+                "status": row["status"] if row is not None else "undefined",
+                "undefined_reason": row["undefined_reason"]
+                if row is not None
+                else "missing_accuracy_row",
+            }
+        )
+    return pd.DataFrame(rows).astype({"h": "Int64"})
+
+
+def build_validation_report(accuracy, cfg):
+    """Pivot existing Accuracy into 42 groups; preserve nulls and per-metric status."""
+    selected = _report_accuracy(accuracy, cfg)
+    metrics = ("pinball_skill", "coverage_80", "width_80", "brier_skill", "mae_ratio_vs_naive")
+    rows = []
+    for asset, h, sample in _report_groups():
+        record = {"asset": asset, "h": h, "sample": sample}
+        for metric in metrics:
+            key = (asset, h, sample, metric)
+            row = selected.loc[key] if key in selected.index else None
+            record[metric] = row["value"] if row is not None else None
+            record[metric + "_status"] = row["status"] if row is not None else "undefined"
+            if metric == "pinball_skill":
+                low = row["ci_low"] if row is not None else None
+                record.update(
+                    pinball_skill_ci_low=low,
+                    pinball_skill_ci_high=row["ci_high"] if row is not None else None,
+                    n_obs=row["n_obs"] if row is not None else None,
+                    pinball_skill_ci_excludes_zero_positive=bool(pd.notna(low) and low > 0),
+                )
+        rows.append(record)
+    columns = [
+        "asset",
+        "h",
+        "sample",
+        "pinball_skill",
+        "pinball_skill_ci_low",
+        "pinball_skill_ci_high",
+        "coverage_80",
+        "width_80",
+        "brier_skill",
+        "mae_ratio_vs_naive",
+        "n_obs",
+        "pinball_skill_ci_excludes_zero_positive",
+        *[metric + "_status" for metric in metrics],
+    ]
+    return pd.DataFrame(rows)[columns]
+
+
 def run_validation(clean_dir, model_root, output_dir, cfg=None, *, run_registry_dir=None):
     cfg = cfg or EvaluationConfig()
     directory = Path(output_dir)
@@ -1235,6 +1445,20 @@ def run_validation(clean_dir, model_root, output_dir, cfg=None, *, run_registry_
         },
     }
     result = evaluate(forecasts, prices, rejected, fits, cfg, input_lineage=lineage)
+    diagnostics = summarize_forecast_diagnostics(forecasts, result.accuracy, cfg)
+    report = build_validation_report(result.accuracy, cfg)
+    result.log["forecast_diagnostics"] = {
+        "file": "forecast_diagnostics.csv",
+        "rows": len(diagnostics),
+        "validation_report_file": "validation_2019_report.csv",
+        "report_rows": len(report),
+        "probability_mask": "forecast_status=ok, numeric finite prob_up in [0.05,0.95]; no target/common mask",
+        "jump_rule": "abs(p[h+1]-p[h]) > 0.2; same asset/base_date; pooled valid pairs; no rounding",
+        "clip_rule": "isclose(0.05 or 0.95, atol=1e-12, rtol=0)",
+        "coverage_source": "Accuracy coverage_80 unchanged; denominator/n_obs copied, numerator not reconstructed",
+        "report_n_obs_source": "Accuracy pinball_skill.n_obs on existing common mask",
+        "decision_status": "No automatic model selection; coverage threshold and aggregation across horizons pending team review",
+    }
     result.manifest.update(
         snapshot_date=SNAPSHOT_DATE,
         snapshot_sha256=hashes,
@@ -1256,6 +1480,8 @@ def run_validation(clean_dir, model_root, output_dir, cfg=None, *, run_registry_
         ("model_comparison", result.model_comparison),
     ]:
         frame.to_parquet(directory / (name + ".parquet"), index=False)
+    diagnostics.to_csv(directory / "forecast_diagnostics.csv", index=False)
+    report.to_csv(directory / "validation_2019_report.csv", index=False)
     for name, value in [("evaluation_manifest", result.manifest), ("evaluation_log", result.log)]:
         (directory / (name + ".json")).write_text(
             json.dumps(_plain(value), indent=2, ensure_ascii=False, allow_nan=False),
