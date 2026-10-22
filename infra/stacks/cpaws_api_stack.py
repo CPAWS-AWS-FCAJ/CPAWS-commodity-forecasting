@@ -37,7 +37,6 @@ class CpawsApiStack(Stack):
         forecast_api_log_group = logs.LogGroup(
             self,
             "ForecastsApiLogGroup",
-            log_group_name=f"/aws/lambda/cpaws-{env_name}-forecasts-api",
             retention=logs.RetentionDays.ONE_MONTH,
             removal_policy=RemovalPolicy.RETAIN,
         )
