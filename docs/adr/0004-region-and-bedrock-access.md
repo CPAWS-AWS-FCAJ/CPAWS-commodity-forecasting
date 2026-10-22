@@ -49,9 +49,10 @@ Cấu hình dự kiến:
 
 - Sử dụng tool use với JSON Schema để yêu cầu đầu ra có cấu trúc.
 - Đặt `temperature = 0` nhằm giảm sự biến thiên giữa các lần chạy.
+- Đặt `max_tokens = 1200`. Đầu ra bị cắt do chạm `max_tokens` được tính là `invalid`.
 - Lưu phiên bản prompt và metadata của mô hình để hỗ trợ truy vết và đánh giá chất lượng nhãn.
 
-Schema và quy tắc gắn nhãn được mô tả trong [`docs/prompts/news-labeling-v1.md`](../prompts/news-labeling-v1.md).
+Schema và quy tắc gắn nhãn được mô tả trong [`docs/prompts/news-labeling-v2.md`](../prompts/news-labeling-v2.md).
 
 ### 3. Cách gọi mô hình
 
@@ -67,6 +68,7 @@ Giới hạn `max_tokens` ban đầu:
 |---|---:|
 | Câu hỏi đơn giản | 512 |
 | Câu hỏi phức tạp hoặc có sử dụng tool | 1500 |
+| Gắn nhãn tin tức | 1200 |
 
 Các giới hạn trên là cấu hình khởi đầu cho MVP và cần được điều chỉnh dựa trên thử nghiệm thực tế.
 

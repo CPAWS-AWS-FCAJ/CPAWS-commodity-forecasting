@@ -9,3 +9,4 @@ matplotlib>=3.8          # scripts/eda_prices.py, report and slide figures
 scipy>=1.11              # scripts/eda_prices.py (descriptive statistics)
 moto[s3]>=5.0            # S3 tests without calling AWS (tests/test_lambda_ingest.py)
 psutil>=5.9              # scripts/measure_ingest.py (peak memory)
+jsonschema==4.26.0       # validate news labeling output against docs/prompts/news-labeling-schema.json
