@@ -783,6 +783,57 @@ def test_cli_baseline_runs_selected_assets_only(tmp_path):
         assert rec["model_version"] == BL and rec["base_date"] == BASE
 
 
+# Event Lambda destination OnSuccess của Lambda ingest (định dạng invocation record của AWS)
+DESTINATION_EVENT = {
+    "version": "1.0",
+    "timestamp": "2019-06-29T12:16:03.512Z",
+    "requestContext": {
+        "requestId": "c6af9ac6-7b61-11e6-9a41-93e8deadbeef",
+        "functionArn": "arn:aws:lambda:ap-southeast-1:000000000000:function:cpaws-dev-ingest:$LATEST",
+        "condition": "Success",
+        "approximateInvokeCount": 1,
+    },
+    "requestPayload": {},
+    "responseContext": {"statusCode": 200, "executedVersion": "$LATEST"},
+    "responsePayload": {"run_dt": DT, "status": "ok", "stale_sources": {}, "written": 12},
+}
+
+
+def _forbid_artifact_download(monkeypatch):
+    def fail(*args, **kwargs):
+        raise AssertionError("baseline-q252 must not read models/ from the lake")
+
+    monkeypatch.setattr(predict, "_download_model", fail)
+
+
+def test_handler_baseline_dry_run_all_assets_without_artifact(aws, monkeypatch):
+    s3, table = aws
+    monkeypatch.setenv("MODEL_VERSION", BL)
+    _forbid_artifact_download(monkeypatch)
+    _write_lake(storage.S3Storage(BUCKET, client=s3), _prices(BL_START))
+    out = lambda_predict.handler({"dry_run": True}, None)
+    assert out["ok"] and out["dry_run"] and out["written"] == 0
+    assert out["model_version"] == BL
+    assert set(out["assets"]) == set(predict.PREDICT_ASSETS)
+    assert all(a["status"] == "ok" for a in out["assets"].values())
+    assert "Contents" not in s3.list_objects_v2(Bucket=BUCKET, Prefix="models/")
+    assert table.scan()["Count"] == 0
+
+
+def test_handler_destination_event_runs_all_assets(aws, monkeypatch):
+    s3, table = aws
+    monkeypatch.setenv("MODEL_VERSION", BL)
+    _forbid_artifact_download(monkeypatch)
+    _write_lake(storage.S3Storage(BUCKET, client=s3), _prices(BL_START))
+    out = lambda_predict.handler(DESTINATION_EVENT, None)
+    assert out["ok"] and not out["dry_run"] and out["written"] == 4
+    assert set(out["assets"]) == set(predict.PREDICT_ASSETS)
+    for asset in predict.PREDICT_ASSETS:
+        items = _items(table, asset)
+        assert len(items) == 1
+        _assert_contract(items[0], asset, mv=BL)
+
+
 # ---------- module ----------
 
 
