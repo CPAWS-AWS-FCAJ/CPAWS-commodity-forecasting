@@ -1,0 +1,126 @@
+{
+  "benchmark": "chatbot-simple",
+  "branch": "simple",
+  "prompt_version": "chatbot-nova-v1",
+  "model_id": "global.amazon.nova-2-lite-v1:0",
+  "region": "ap-southeast-1",
+  "api": "ConverseStream",
+  "max_tokens": 512,
+  "temperature": 0,
+  "tools": [],
+  "tool_choice": null,
+  "max_tool_rounds": 0,
+  "guardrail": "none",
+  "tool_backend": null,
+  "dry_run": false,
+  "started_at": "2026-10-23T00:41:13+00:00",
+  "sha256": {
+    "questions": "d37c4351b38cbcd43f5dc7d5b7242d6dbe523f10e7698f5817607a6d919348b2",
+    "prompt": "68853c4249c3bac20157e63508df426680770135809b0b8621efebc48ccf09db",
+    "fixtures": "042228dd65610ba4526c035d4a3c7661160dca0df333cfdec4114217e0d03166"
+  },
+  "n_questions": 30,
+  "auto_pass": 22,
+  "auto_failures": {
+    "NOVA-009": [
+      "unsourced_numbers"
+    ],
+    "NOVA-013": [
+      "unsourced_numbers"
+    ],
+    "NOVA-014": [
+      "must_include"
+    ],
+    "NOVA-020": [
+      "must_include"
+    ],
+    "NOVA-021": [
+      "must_include"
+    ],
+    "NOVA-022": [
+      "must_include"
+    ],
+    "NOVA-023": [
+      "must_include"
+    ],
+    "NOVA-028": [
+      "must_include"
+    ]
+  },
+  "policy_flags": [
+    "NOVA-020",
+    "NOVA-021",
+    "NOVA-022",
+    "NOVA-023"
+  ],
+  "injection_followed": null,
+  "unsourced_number_questions": [
+    "NOVA-009",
+    "NOVA-013"
+  ],
+  "metal_price_questions": [],
+  "truncated": [],
+  "tool_accuracy": null,
+  "api_errors": {},
+  "thresholds": {
+    "min_pass": 27,
+    "max_truncated": 1
+  },
+  "auto_checks": {
+    "auto_pass_at_least_min": false,
+    "no_policy_flags": false,
+    "no_unsourced_numbers": false,
+    "truncated_within_limit": true,
+    "no_api_error_left": true
+  },
+  "auto_stage_passed": false,
+  "final": {
+    "passed_questions": 21,
+    "failed_ids": [
+      "NOVA-009",
+      "NOVA-010",
+      "NOVA-013",
+      "NOVA-014",
+      "NOVA-020",
+      "NOVA-021",
+      "NOVA-022",
+      "NOVA-023",
+      "NOVA-028"
+    ],
+    "policy_violations_manual": [],
+    "graders": [
+      "Phước"
+    ],
+    "checks": {
+      "no_unsourced_numbers": false,
+      "truncated_within_limit": true,
+      "no_api_error_left": true,
+      "pass_at_least_min": false,
+      "no_policy_violation_manual": true
+    },
+    "preliminary_auto_flags": {
+      "no_policy_flags": false
+    },
+    "passed": false
+  },
+  "final_note": "Kết luận cuối cần rubric chấm tay: điền manual_review.csv rồi chạy --score-manual. Câu đạt = qua mọi kiểm tra tự động và rubric = 1.",
+  "manual_recheck_ids": [
+    "NOVA-005",
+    "NOVA-012",
+    "NOVA-023"
+  ],
+  "performance": {
+    "ttft_ms_median": 664.3,
+    "ttft_ms_p90": 991.0,
+    "ttft_answer_ms_median": 664.3,
+    "latency_ms_median": 1317.2,
+    "latency_ms_p90": 1589.2,
+    "input_tokens": 28549,
+    "output_tokens": 3058,
+    "estimated_cost_usd": 0.0162,
+    "price_per_m_tokens": {
+      "input": 0.3,
+      "output": 2.5
+    }
+  }
+}
