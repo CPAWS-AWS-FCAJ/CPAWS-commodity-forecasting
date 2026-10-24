@@ -183,7 +183,7 @@
     "date": "2026-10-14"
   },
   "stale_sources": [
-    "eia"
+    "brent"
   ],
   "roll_in_horizon": false,
   "is_sample": true,
