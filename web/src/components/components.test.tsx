@@ -96,6 +96,26 @@ describe("AssetCard", () => {
     expect(screen.getByText(/Thay đổi 80% sau 7 ngày/)).toBeInTheDocument();
     expect(screen.getByText(/Khả năng (tăng|giảm)/)).toBeInTheDocument();
   });
+
+  it("hiện nhãn 'Mốc thống kê 252 phiên' khi model_version là baseline-q252", () => {
+    render(
+      <MemoryRouter>
+        <AssetCard item={{ ...gold, is_sample: false, model_version: "baseline-q252" }} />
+      </MemoryRouter>,
+    );
+    expect(screen.getByText("Mốc thống kê 252 phiên")).toBeInTheDocument();
+    expect(screen.queryByText("Dữ liệu mẫu")).not.toBeInTheDocument();
+  });
+
+  it("không hiện nhãn mốc thống kê với mô hình khác hoặc dữ liệu mẫu", () => {
+    render(
+      <MemoryRouter>
+        <AssetCard item={{ ...gold, is_sample: false, model_version: "dlinear-41e13dc5de3d" }} />
+        <AssetCard item={gold} />
+      </MemoryRouter>,
+    );
+    expect(screen.queryByText("Mốc thống kê 252 phiên")).not.toBeInTheDocument();
+  });
 });
 
 describe("ReturnRange", () => {

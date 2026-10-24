@@ -31,6 +31,8 @@ export interface ForecastSummary {
   stale: boolean;
   roll_in_horizon: boolean;
   is_sample: boolean;
+  /** API trả trường này ở danh sách (handler `_summary_item`); dữ liệu mẫu cục bộ không có. */
+  model_version?: string;
 }
 
 export interface ForecastListResponse {
