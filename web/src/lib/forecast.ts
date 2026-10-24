@@ -156,3 +156,11 @@ export function isStaleByDate(baseDate: string, today: string, isSample: boolean
 export function todayInVietnam(now: Date = new Date()): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh" }).format(now);
 }
+
+/** model_version của mốc thống kê 252 phiên (Khải chốt dùng cho demo, 22/10). */
+export const BASELINE_Q252 = "baseline-q252";
+
+/** Tên dễ hiểu của mô hình; null khi không có tên riêng (giao diện hiện mã model_version). */
+export function modelDisplayName(version?: string): string | null {
+  return version === BASELINE_Q252 ? "Mốc thống kê 252 phiên" : null;
+}

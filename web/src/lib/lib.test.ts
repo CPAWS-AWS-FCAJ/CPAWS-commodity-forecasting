@@ -6,6 +6,7 @@ import {
   describeProbability,
   edgeFromReturns,
   isStaleByDate,
+  modelDisplayName,
   probUpFromQuantiles,
   weekdaysSince,
 } from "./forecast";
@@ -143,5 +144,17 @@ describe("isPriceHidden", () => {
 
   it("không ẩn gì khi bật cờ", () => {
     for (const asset of ASSET_IDS) expect(isPriceHidden(asset, true)).toBe(false);
+  });
+});
+
+describe("modelDisplayName", () => {
+  it("đặt tên dễ hiểu cho mốc thống kê 252 phiên", () => {
+    expect(modelDisplayName("baseline-q252")).toBe("Mốc thống kê 252 phiên");
+  });
+
+  it("trả null cho mô hình khác hoặc khi thiếu model_version", () => {
+    expect(modelDisplayName("dlinear-41e13dc5de3d")).toBeNull();
+    expect(modelDisplayName("sample")).toBeNull();
+    expect(modelDisplayName(undefined)).toBeNull();
   });
 });

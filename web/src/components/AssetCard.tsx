@@ -2,8 +2,9 @@ import { Link } from "react-router-dom";
 import type { ForecastSummary } from "../api/types";
 import { ASSETS } from "../lib/assets";
 import { formatDate, formatPrice, formatReturnPercent } from "../lib/format";
+import { BASELINE_Q252 } from "../lib/forecast";
 import { ProbabilityBadge } from "./ProbabilityBadge";
-import { RollBadge, SampleBadge, StaleBadge } from "./StatusBadges";
+import { BaselineBadge, RollBadge, SampleBadge, StaleBadge } from "./StatusBadges";
 
 interface Props {
   item: ForecastSummary;
@@ -23,6 +24,7 @@ export function AssetCard({ item, hidePrice = false }: Props) {
       <h2 className="text-lg font-semibold">{meta.name}</h2>
       <div className="mt-1 flex min-h-12 flex-wrap content-start gap-1">
         {item.is_sample ? <SampleBadge /> : null}
+        {item.model_version === BASELINE_Q252 ? <BaselineBadge /> : null}
         {item.stale ? <StaleBadge /> : null}
         {item.roll_in_horizon ? <RollBadge /> : null}
       </div>
