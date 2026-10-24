@@ -5,7 +5,7 @@ Dữ liệu giả lập cho hai tool `get_forecast` và `get_news`. Toàn bộ l
 ## `forecasts/`: kết quả `get_forecast(asset)`
 
 - Định dạng đúng `GET /forecasts/{asset}` trong `docs/api/contract.md`.
-- Tất cả bản ghi: `is_sample: true`, `base_date` 2026-10-14, `fx.usd_vnd` 26310.
+- Bản ghi `model_version: "sample"` có `is_sample: true`; riêng `gold__baseline.json` có `is_sample: false` (demo thật dùng `baseline-q252`). Mọi bản ghi: `base_date` 2026-10-14, `fx.usd_vnd` 26310.
 - Phân vị, giá và `prob_up` sinh bằng các hàm `normalize_quantiles()`, `quantiles_to_prices()`, `prob_up()` trong `src/forecast/returns.py`.
   - Return làm tròn 4 chữ số, giá 2 chữ số, `prob_up` 2 chữ số.
   - `prob_up` tính trên return đã làm tròn.
@@ -14,8 +14,8 @@ Dữ liệu giả lập cho hai tool `get_forecast` và `get_news`. Toàn bộ l
 | File | Kịch bản |
 |---|---|
 | `gold.json`, `silver.json`, `brent.json`, `wti.json` | Bình thường, `model_version: "sample"` |
-| `gold__baseline.json` | `model_version: "baseline-q252"`: mốc thống kê, khoảng rộng hơn `gold.json` |
-| `brent__stale.json` | `stale_sources: ["eia"]` |
+| `gold__baseline.json` | `model_version: "baseline-q252"`: mốc thống kê, khoảng rộng hơn `gold.json`, `is_sample: false` |
+| `brent__stale.json` | `stale_sources: ["brent"]` |
 | `wti__roll.json` | `roll_in_horizon: true` |
 | `silver__not_found.json` | Lỗi `{"error": "not_found", ...}` (HTTP 404 theo contract) |
 

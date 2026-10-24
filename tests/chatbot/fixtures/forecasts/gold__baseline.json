@@ -184,6 +184,6 @@
   },
   "stale_sources": [],
   "roll_in_horizon": false,
-  "is_sample": true,
+  "is_sample": false,
   "disclaimer": "Dự báo mang tính tham khảo, không phải lời khuyên đầu tư."
 }
