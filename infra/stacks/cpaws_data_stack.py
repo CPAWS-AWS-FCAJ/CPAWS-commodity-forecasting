@@ -1,4 +1,9 @@
-"""Stack CpawsData: S3 data lake, ECR, Lambda ingest và lịch chạy hằng ngày."""
+"""Stack CpawsData: S3 data lake, ECR, Lambda ingest, Lambda predict và lịch chạy hằng ngày.
+
+Luồng hằng ngày: Scheduler → Lambda ingest (bất đồng bộ, retry 1) → destination OnSuccess và
+OnFailure đều gọi Lambda predict (retry 0). Ingest lỗi một nguồn vẫn ghi snapshot cho tài sản tốt
+nên predict vẫn chạy; tài sản thiếu phiên cuối bị bỏ qua và predict raise PredictFailed (alarm).
+"""
 
 from typing import Any
 
@@ -6,12 +11,19 @@ from aws_cdk import CfnOutput, Duration, RemovalPolicy, Stack
 from aws_cdk import aws_ecr as ecr
 from aws_cdk import aws_iam as iam
 from aws_cdk import aws_lambda as lambda_
+from aws_cdk import aws_lambda_destinations as destinations
 from aws_cdk import aws_logs as logs
 from aws_cdk import aws_s3 as s3
 from aws_cdk import aws_scheduler as scheduler
 from constructs import Construct
 
-from .shared import INGEST_SCHEDULE_EXPRESSION, INGEST_SCHEDULE_GROUP, ingest_function_name
+from .shared import (
+    INGEST_SCHEDULE_EXPRESSION,
+    INGEST_SCHEDULE_GROUP,
+    forecasts_table_name,
+    ingest_function_name,
+    predict_function_name,
+)
 
 
 class CpawsDataStack(Stack):
@@ -22,6 +34,9 @@ class CpawsDataStack(Stack):
         *,
         env_name: str,
         ingest_image_tag: str,
+        predict_image_tag: str,
+        predict_model_version: str,
+        predict_repo_only: bool = False,
         **kwargs: Any,
     ) -> None:
         super().__init__(scope, construct_id, **kwargs)
@@ -62,6 +77,32 @@ class CpawsDataStack(Stack):
                 ecr.LifecycleRule(max_image_count=5, description="Giu 5 image moi nhat")
             ],
         )
+
+        # ECR cho container Lambda predict: cùng tên theo quy ước, RemovalPolicy và lifecycle với ingest.
+        self.predict_repo = ecr.Repository(
+            self,
+            "PredictRepo",
+            repository_name=f"cpaws-{env_name}-predict",
+            image_scan_on_push=True,
+            removal_policy=RemovalPolicy.RETAIN if is_prod else RemovalPolicy.DESTROY,
+            empty_on_delete=not is_prod,
+            lifecycle_rules=[
+                ecr.LifecycleRule(max_image_count=5, description="Giu 5 image moi nhat")
+            ],
+        )
+
+        # Lambda predict cần image có sẵn trong ECR. Lần deploy ĐẦU TIÊN dùng
+        # -c predict_repo_only=true để chỉ tạo repo, push image, rồi deploy lại không có cờ này.
+        # Không dùng cờ ở các lần sau: deploy với cờ sẽ XÓA Lambda predict và destination của ingest.
+        self.predict_fn: lambda_.DockerImageFunction | None = None
+        predict_destination = None
+        if not predict_repo_only:
+            self.predict_fn = self._predict_function(
+                env_name=env_name,
+                image_tag=predict_image_tag,
+                model_version=predict_model_version,
+            )
+            predict_destination = destinations.LambdaDestination(self.predict_fn)
 
         # Execution role của Lambda ingest, quyền tối thiểu theo
         # docs/handoff/ingest-lambda.md (mục "Quyền IAM tối thiểu"). Tuấn review.
@@ -121,6 +162,11 @@ class CpawsDataStack(Stack):
             log_group=ingest_log_group,
             # Giới hạn retry khi gọi bất đồng bộ để không tải Yahoo nhiều lần khi nguồn lỗi
             retry_attempts=1,
+            # Cả thành công lẫn thất bại (sau khi hết retry) đều gọi predict: ingest lỗi một nguồn
+            # vẫn ghi snapshot cho tài sản tốt (góp ý của Khải, 22/10). Destination chỉ áp dụng khi
+            # ingest được gọi BẤT ĐỒNG BỘ (Scheduler, hoặc aws lambda invoke --invocation-type Event).
+            on_success=predict_destination,
+            on_failure=predict_destination,
             environment={
                 "LAKE_BUCKET": self.lake.bucket_name,
                 "CPAWS_ENV": env_name,
@@ -183,3 +229,84 @@ class CpawsDataStack(Stack):
         CfnOutput(self, "IngestRepoUri", value=self.ingest_repo.repository_uri)
         CfnOutput(self, "IngestFunctionName", value=self.ingest_fn.function_name)
         CfnOutput(self, "IngestScheduleName", value=self.ingest_schedule.name or "")
+        CfnOutput(self, "PredictRepoUri", value=self.predict_repo.repository_uri)
+        if self.predict_fn is not None:
+            CfnOutput(self, "PredictFunctionName", value=self.predict_fn.function_name)
+
+    def _predict_function(
+        self, *, env_name: str, image_tag: str, model_version: str
+    ) -> lambda_.DockerImageFunction:
+        """Lambda predict từ image ECR (docker/predict/Dockerfile), quyền tối thiểu. Tuấn review."""
+        role = iam.Role(
+            self,
+            "PredictRole",
+            role_name=f"cpaws-{env_name}-predict-role",
+            assumed_by=iam.ServicePrincipal("lambda.amazonaws.com"),
+            managed_policies=[
+                iam.ManagedPolicy.from_aws_managed_policy_name(
+                    "service-role/AWSLambdaBasicExecutionRole"
+                )
+            ],
+        )
+        # Chỉ ĐỌC clean/ (prices, display_factors) và models/ (artifact); không ghi gì vào lake.
+        # Giả định LAKE_PREFIX rỗng, giống role ingest.
+        role.add_to_policy(
+            iam.PolicyStatement(
+                sid="LakeReadCleanModels",
+                actions=["s3:GetObject"],
+                resources=[
+                    self.lake.arn_for_objects("clean/*"),
+                    self.lake.arn_for_objects("models/*"),
+                ],
+            )
+        )
+        # Code dùng ListObjectsV2 để tìm dt= mới nhất và tải thư mục artifact
+        role.add_to_policy(
+            iam.PolicyStatement(
+                sid="LakeListCleanModels",
+                actions=["s3:ListBucket"],
+                resources=[self.lake.bucket_arn],
+                conditions={"StringLike": {"s3:prefix": ["clean/*", "models/*"]}},
+            )
+        )
+        # DynamoSink chỉ dùng put_item (ghi đè theo asset + base_date); không Query/Delete.
+        table_name = forecasts_table_name(env_name)
+        role.add_to_policy(
+            iam.PolicyStatement(
+                sid="ForecastsPutItem",
+                actions=["dynamodb:PutItem"],
+                resources=[
+                    self.format_arn(service="dynamodb", resource="table", resource_name=table_name)
+                ],
+            )
+        )
+
+        log_group = logs.LogGroup(
+            self,
+            "PredictLogGroup",
+            log_group_name=f"/aws/lambda/{predict_function_name(env_name)}",
+            retention=logs.RetentionDays.ONE_MONTH,
+            removal_policy=RemovalPolicy.DESTROY,
+        )
+
+        # 1.024 MB / 120 s, x86_64, ngoài VPC (cấu hình Khải yêu cầu cho baseline-q252).
+        return lambda_.DockerImageFunction(
+            self,
+            "PredictFunction",
+            function_name=predict_function_name(env_name),
+            description="Daily return-quantile forecast from the latest clean snapshot to DynamoDB",
+            code=lambda_.DockerImageCode.from_ecr(self.predict_repo, tag_or_digest=image_tag),
+            architecture=lambda_.Architecture.X86_64,
+            memory_size=1024,
+            timeout=Duration.seconds(120),
+            role=role,
+            log_group=log_group,
+            # Không retry: tài sản bị bỏ qua sẽ bị bỏ qua lại; lỗi đã có alarm Errors để xử lý tay.
+            retry_attempts=0,
+            environment={
+                "LAKE_BUCKET": self.lake.bucket_name,
+                "FORECASTS_TABLE": table_name,
+                "MODEL_VERSION": model_version,
+                "CPAWS_ENV": env_name,
+            },
+        )

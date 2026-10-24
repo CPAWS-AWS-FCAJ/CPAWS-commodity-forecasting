@@ -14,3 +14,16 @@ def ingest_function_name(env_name: str) -> str:
     """Tên Lambda ingest. CpawsData đặt function_name và log group theo tên này, CpawsOps dùng nó
     cho dimension của alarm; lệch tên thì alarm theo dõi metric không tồn tại và luôn OK."""
     return f"cpaws-{env_name}-ingest"
+
+
+def predict_function_name(env_name: str) -> str:
+    """Tên Lambda predict. CpawsData đặt function_name và log group theo tên này, CpawsOps dùng nó
+    cho dimension của alarm (giống ingest_function_name)."""
+    return f"cpaws-{env_name}-predict"
+
+
+def forecasts_table_name(env_name: str) -> str:
+    """Tên bảng DynamoDB Forecasts. Phải KHỚP table_name trong cpaws_serving_stack.py
+    (tests/test_infra_stacks.py kiểm tra). CpawsData tham chiếu bảng theo tên thay vì export
+    chéo stack, để không khóa CpawsServing khi sau này đổi bảng."""
+    return f"cpaws-{env_name}-forecasts"
