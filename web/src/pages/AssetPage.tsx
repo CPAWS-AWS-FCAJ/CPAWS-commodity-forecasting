@@ -255,7 +255,7 @@ function Notes({ asset, detail }: { asset: AssetId; detail: NonNullable<ReturnTy
       {detail.is_sample ? <p>Số liệu trên trang này là dữ liệu mẫu, không phải dự báo thật.</p> : null}
       {detail.model_version === BASELINE_Q252 ? (
         <p>
-          Dự báo hiện dùng mốc thống kê: khoảng giá lấy từ phân phối return của 252 phiên giao dịch gần nhất
+          Dự báo hiện dùng mốc thống kê: khoảng dự báo lấy từ phân phối return của 252 phiên giao dịch gần nhất
           (khoảng 1 năm), chưa dùng mô hình học máy.
         </p>
       ) : null}
