@@ -12,15 +12,17 @@ import { ReturnRange } from "../components/ReturnRange";
 import { QuantileTable } from "../components/QuantileTable";
 import { ReturnFanChart } from "../components/ReturnFanChart";
 import { EmptyBlock, ErrorBlock, LoadingBlock } from "../components/StateViews";
-import { RollBadge, SampleBadge, StaleBadge } from "../components/StatusBadges";
+import { BaselineBadge, RollBadge, SampleBadge, StaleBadge } from "../components/StatusBadges";
 import { CurrencyToggle, HorizonPicker, ModeToggle } from "../components/Toggles";
 import { ASSETS, isPriceHidden } from "../lib/assets";
 import { buildFanData, buildReturnFanData } from "../lib/chartData";
 import { formatDate, formatDateTimeVn, formatNumber, formatPrice } from "../lib/format";
 import {
+  BASELINE_Q252,
   edgeFromReturns,
   findHorizon,
   isStaleByDate,
+  modelDisplayName,
   todayInVietnam,
 } from "../lib/forecast";
 import { useSettings } from "../lib/settings";
@@ -166,7 +168,7 @@ function Summary({
   // created_at và model_version có thể chưa có trong phản hồi API (PR #22)
   const footer = [
     detail.created_at ? `Dự báo tạo lúc ${formatDateTimeVn(detail.created_at)}` : null,
-    detail.model_version ? `mô hình ${detail.model_version}` : null,
+    detail.model_version ? modelFooter(detail.model_version) : null,
     advanced ? `chuỗi mục tiêu ${detail.target_series}` : null,
   ]
     .filter(Boolean)
@@ -176,6 +178,7 @@ function Summary({
     <section aria-label="Tóm tắt dự báo" className="rounded-lg border border-line bg-white p-5">
       <div className="flex flex-wrap items-center gap-2">
         {detail.is_sample ? <SampleBadge /> : null}
+        {detail.model_version === BASELINE_Q252 ? <BaselineBadge /> : null}
         {stale ? <StaleBadge sources={detail.stale_sources} /> : null}
         {detail.roll_in_horizon ? <RollBadge /> : null}
       </div>
@@ -234,6 +237,12 @@ function Summary({
   );
 }
 
+/** "Mốc thống kê 252 phiên (baseline-q252)" hoặc "mô hình <mã>" khi không có tên riêng. */
+function modelFooter(version: string): string {
+  const name = modelDisplayName(version);
+  return name ? `${name} (${version})` : `mô hình ${version}`;
+}
+
 function Notes({ asset, detail }: { asset: AssetId; detail: NonNullable<ReturnType<typeof useForecast>["data"]> }) {
   const meta = ASSETS[asset];
   return (
@@ -244,6 +253,12 @@ function Notes({ asset, detail }: { asset: AssetId; detail: NonNullable<ReturnTy
         <p>Kỳ dự báo chứa ngày đáo hạn hợp đồng tương lai, giá có thể nhảy khi chuyển hợp đồng.</p>
       ) : null}
       {detail.is_sample ? <p>Số liệu trên trang này là dữ liệu mẫu, không phải dự báo thật.</p> : null}
+      {detail.model_version === BASELINE_Q252 ? (
+        <p>
+          Dự báo hiện dùng mốc thống kê: khoảng dự báo lấy từ phân phối return của 252 phiên giao dịch gần nhất
+          (khoảng 1 năm), chưa dùng mô hình học máy.
+        </p>
+      ) : null}
       <p>{detail.disclaimer}</p>
     </section>
   );
