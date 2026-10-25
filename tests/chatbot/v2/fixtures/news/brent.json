@@ -1,0 +1,32 @@
+{
+  "asset": "brent",
+  "items": [
+    {
+      "title": "Pipeline outage disrupts exports from a producing region",
+      "summary": "An unplanned pipeline outage cut export flows from a producing region while repairs are assessed.",
+      "link": "https://example.com/news/brent-pipeline-outage",
+      "source": "Meridian Energy Note",
+      "published_at": "2026-10-20T07:15:00Z",
+      "impact_score": 3,
+      "direction": "bullish"
+    },
+    {
+      "title": "Energy forecaster trims next-year demand outlook",
+      "summary": "An energy forecaster lowered its demand growth estimate for next year, citing slower industrial activity.",
+      "link": "https://example.com/news/brent-demand-outlook",
+      "source": "Meridian Energy Note",
+      "published_at": "2026-10-16T10:00:00Z",
+      "impact_score": 2,
+      "direction": "bearish"
+    },
+    {
+      "title": "Tanker rates ease after a busy month",
+      "summary": "Freight rates for crude tankers eased slightly as more vessels became available.",
+      "link": "https://example.com/news/brent-tanker-rates",
+      "source": "Harbor Commodity Desk",
+      "published_at": "2026-10-15T14:40:00Z",
+      "impact_score": 1,
+      "direction": "uncertain"
+    }
+  ]
+}
