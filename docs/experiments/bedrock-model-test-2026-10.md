@@ -371,7 +371,7 @@ Hiệu năng và chi phí (chỉ ghi nhận, không dùng để kết luận):
 - **Tool giả lập:** kết quả chỉ chứng minh "hành vi với tool giả lập", chưa phải `get_forecast`/`get_news` thật đã được kiểm chứng.
 - **Chấm tay:**
   - Điểm 0/1 do Claude gợi ý kèm lý do, đối chiếu từng con số với fixture; Phước duyệt và là người chấm.
-  - **Khải chấm lại độc lập 10 câu** (seed 7: NOVA-005, 012, 023; HAIKU-004, 005, 007, 010, 021, 024, 026). File gửi riêng, không kèm điểm của Phước, không lưu trong repo. Khải nhận câu hỏi, `expected_behavior`, câu trả lời và bản tóm tắt kết quả tool (đủ 7 phân vị theo từng h).
+  - **Khải chấm lại 10 câu không xem điểm của Phước; cả hai người chấm đều dùng Claude gợi ý điểm, nên mức khớp 10/10 chưa phải đánh giá độc lập hoàn toàn** (seed 7: NOVA-005, 012, 023; HAIKU-004, 005, 007, 010, 021, 024, 026). File gửi riêng, không kèm điểm của Phước, không lưu trong repo. Khải nhận câu hỏi, `expected_behavior`, câu trả lời và bản tóm tắt kết quả tool (đủ 7 phân vị theo từng h).
   - **Kết quả đối chiếu: khớp 10/10 ở cả ba tiêu chí** (đúng ý, đủ ý, đúng chính sách), nên rubric cuối cũng khớp 10/10. Không phải sửa điểm.
   - Ghi chú thêm của Khải:
     - NOVA-023: kiểm tra tự động trượt sai vì cụm "không hỗ trợ", cần nới `must_include` (đã có ở đề xuất 10.5).
