@@ -1,20 +1,56 @@
 """Cấu hình benchmark chatbot theo nhánh (scripts/benchmark/chatbot_benchmark.py).
 
 Thay đổi tham số ở đây, không sửa trong script. Cấu hình gọi model theo ADR-0004; bộ câu hỏi,
-chấm điểm và ngưỡng theo docs/experiments/chatbot-benchmark-proposal.md (mục 6, 7, 11, 12).
+chấm điểm và ngưỡng theo docs/experiments/chatbot-benchmark-proposal.md (v1, mục 6, 7, 11, 12) và
+docs/experiments/chatbot-benchmark-v2-proposal.md (v2, mục 4 và 7).
 """
 
-QUESTIONS = {
-    "simple": "tests/chatbot/nova_simple_questions.jsonl",
-    "complex": "tests/chatbot/haiku_complex_questions.jsonl",
+# Bộ câu hỏi. v1: chạy chính thức 23/10, nay chỉ dùng cho lần chạy phát triển (run_type dev).
+# v2: chạy chính thức trước 8/11; phải khóa SHA-256 (locked_sha256) trước khi chạy official.
+QUESTION_SETS = {
+    "v1": {
+        "questions": {
+            "simple": "tests/chatbot/nova_simple_questions.jsonl",
+            "complex": "tests/chatbot/haiku_complex_questions.jsonl",
+        },
+        "fixtures_dir": "tests/chatbot/fixtures",
+        "prompts": {
+            "simple": "docs/prompts/chatbot-nova-v1.md",
+            "complex": "docs/prompts/chatbot-haiku-v1.md",
+        },
+        "prompt_versions": {"simple": "chatbot-nova-v1", "complex": "chatbot-haiku-v1"},
+        "news_default_to": "2026-10-14",  # base_date của fixture v1
+        "require_lock": False,
+        "locked_sha256": None,
+    },
+    "v2": {
+        "questions": {
+            "simple": "tests/chatbot/v2/nova_simple_questions.jsonl",
+            "complex": "tests/chatbot/v2/haiku_complex_questions.jsonl",
+        },
+        "fixtures_dir": "tests/chatbot/v2/fixtures",
+        # Khải chốt 25/10: chạy chính thức bằng prompt + tool v2. Đổi sang chatbot-*-v2.md khi
+        # prompt v2 được duyệt, TRƯỚC khi khóa SHA-256.
+        "prompts": {
+            "simple": "docs/prompts/chatbot-nova-v1.md",
+            "complex": "docs/prompts/chatbot-haiku-v1.md",
+        },
+        "prompt_versions": {"simple": "chatbot-nova-v1", "complex": "chatbot-haiku-v1"},
+        "news_default_to": "2026-10-21",  # base_date của fixture v2
+        "require_lock": True,
+        # Dán kết quả của `--print-lock --set v2` vào đây (và vào đề xuất v2) khi khóa ngày 3/11.
+        "locked_sha256": None,
+    },
 }
-PROMPTS = {
-    "simple": "docs/prompts/chatbot-nova-v1.md",
-    "complex": "docs/prompts/chatbot-haiku-v1.md",
-}
-PROMPT_VERSIONS = {"simple": "chatbot-nova-v1", "complex": "chatbot-haiku-v1"}
-FIXTURES_DIR = "tests/chatbot/fixtures"
-RESULTS_DIR = "docs/experiments/results"  # kết quả ghi vào chatbot-benchmark-<YYYY-MM-DD>/<nhánh>/
+DEFAULT_QUESTION_SET = "v1"
+# Code được khóa cùng bộ câu hỏi (Khải 25/10: khóa cả code tool chatbot). Thêm file tool v2
+# (ví dụ src/chatbot/tools.py) vào đây khi có.
+TOOL_CODE_PATHS = ("scripts/benchmark/chatbot_benchmark.py",)
+RUN_TYPES = (
+    "official",
+    "dev",
+)  # dev: không báo cáo như kết quả đạt, thư mục kết quả có hậu tố -dev
+RESULTS_DIR = "docs/experiments/results"  # chatbot-benchmark-<ngày>[-<bộ>][-dev|-dryrun]/<nhánh>/
 
 MODEL_IDS = {
     "simple": "global.amazon.nova-2-lite-v1:0",
@@ -51,8 +87,8 @@ FATAL_ERROR_CODES = frozenset(
     }
 )
 
-# get_news mặc định (khớp prompt chatbot-haiku-v1): 7 ngày đến base_date của fixture, min_impact 2
-NEWS_DEFAULT_TO = "2026-10-14"
+# get_news mặc định (khớp prompt chatbot-haiku-v1): 7 ngày đến base_date của fixture
+# (news_default_to của từng bộ), min_impact 2
 NEWS_DEFAULT_DAYS = 7
 NEWS_DEFAULT_MIN_IMPACT = 2
 
@@ -63,6 +99,9 @@ GENERIC_ALLOWED_NUMBERS = (
     1, 2, 3, 4, 5, 6, 7, 80, 10, 50, 90, 252,
     0.05, 0.10, 0.25, 0.50, 0.75, 0.90, 0.95, 25, 75, 95,
 )  # fmt: skip
+# Kiểm tra nhãn khoảng 80% (Khải 25/10: gắn sai nhãn thì trượt tự động): đoạn có các cụm này mà
+# chứa số khớp q05/q25/q75/q95 (và không khớp q10/q90) là gắn sai nhãn.
+INTERVAL_LABEL_TRIGGERS = ("80%", "khoảng dự báo", "khoảng tin cậy")
 VIETNAMESE_MIN_WORD_RATIO = 0.3  # tỷ lệ từ có dấu tiếng Việt tối thiểu
 METAL_PRICE_REL_TOL = 0.002  # vàng/bạc: số lệch ≤ 0,2% so với last_price/prices coi là nêu giá
 

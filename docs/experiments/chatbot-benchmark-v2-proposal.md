@@ -83,3 +83,23 @@
 **Chấm tay lần chạy chính thức:** Khải chấm lại 10 câu **không dùng Claude**, để kiểm tra độ tin cậy giữa hai người chấm. Lần 23/10 cả hai người chấm đều dùng Claude gợi ý điểm.
 
 **Mốc:** giữ nguyên như mục 5.
+
+## 8. Trạng thái sửa script (25/10/2026)
+
+Đã làm đủ 6 điểm ở mục 4 và các quyết định ở mục 7 trong `scripts/benchmark/chatbot_benchmark.py` và `configs/chatbot_benchmark.py`, kèm test không gọi mạng trong `tests/test_chatbot_benchmark.py`:
+
+- **`--set v1|v2`** (mặc định v1): mỗi bộ có câu hỏi, fixture, prompt và ngày mặc định của `get_news` riêng.
+- **`must_include_any`**: mỗi nhóm đạt khi có ít nhất một cụm.
+- **Kiểm tra nhãn khoảng 80%** (`interval_label`): trượt tự động. Chạy thử trên kết quả thật 23/10, kiểm tra bắt đúng 5 câu đã xác nhận khi chấm tay (HAIKU-004, 007, 016, 019, 025) và không bắt nhầm câu nào. Có test hồi quy giữ kết quả này.
+- **Kiểm tra #4 chặt hơn**: số nguyên chỉ khớp nguồn cũng là số nguyên.
+- **Cột `tuan_thu_chi_dan`** trong `manual_review.csv`: chỉ ghi nhận, không tính vào câu đạt. File chấm tay v1 (không có cột này) vẫn đọc được.
+- **`--run-type official|dev`**: `run_type` ghi vào `summary.json`, thư mục kết quả của lần dev có hậu tố `-dev`.
+- **Khóa SHA-256** (`--print-lock --set v2`): gồm câu hỏi, prompt, fixture và code tool (`TOOL_CODE_PATHS`). Lần chạy official của bộ v2 dừng **trước khi tạo client Bedrock** nếu chưa khóa hoặc lệch khóa.
+
+Tương thích ngược: SHA-256 bộ fixture v1 tính theo code mới trùng mã đã ghi ngày 23/10. Dry-run bộ v1 và bộ v2, cả hai nhánh, đều 30/30.
+
+Còn lại trước khi khóa (3/11):
+1. Prompt v2 và tool `get_forecast` v2.
+2. Đổi `prompts` của bộ v2 trong config sang file v2.
+3. Thêm file tool v2 vào `TOOL_CODE_PATHS`.
+4. Chạy `--print-lock --set v2`, dán kết quả vào `locked_sha256` và vào đề xuất này.
