@@ -899,8 +899,8 @@ def _fixtures_sha256(qset: str = C.DEFAULT_QUESTION_SET) -> str:
 
 
 def lock_hashes(qset: str) -> dict[str, str]:
-    """SHA-256 khóa trước lần chạy chính thức (đề xuất v2, mục 5 và 7): câu hỏi, prompt, fixture
-    và code tool/chấm điểm (TOOL_CODE_PATHS)."""
+    """SHA-256 khóa trước lần chạy chính thức (đề xuất v2, mục 5 và 7): câu hỏi, prompt, fixture,
+    code tool/chấm điểm (TOOL_CODE_PATHS) và cấu hình chấm điểm (scoring_config)."""
     cfg = qcfg(qset)
     out = {}
     for b in BRANCHES:
@@ -908,7 +908,36 @@ def lock_hashes(qset: str) -> dict[str, str]:
         out[f"prompt_{b}"] = _sha256(ROOT / cfg["prompts"][b])
     out["fixtures"] = _fixtures_sha256(qset)
     out["tool_code"] = _files_sha256(ROOT / p for p in C.TOOL_CODE_PATHS)
+    out["scoring_config"] = scoring_config_sha256()
     return out
+
+
+def scoring_config_sha256() -> str:
+    """SHA-256 của các tham số gọi model và chấm điểm trong config (Khải review PR #35): đổi
+    ngưỡng, số được phép, nhãn khoảng 80% hay cấu hình model sau khi khóa thì lệch khóa."""
+    names = sorted(
+        (
+            "THRESHOLDS", "INTERVAL_LABEL_TRIGGERS", "GENERIC_ALLOWED_NUMBERS", "MODEL_IDS",
+            "MAX_TOKENS", "TEMPERATURE", "MAX_TOOL_ROUNDS", "DISCLAIMER", "METAL_PRICE_REL_TOL",
+            "VIETNAMESE_MIN_WORD_RATIO", "POLICY_CATEGORIES", "INJECTION_CATEGORY",
+            "NEWS_DEFAULT_DAYS", "NEWS_DEFAULT_MIN_IMPACT", "MANUAL_RECHECK_SIZE",
+            "MANUAL_RECHECK_SEED",
+        )
+    )  # fmt: skip
+    payload = json.dumps(
+        {n: getattr(C, n) for n in names}, sort_keys=True, ensure_ascii=False, default=list
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def check_dev_allowed(qset: str) -> None:
+    """Bộ giữ riêng (holdout, ví dụ v2) không được chạy dev thật: chỉ chạy official một lần sau
+    khi khóa, để kết quả chính thức không bị ảnh hưởng bởi việc sửa prompt/tool theo bộ đó."""
+    if qcfg(qset).get("holdout"):
+        raise RuntimeError(
+            f"bộ {qset} là bộ giữ riêng: không chạy dev thật trên bộ này (dùng --set v1 cho "
+            "lần chạy phát triển, hoặc --dry-run để kiểm tra luồng)"
+        )
 
 
 def verify_lock(qset: str) -> None:
@@ -953,6 +982,8 @@ def run(
     nhập lại rồi chạy với --rerun-api-errors để chạy nốt."""
     if run_type not in C.RUN_TYPES:
         raise ValueError(f"run_type phải là một trong {C.RUN_TYPES}")
+    if run_type == "dev" and not dry_run:
+        check_dev_allowed(qset)
     if run_type == "official" and not dry_run:
         verify_lock(qset)
     cfg = qcfg(qset)
@@ -1107,9 +1138,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.dry_run:
         name += "-dryrun"
     out_dir = args.out_dir or ROOT / C.RESULTS_DIR / name / args.branch
-    if args.run_type == "official" and not args.dry_run:
-        try:
-            verify_lock(args.qset)  # dừng trước khi tạo client Bedrock
+    if not args.dry_run:
+        try:  # dừng trước khi tạo client Bedrock
+            if args.run_type == "dev":
+                check_dev_allowed(args.qset)
+            else:
+                verify_lock(args.qset)
         except RuntimeError as exc:
             print(f"DỪNG: {exc}", file=sys.stderr)
             return 2

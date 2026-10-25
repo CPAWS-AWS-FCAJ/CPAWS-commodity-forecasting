@@ -21,6 +21,7 @@ QUESTION_SETS = {
         "prompt_versions": {"simple": "chatbot-nova-v1", "complex": "chatbot-haiku-v1"},
         "news_default_to": "2026-10-14",  # base_date của fixture v1
         "require_lock": False,
+        "holdout": False,  # được chạy dev thật
         "locked_sha256": None,
     },
     "v2": {
@@ -38,6 +39,8 @@ QUESTION_SETS = {
         "prompt_versions": {"simple": "chatbot-nova-v1", "complex": "chatbot-haiku-v1"},
         "news_default_to": "2026-10-21",  # base_date của fixture v2
         "require_lock": True,
+        # Bộ giữ riêng: chỉ chạy official sau khi khóa; chạy dev thật bị chặn (Khải review PR #35)
+        "holdout": True,
         # Dán kết quả của `--print-lock --set v2` vào đây (và vào đề xuất v2) khi khóa ngày 3/11.
         "locked_sha256": None,
     },

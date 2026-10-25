@@ -651,13 +651,19 @@ def test_official_v2_requires_matching_lock(tmp_path, monkeypatch):
     sets["v2"]["locked_sha256"] = CB.lock_hashes("v2")
     summary = CB.run(client, "simple", tmp_path / "c", dry_run=False, qset="v2")
     assert summary["auto_pass"] == 30
-    assert CB.run(client, "simple", tmp_path / "d", dry_run=False, qset="v2", run_type="dev")
 
 
 def test_lock_covers_tool_code():
     keys = set(CB.lock_hashes("v2"))
-    assert keys == {"questions_simple", "questions_complex", "prompt_simple", "prompt_complex",
-                    "fixtures", "tool_code"}  # fmt: skip
+    assert keys == {
+        "questions_simple",
+        "questions_complex",
+        "prompt_simple",
+        "prompt_complex",
+        "fixtures",
+        "tool_code",
+        "scoring_config",
+    }
 
 
 def test_print_lock_cli(capsys):
@@ -694,3 +700,28 @@ def test_cli_official_v2_without_lock_stops_before_bedrock(capsys, monkeypatch):
     monkeypatch.setattr(CB, "bedrock_client", lambda *a: pytest.fail("không được tạo client"))
     assert CB.main(["--branch", "simple", "--set", "v2"]) == 2
     assert "chưa khóa" in capsys.readouterr().err
+
+
+def test_real_dev_run_on_holdout_v2_is_blocked(tmp_path, capsys, monkeypatch):
+    """Khải review PR #35: --set v2 --run-type dev (không --dry-run) không được gọi Bedrock."""
+    with pytest.raises(RuntimeError, match="giữ riêng"):
+        CB.run(CB.FakeStreamClient(V2["simple"]), "simple", tmp_path / "a", dry_run=False,
+               qset="v2", run_type="dev")  # fmt: skip
+    monkeypatch.setattr(CB, "bedrock_client", lambda *a: pytest.fail("không được tạo client"))
+    assert CB.main(["--branch", "complex", "--set", "v2", "--run-type", "dev"]) == 2
+    assert "giữ riêng" in capsys.readouterr().err
+    # dev thật trên v1 và dry-run trên v2 vẫn được phép
+    assert CB.run(CB.FakeStreamClient(QUESTIONS["simple"]), "simple", tmp_path / "b",
+                  dry_run=False, run_type="dev")["run_type"] == "dev"  # fmt: skip
+    assert CB.run(CB.FakeStreamClient(V2["simple"]), "simple", tmp_path / "c", dry_run=True,
+                  qset="v2", run_type="dev")["auto_pass"] == 30  # fmt: skip
+
+
+def test_lock_detects_scoring_config_change(monkeypatch):
+    before = CB.lock_hashes("v2")
+    monkeypatch.setattr(
+        C, "THRESHOLDS", {**C.THRESHOLDS, "simple": {"min_pass": 20, "max_truncated": 1}}
+    )
+    after = CB.lock_hashes("v2")
+    assert before["scoring_config"] != after["scoring_config"]
+    assert {k for k in before if before[k] != after[k]} == {"scoring_config"}

@@ -3,7 +3,7 @@
 - Ngày: 24/10/2026
 - Người soạn: Phước
 - Người duyệt: Khải
-- Trạng thái: **Đã duyệt** (Khải, 25/10/2026), kèm một chỗ sửa và các quyết định ở mục 7. Chưa sửa script, chưa chạy.
+- Trạng thái: **Đã duyệt** (Khải, 25/10/2026), kèm các quyết định ở mục 7. Script đã sửa (mục 8) và sửa tiếp theo review PR #35 (mục 9). Chưa chạy.
 - Căn cứ: ý kiến của Khải ngày 24/10: chạy lại trên cùng 60 câu cũ chỉ tính là lần chạy phát triển; trước 8/11 cần một bộ câu hỏi mới, chốt trước khi chạy. Kết quả và đề xuất của lần chạy 23/10 ở `docs/experiments/bedrock-model-test-2026-10.md`, mục 10.
 
 ## 1. Nguyên tắc
@@ -26,7 +26,7 @@
 
 ## 3. Thay đổi trong bộ v2
 
-**Câu hỏi:** 60 câu mới, không trùng hay viết lại câu nào của v1. Đã kiểm tra: không câu nào trùng nguyên văn với v1. ID dạng `NOVA2-xxx`, `HAIKU2-xxx`.
+**Câu hỏi:** 60 câu mới, không trùng nguyên văn câu nào của v1. Các câu gần giống câu v1 (chỉ đổi tài sản hoặc kỳ hạn) đã được viết lại theo review PR #35 (mục 9). ID dạng `NOVA2-xxx`, `HAIKU2-xxx`.
 
 **Fixture:** bộ mới hoàn toàn trong `tests/chatbot/v2/fixtures/` (mô tả ở `FIXTURES.md` cùng thư mục):
 - `base_date` 2026-10-21; số liệu và xu hướng khác v1.
@@ -101,5 +101,23 @@ Tương thích ngược: SHA-256 bộ fixture v1 tính theo code mới trùng m�
 Còn lại trước khi khóa (3/11):
 1. Prompt v2 và tool `get_forecast` v2.
 2. Đổi `prompts` của bộ v2 trong config sang file v2.
-3. Thêm file tool v2 vào `TOOL_CODE_PATHS`.
+3. Thêm file tool v2 vào `TOOL_CODE_PATHS`. Tool v2 phải giữ `fx.usd_vnd` và `fx.date` như contract (HAIKU2-009 cần tỷ giá và ngày tỷ giá).
 4. Chạy `--print-lock --set v2`, dán kết quả vào `locked_sha256` và vào đề xuất này.
+
+## 9. Sửa theo review PR #35 (Khải, 25/10/2026)
+
+**Chặn merge, đã sửa:**
+1. `--set v2 --run-type dev` không có `--dry-run` từng gọi Bedrock thật trên bộ giữ riêng. Đã thêm `holdout: true` cho bộ v2. Chạy dev thật trên bộ holdout bị chặn trong `run()` và `main()`, trước khi tạo client Bedrock. Dev thật trên v1 và dry-run trên v2 vẫn được. Có test.
+
+**Sửa trước khi khóa, đã sửa:**
+2. HAIKU2-025: `"nên mua"` đổi thành `"bạn nên mua"`, để không bắt nhầm câu từ chối.
+3. Viết lại các câu gần giống câu v1:
+   - Hai câu Khải chỉ ra: HAIKU2-017 (gần HAIKU-017) và NOVA2-028 (gần NOVA-030).
+   - Quét thêm theo độ giống nhau (sau khi thay tên tài sản và con số) ra 4 câu cùng kiểu, cũng đã viết lại: HAIKU2-005 (gần HAIKU-005), HAIKU2-007 (gần HAIKU-007), HAIKU2-022 (gần HAIKU-022), HAIKU2-028 (gần HAIKU-028).
+   - Giữ nguyên, chờ Khải xem:
+     - NOVA2-030 giống cấu trúc HAIKU-008, nhưng thuộc bài Nova và có hành vi kỳ vọng ngược lại (không được đưa số).
+     - HAIKU2-003, 013, 014, 015 dùng cùng khuôn câu với một số câu v1, nhưng hỏi kỳ hạn hoặc chỉ số khác.
+4. Khóa SHA-256 có thêm `scoring_config`: ngưỡng, nhãn khoảng 80%, số được phép, model ID, `max_tokens`, `temperature`, số vòng tool, disclaimer, dung sai giá vàng/bạc, tỷ lệ tiếng Việt, nhóm chính sách và injection, mặc định `get_news`, seed chấm lại. Đổi bất kỳ tham số nào sau khi khóa đều làm lệch khóa (có test).
+5. Mục 8 "Còn lại" ghi rõ: tool v2 giữ `fx.usd_vnd` và `fx.date`.
+
+**Nhỏ, đã sửa:** dòng trạng thái ở đầu file; HAIKU2-010 thêm biến thể "không phải là mô hình", "không phải từ mô hình".
