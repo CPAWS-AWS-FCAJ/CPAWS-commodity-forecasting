@@ -1,4 +1,4 @@
-"""Stack CpawsOps: alarm cho Lambda ingest, gửi email qua SNS."""
+"""Stack CpawsOps: alarm cho Lambda ingest và predict, gửi email qua SNS."""
 
 from typing import Any
 
@@ -18,6 +18,7 @@ class CpawsOpsStack(Stack):
         *,
         env_name: str,
         ingest_function_name: str,
+        predict_function_name: str,
         alarm_email: str | None = None,
         **kwargs: Any,
     ) -> None:
@@ -54,5 +55,28 @@ class CpawsOpsStack(Stack):
             treat_missing_data=cloudwatch.TreatMissingData.NOT_BREACHING,
         )
         ingest_alarm.add_alarm_action(cw_actions.SnsAction(self.alarm_topic))
+
+        # Predict chạy sau mỗi lần ingest (OnSuccess/OnFailure). PredictFailed (có tài sản bị bỏ qua,
+        # ví dụ thiếu phiên cuối) cũng được tính vào Errors. Trước khi Lambda predict được tạo,
+        # metric không có số liệu nên alarm ở trạng thái bình thường.
+        predict_errors = cloudwatch.Metric(
+            namespace="AWS/Lambda",
+            metric_name="Errors",
+            dimensions_map={"FunctionName": predict_function_name},
+            statistic="Sum",
+            period=Duration.minutes(5),
+        )
+        predict_alarm = cloudwatch.Alarm(
+            self,
+            "PredictErrorsAlarm",
+            alarm_name=f"cpaws-{env_name}-predict-errors",
+            alarm_description="Predict Lambda reported >= 1 error (asset skipped/failed or crash)",
+            metric=predict_errors,
+            threshold=1,
+            evaluation_periods=1,
+            comparison_operator=cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+            treat_missing_data=cloudwatch.TreatMissingData.NOT_BREACHING,
+        )
+        predict_alarm.add_alarm_action(cw_actions.SnsAction(self.alarm_topic))
 
         CfnOutput(self, "AlarmTopicArn", value=self.alarm_topic.topic_arn)
