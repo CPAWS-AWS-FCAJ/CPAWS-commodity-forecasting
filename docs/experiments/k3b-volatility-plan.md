@@ -68,3 +68,42 @@ Ký hiệu: Q_τ,h = phân vị baseline-q252 tại t; m_h = Q_0.5,h.
   `w252-k3-l30`; trung bình 7 h kèm CI theo mục 4.
 - Phân bố k_t trên train và 2019 (min, trung vị, max, tỷ lệ bị kẹp ở 0,5 hoặc 2,0).
 - Ghi rõ: lần nhìn thứ 2 vào 2019, tổng 11 cấu hình.
+
+## 6. Sửa đổi và làm rõ trước khi chạy (26/10/2026)
+
+Ghi khi viết code, **trước khi có bất kỳ kết quả 2019 nào của K3b**. Không đổi ứng viên, λ, ngưỡng
+kẹp hay siêu tham số.
+
+1. **Sửa lỗi đếm cột S2 (Khải xác nhận).** Mục 3 ghi "6 cột", nhưng công thức cho 5:
+   `fixed_imf_matrix` với K = 3 có 4 cột (IMF1–3 + residue), nên có 4 cột log năng lượng, cộng
+   log(σ_short,t / σ_long,t) với λ = 0,94. S2 dùng **5 cột** theo đúng công thức; "6 cột" là viết
+   nhầm.
+2. **Tập chung để chọn và xét tiêu chí (Khải xác nhận).** "Tập chung" ở mục 4 là giao các ngày gốc
+   hợp lệ của 3 ứng viên trên từng tài sản. Dự kiến bằng tập quy tắc A của S2 (window 252, L 30):
+   vàng 245, bạc 245, Brent 232, WTI 232. Tập này rộng hơn tập K3 (Brent, WTI 202), vì tập K3 là
+   giao 8 cấu hình, có cả cấu hình L = 60. Mọi chỉ số và CI cũng được báo cáo trên tập K3 (vàng 245,
+   bạc 245, Brent 202, WTI 202) để so với ADR-0009. Nếu kết luận trên hai tập khác nhau thì ghi rõ.
+   Code dừng nếu giao 3 ứng viên khác tập quy tắc A của S2, hoặc không chứa trọn tập K3.
+3. **Chi tiết hiện thực mà kế hoạch chưa nói rõ** (chốt ở đây trước khi chạy):
+   - Return ngày r_s đánh chỉ số tại phiên kết thúc s. r_s = NaN khi s hoặc phiên liền trước theo
+     lịch không có giá hợp lệ (thiếu, bị loại, ≤ 0).
+   - σ_long,t: độ lệch chuẩn mẫu (ddof = 1) của các r_s hợp lệ trong 252 phiên lịch gần nhất ≤ t.
+     Cần ít nhất 200 return hợp lệ (cùng `MIN_OBS` của mốc 252 phiên), nếu không thì NaN và ngày gốc
+     đó không hợp lệ.
+   - σ_short: σ² bắt đầu tại phiên có return hợp lệ thứ 252 của chuỗi giá đã đọc (clean từ 2012),
+     bằng phương sai mẫu (ddof = 1) của 252 return hợp lệ đầu tiên; đệ quy từ phiên sau đó. Trước
+     phiên này σ_short là NaN.
+   - S2 dùng tỷ số **chưa kẹp** σ_short/σ_long trong cột log; k_t (đã kẹp) chỉ dùng cho S1.
+   - S2: Δg = W·x + b với W cỡ 42 × 5 (7 h × 6 khoảng cách), b cỡ 42, khởi tạo 0. Δm cố định bằng 0.
+     Dùng cùng hàm neo của K3 (`anchor_quantiles`). Chuẩn hóa từng cột bằng `ColumnScaler`, fit chỉ
+     trên mảng train. Weight decay là tham số `weight_decay` của `torch.optim.Adam`, như K3.
+   - Mẫu S2 là quy tắc A (window 252, K 3, L 30) cộng thêm điều kiện tỷ số σ hợp lệ. Số mẫu phải bằng
+     số mẫu K3 của `w252-k3-l30` (train/val: vàng 1251/245, bạc 1251/245, Brent 1110/232,
+     WTI 1172/232), nếu khác thì dừng.
+   - CI của `pinball_skill` trung bình 7 h: với mỗi lần lấy mẫu của kế hoạch bootstrap chung
+     (`walk_forward.shared_bootstrap_plan`), tính `pinball_skill` từng h trên các ngày được rút rồi
+     lấy trung bình 7 h. Giá trị điểm là trung bình 7 giá trị `pinball_skill` từng h.
+   - Mốc so sánh K3 `w252-k3-l30` lấy từ lần chạy có provenance sạch `k3-val2019-clean` (commit
+     `cc5dac3`), chỉ đọc, chấm lại bằng cùng hàm đánh giá.
+   - Tài sản "đạt" xét trên mẫu `all` (mẫu mà sản phẩm dự báo). Với dầu, CI trung bình 7 h trên
+     `excl_roll` được báo cáo cạnh đó; nếu hai mẫu cho kết luận khác nhau thì ghi rõ trong báo cáo.
