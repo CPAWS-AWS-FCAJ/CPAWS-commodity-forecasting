@@ -586,9 +586,11 @@ def interval_label_errors(answer: str, tool_calls: list[dict]) -> list[str]:
     """Số bị gọi là "khoảng 80%" nhưng là q05/q25/q75/q95 (đề xuất v2 mục 4.3, Khải 25/10).
 
     Xét từng đoạn (dòng, câu) có cụm trong INTERVAL_LABEL_TRIGGERS; số trong đoạn khớp q05/q25/
-    q75/q95 mà không khớp q10/q90 (của bất kỳ kỳ hạn nào) là gắn sai nhãn."""
+    q75/q95 mà không khớp q10/q50/q90 (của bất kỳ kỳ hạn, tài sản nào) là gắn sai nhãn."""
     wrong = _quantile_values(tool_calls, (0, 2, 4, 6))
-    right = _quantile_values(tool_calls, (1, 5))
+    # q50 cũng hợp lệ trên dòng có nhãn 80% (trung vị thường đứng cạnh khoảng); thiếu q50 thì
+    # q50 của tài sản này trùng q95 của tài sản khác bị bắt nhầm (dev 26/10, HAIKU-014, 029)
+    right = _quantile_values(tool_calls, (1, 3, 5))
     if not wrong:
         return []
     bad = []
@@ -861,6 +863,43 @@ def score_manual(out_dir: Path, branch: str) -> dict:
     (out_dir / "summary.json").write_text(
         json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n"
     )
+    return summary
+
+
+def rescore(out_dir: Path, branch: str) -> dict:
+    """Chấm lại raw.jsonl của một lần chạy dev hoặc dry-run bằng code chấm hiện tại, không gọi
+    lại model (ví dụ sau khi sửa lỗi bộ chấm). Kết quả chính thức không được chấm lại bằng code
+    mới, vì cách chấm đã chốt trước khi chạy."""
+    old = json.loads((out_dir / "summary.json").read_text(encoding="utf-8"))
+    run_type = old.get("run_type", "official")
+    if run_type != "dev" and not old.get("dry_run"):
+        raise RuntimeError("chỉ chấm lại được kết quả dev hoặc dry-run, không chấm lại official")
+    qset = old.get("question_set", C.DEFAULT_QUESTION_SET)
+    questions = load_questions(questions_path(qset, branch))
+    by_q = {q["id"]: q for q in questions}
+    records = load_questions(out_dir / "raw.jsonl")
+    for rec in records:
+        if rec.get("status") != "api_error":
+            rec |= check_answer(by_q[rec["id"]], rec)
+    _write_raw(out_dir / "raw.jsonl", questions, {r["id"]: r for r in records})
+    now = dt.datetime.now(dt.UTC).isoformat(timespec="seconds")
+    summary = {
+        **old,
+        **summarize(branch, questions, records, qset, run_type),
+        "final": None,  # auto_pass có thể đổi: chạy lại --score-manual nếu đã chấm tay
+        "rescores": old.get("rescores", [])
+        + [{"at": now, "tool_code_sha256": _files_sha256(ROOT / x for x in C.TOOL_CODE_PATHS)}],
+    }
+    (out_dir / "summary.json").write_text(
+        json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n"
+    )
+    manual = out_dir / "manual_review.csv"
+    graded = False
+    if manual.exists():
+        with manual.open(encoding="utf-8-sig", newline="") as f:
+            graded = any((r.get("nguoi_cham") or "").strip() for r in csv.DictReader(f))
+    if not graded:  # chưa chấm tay thì tạo lại mẫu cho khớp auto_pass mới
+        write_manual_template(manual, records, summary["manual_recheck_ids"])
     return summary
 
 
@@ -1193,6 +1232,12 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--force", action="store_true", help="cho phép ghi đè kết quả đã có")
     ap.add_argument("--score-manual", type=Path, metavar="DIR", help="chấm kết luận cuối")
     ap.add_argument(
+        "--rescore",
+        type=Path,
+        metavar="DIR",
+        help="chấm lại raw.jsonl (dev/dry-run) bằng code chấm hiện tại, không gọi model",
+    )
+    ap.add_argument(
         "--rerun-api-errors",
         action="store_true",
         help="chỉ chạy lại các câu lỗi API hoặc chưa chạy trong raw.jsonl của --out-dir/hôm nay",
@@ -1204,6 +1249,11 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if not args.branch:
         ap.error("cần --branch (trừ khi dùng --print-lock)")
+    if args.rescore:
+        summary = rescore(args.rescore, args.branch)
+        keys = ("auto_pass", "auto_checks", "auto_failures")
+        print(json.dumps({k: summary[k] for k in keys}, ensure_ascii=False, indent=2))
+        return 0
     if args.score_manual:
         final = score_manual(args.score_manual, args.branch)["final"]
         print(json.dumps(final, ensure_ascii=False, indent=2))

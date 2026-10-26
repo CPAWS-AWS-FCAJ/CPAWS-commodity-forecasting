@@ -795,3 +795,52 @@ def test_lock_includes_tool_and_shared_formatter():
         C.TOOL_CODE_PATHS
     )
     assert all((ROOT / p).is_file() for p in C.TOOL_CODE_PATHS)
+
+
+def test_interval_label_accepts_median_that_equals_other_asset_tail():
+    """Dev 26/10 (HAIKU-014): q50 Brent h1 = 74,76 trùng q95 WTI h2; không được coi là sai nhãn."""
+    calls = [
+        {"name": "get_forecast", "input": {"asset": a}, "ok": True, "result": _forecast(a)}
+        for a in ("brent", "wti")
+    ]
+    line = "Brent: khoảng 80% từ 72.96 đến 76.61 USD/bbl, trung vị 74.76 USD/bbl."
+    assert CB.interval_label_errors(line, calls) == []
+    wrong = "WTI: khoảng 80% từ 69.03 đến 73.19 USD/bbl."  # 69,03 là q05 WTI h1
+    assert CB.interval_label_errors(wrong, calls) == ["69.03"]
+
+
+def test_rescore_dev_results_and_refuse_official(tmp_path):
+    dev = tmp_path / "dev"
+    CB.run(CB.FakeStreamClient(QUESTIONS["complex"]), "complex", dev, dry_run=False, run_type="dev")
+    raw = CB.load_questions(dev / "raw.jsonl")
+    raw[0]["answer"] = raw[0]["answer"].replace("q10 đến q90", "q10 đến q90 (khoảng dự báo)") + (
+        " Khoảng dự báo 80% từ -1,50% đến +1,28%."  # -1,50 là q05 vàng h1
+    )
+    (dev / "raw.jsonl").write_text(
+        "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in raw), encoding="utf-8"
+    )
+    summary = CB.rescore(dev, "complex")
+    assert raw[0]["id"] in summary["interval_mislabel_questions"]
+    assert summary["final"] is None and len(summary["rescores"]) == 1
+
+    official = tmp_path / "official"
+    CB.run(CB.FakeStreamClient(QUESTIONS["simple"]), "simple", official, dry_run=False)
+    with pytest.raises(RuntimeError, match="không chấm lại official"):
+        CB.rescore(official, "simple")
+
+
+def test_rescore_keeps_graded_manual_csv(tmp_path):
+    CB.run(
+        CB.FakeStreamClient(QUESTIONS["simple"]), "simple", tmp_path, dry_run=True, run_type="dev"
+    )
+    path = tmp_path / "manual_review.csv"
+    with path.open(encoding="utf-8-sig", newline="") as f:
+        rows = list(csv.DictReader(f))
+    rows[0]["nguoi_cham"] = "Phước"
+    with path.open("w", encoding="utf-8-sig", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=CB.MANUAL_COLUMNS)
+        w.writeheader()
+        w.writerows(rows)
+    CB.rescore(tmp_path, "simple")
+    with path.open(encoding="utf-8-sig", newline="") as f:
+        assert next(csv.DictReader(f))["nguoi_cham"] == "Phước"
