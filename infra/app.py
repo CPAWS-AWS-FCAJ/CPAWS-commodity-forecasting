@@ -25,6 +25,12 @@ DEFAULT_PREDICT_MODEL_VERSION = "baseline-q252"
 app = cdk.App()
 env_name = app.node.try_get_context("env") or "dev"
 ingest_image_tag = app.node.try_get_context("ingest_image_tag") or DEFAULT_INGEST_IMAGE_TAG
+
+# SSM SecureString parameter name for the EIA API key.
+# Pass only the parameter name, never the API key value.
+eia_parameter_name = (
+    app.node.try_get_context("eia_parameter_name") or f"/cpaws/{env_name}/eia-api-key"
+)
 predict_image_tag = app.node.try_get_context("predict_image_tag") or DEFAULT_PREDICT_IMAGE_TAG
 predict_model_version = (
     app.node.try_get_context("predict_model_version") or DEFAULT_PREDICT_MODEL_VERSION
@@ -48,6 +54,7 @@ CpawsDataStack(
     "CpawsData",
     env_name=env_name,
     ingest_image_tag=ingest_image_tag,
+    eia_parameter_name=eia_parameter_name,
     predict_image_tag=predict_image_tag,
     predict_model_version=predict_model_version,
     predict_repo_only=predict_repo_only,
