@@ -205,9 +205,9 @@ DM là phép **kiểm định hai phía** so sánh hai mô hình bằng **chuỗ
 | `model_a`, `model_b` | `string` | Hai phiên bản đem so sánh |
 | `loss` | `string` | `pinball` (trung bình 7 phân vị) |
 | `dm_stat` | `number` hoặc `null` | Thống kê DM sau hiệu chỉnh HLN |
-| `p_value` | `number` hoặc `null` | p-value kiểm định **hai phía** theo phân phối t với `T-1` bậc tự do |
+| `p_value` | `number` hoặc `null` | p-value kiểm định **hai phía** theo phân phối t với `n_obs-1` bậc tự do (`n_obs` là số cặp loss quan sát thực) |
 | `p_value_holm` | `number` hoặc `null` | p-value điều chỉnh Holm theo họ kiểm định định trước |
-| `hac_lag` | `integer` | Độ trễ HAC tối thiểu `h-1` |
+| `hac_lag` | `integer` | Độ trễ HAC sử dụng `h-1` theo chính sách đã chốt |
 | `n_obs` | `integer >= 0` | Số cặp loss hợp lệ đã so sánh |
 | `status` | `enum(string)` | `ok`, `undefined`, `not_applicable` |
 | `undefined_reason` | `string` hoặc `null` | Ví dụ `insufficient_pairs`, `nonpositive_hac_variance`, `missing_paired_loss` |
@@ -221,10 +221,20 @@ DM là phép **kiểm định hai phía** so sánh hai mô hình bằng **chuỗ
 
 - Cặp so sánh chính: **`model_a=dlinear-mvp-v1`, `model_b=baseline-252`**, vì cả hai có đủ 7 phân vị. `naive-zero` không có 7 phân vị nên không được đưa vào danh sách cặp DM pinball của MVP.
 - Quy ước dấu: `d_t = PL_A(t) - PL_B(t)`. `dm_stat < 0` nghĩa là A có pinball loss thấp hơn B; **chưa đủ để kết luận có ý nghĩa thống kê** nếu p-value chưa đạt ngưỡng.
-- DM dùng phương sai HAC (lag ≥ `h-1`), hiệu chỉnh HLN và phân phối t theo ADR-0008.
-- **Họ Holm được định trước cho từng `(model_a, model_b, sample)`**. Với `sample=all`: 4 tài sản × 7 chân trời = **28 phép kiểm định**. **[CẦN CHỐT — Khải]** Với `sample=excl_roll`, vì chỉ Brent/WTI áp dụng, nhóm cần chọn rõ: **14 phép thử** (2 tài sản × 7 h, họ có ý nghĩa đã định trước) **hay 28 vị trí** (giữ quy mô 4 tài sản × 7 h, các vị trí gold/silver không áp dụng). Không mặc định phương án 28 hoặc 14 trước khi Khải trả lời; không tự thu nhỏ họ do một số p-value `undefined`/`NaN`.
+- DM dùng phương sai HAC với `lag=h-1`, **trọng số đều (uniform)** trên các độ trễ được đưa vào (không dùng Bartlett hay đổi sang Parzen kernel), hiệu chỉnh HLN và phân phối t theo ADR-0008.
+- **Họ Holm đã chốt** cho từng `(model_a, model_b, sample)`: `sample=all` có **28 vị trí** (4 tài sản × 7 h); `sample=excl_roll` có **14 vị trí** (chỉ Brent/WTI × 7 h), đúng implementation Walk-forward hiện tại. Hai mẫu là **hai họ riêng**, không gộp thành một họ 42 vị trí. Các vị trí `undefined`/`NaN` vẫn thuộc họ đã định trước; không thu nhỏ họ theo số p-value hữu hạn.
 - **Yêu cầu đồng bộ code:** `holm_adjust()` phải có cách nhận **họ kiểm định định trước** một cách tường minh (ví dụ `family_size` hoặc danh sách đầy đủ vị trí kiểm định) và có test cho trường hợp p-value thiếu. Việc truyền vào riêng các p-value hữu hạn không được làm thay đổi quy tắc đã chốt. Phải lưu lựa chọn họ kiểm định trong cấu hình gắn với `config_hash`.
 - Nếu không đủ loss ghép cặp, phương sai HAC không dương hoặc test không tính được, trả `status=undefined`, giá trị thống kê và p-value là `null`, giữ `n_obs` bằng số cặp đã có. Không tự tính p-value từ dữ liệu không hợp lệ.
+
+**Chính sách DM khi lịch có khoảng trống — đã chốt (Khải, thay `DM_GAP_POLICY: pending`):**
+
+- **Phương pháp chính:** HAC *amplitude-modulated* (Parzen) trên **lưới phiên giao dịch gốc của từng tài sản**; không nén lịch và không xem các phiên thiếu là hai quan sát liền kề. “Parzen” ở đây chỉ cách xử lý dữ liệu thiếu theo amplitude modulation, **không** có nghĩa thay trọng số HAC uniform hiện tại bằng một *Parzen kernel*.
+- **Biểu diễn ngày thiếu:** ở phiên không có cặp pinball loss hợp lệ, đặt `d_t=0` để biểu diễn trên lưới cố định **đồng thời** đặt `observed_mask_t=False`. Giá trị 0 này chỉ là placeholder, không được tính là chênh lệch loss quan sát được. Phiên có cặp loss hợp lệ đặt `observed_mask_t=True`, `d_t=PL_A(t)-PL_B(t)`.
+- **Tự hiệp phương sai `γ_k`:** chỉ cộng những cặp `(t, t-k)` có **cả hai** `observed_mask=True` và cách nhau đúng `k` **phiên trên lịch gốc**; không ghép qua khoảng trống, không dùng cặp có placeholder. Tính trung bình chênh lệch loss và hiệu chỉnh tâm theo **các quan sát thực**, không lấy các số 0 giả làm quan sát.
+- **Độ trễ và trọng số:** giữ `hac_lag=h-1` và **trọng số đều (uniform)** cho các lag được đưa vào như chính sách DM/HAC hiện tại; giữ hiệu chỉnh **Harvey–Leybourne–Newbold (HLN)** và kiểm định hai phía. Dùng `n=n_obs` = **số cặp loss thực sự quan sát được** trong HLN và bậc tự do `n-1` của phân phối t; không lấy tổng số phiên trong lưới lịch làm `n`.
+- **Kiểm tra độ nhạy (sensitivity):** tính thêm kết quả DM trên **chuỗi chỉ gồm các quan sát thực sau khi bỏ ngày thiếu** (chuỗi nén) và báo cáo tách biệt với kết quả chính; ghi số khoảng trống, `n_obs`, DM statistic, p-value và chênh lệch kết luận. Chuỗi nén chỉ để đối chiếu, không thay thế kết quả chính.
+- **Trường hợp không tính được:** vẫn dùng `status=undefined` và các mã `undefined_reason` **đang có trong Accuracy Schema** khi thiếu cặp, không đủ quan sát hoặc phương sai HAC không dương; không tự thêm enum reason mới khi chưa được nhóm duyệt. Ghi nguyên nhân dữ liệu và số phiên thiếu trong log/manifest.
+- **Tình trạng triển khai:** đây là **quyết định về contract**, chưa phải xác nhận code đã triển khai. `src/eval/walk_forward.py` trong snapshot `developer` đang chặn các nhóm có internal session gaps (`DM_GAP_POLICY=...pending_Khai_review`); việc sửa Metrics/Walk-forward, kiểm thử, tính lại DM và tạo **run ID mới** thuộc PR implementation riêng. Không diễn giải lại hoặc ghi đè kết quả Validation 2019 đã tạo từ code cũ.
 
 ## 8. Lưu trữ và tích hợp API
 
@@ -256,12 +266,11 @@ Các hàm của `src/eval/metrics.py` chỉ tính toán (mảng → số/NaN), k
 
 `pinball_loss()` của một τ trong code **khác** metric `pinball_loss` trung bình 7 τ ở bảng; phải ánh xạ đúng. Không viết lại baseline 252 phiên ở lớp metric; dùng `baselines.py` của Khải khi đã tích hợp.
 
-## 10. Những câu hỏi còn mở cần trả lời trên PR #10
+## 10. Những câu hỏi còn mở / việc còn lại
 
-1. **[Khải — Holm `excl_roll`]** Họ kiểm định của riêng `sample=excl_roll` là **14 phép thử hợp lệ** (Brent, WTI × 7 h), hay **28 vị trí** như họ `sample=all`? Nếu chọn 28, cần chốt cách ghi vị trí `not_applicable` và điều chỉnh p-value; không quyết định theo p-value thực tế.
-2. **[Khải — phạm vi baseline]** Sau khi ARIMA bị loại khỏi MVP, đầu việc "Baseline naive và ARIMA" trong `tasks.md` được thay bằng đầu ra nào, ai cập nhật task và cách nghiệm thu?
-3. **[Khải + Tuấn — `rolling_8w`]** "8 tuần gần nhất" xác định theo ngày gốc `t` có đúng không? Neo khoảng này vào ngày chạy job hay ngày dữ liệu cuối cùng đã có? Chốt cách dùng cutoff riêng từng tài sản để API không chấm các dự báo chưa đủ `h` phiên.
-4. **[Tuấn — hạ tầng/Phase 2]** Prefix S3 `eval/` đã chốt; ai cấp quyền IAM cho `cpaws-ml` và triển khai quyền ghi/đọc? DynamoDB dùng PK/SK/index nào để query `asset`/`h`/`model_version`/khoảng thời gian? Tần suất job, overwrite và TTL ra sao?
+1. **[Khải — phạm vi baseline]** Sau khi ARIMA bị loại khỏi MVP, đầu việc "Baseline naive và ARIMA" trong `tasks.md` được thay bằng đầu ra nào, ai cập nhật task và cách nghiệm thu?
+2. **[Khải + Tuấn — `rolling_8w`]** "8 tuần gần nhất" xác định theo ngày gốc `t` có đúng không? Neo khoảng này vào ngày chạy job hay ngày dữ liệu cuối cùng đã có? Chốt cách dùng cutoff riêng từng tài sản để API không chấm các dự báo chưa đủ `h` phiên.
+3. **[Tuấn — hạ tầng/Phase 2]** Prefix S3 `eval/` đã chốt; ai cấp quyền IAM cho `cpaws-ml` và triển khai quyền ghi/đọc? DynamoDB dùng PK/SK/index nào để query `asset`/`h`/`model_version`/khoảng thời gian? Tần suất job, overwrite và TTL ra sao?
 
 Những điểm đã được Khải xác nhận về `common_mask`, `crossing_rate`, lưu `not_applicable`, `evaluation_kind`, `target_cutoff_date`, DM hai phía và phạm vi MVP **không hỏi lại**.
 
@@ -270,7 +279,9 @@ Những điểm đã được Khải xác nhận về `common_mask`, `crossing_r
 - [x] Chốt `common_mask`, ngoại lệ `crossing_rate` và cách xử lý `excl_roll` theo phản hồi Khải/ADR-0008.
 - [x] Chốt ghi dòng `not_applicable`, `evaluation_kind` bắt buộc và lưu `target_cutoff_date` thành cột hai bảng.
 - [x] Tách lưu trữ Parquet/S3 cho validation-test và DynamoDB cho `rolling_8w`.
-- [x] Xác định DM hai phía, cặp DLinear–baseline 252 và họ Holm `sample=all` gồm 4 tài sản × 7 h = 28; **họ `excl_roll` còn chờ Khải chốt 14 hay 28**.
+- [x] Chốt DM hai phía, cặp DLinear–baseline 252; Holm `sample=all` = **28**, `sample=excl_roll` = **14** vị trí theo từng họ riêng, kể cả vị trí p-value thiếu.
+- [x] Chốt chính sách DM calendar gaps: HAC amplitude-modulated (Parzen), lưới phiên và observed mask, lag `h-1`, trọng số đều, HLN dùng `n_obs` thực; có sensitivity trên chuỗi bỏ ngày thiếu.
+- [ ] Triển khai DM calendar-gap policy và tests trong PR code riêng; phát hành kết quả evaluation dưới `run_id` mới, không sửa các Parquet Validation 2019 cũ.
 - [x] Loại ARIMA khỏi **MVP theo phản hồi Khải** và không lưu `mase_returns` trong bảng metric.
 - [ ] **[CẦN CHỐT — Khải]** Đồng bộ `tasks.md`: đầu việc cũ "Baseline naive và ARIMA" và các so sánh có ARIMA chưa được sửa. Xác nhận nghiệm thu/khối lượng thay thế (ví dụ tích hợp naive làm mốc MAE, so sánh DLinear với baseline-252 đã có, test walk-forward) và cập nhật phân công sau demo.
 - [x] Hoàn tất review PR #10; commit `179db6f` đã được Tuấn approve. Chờ merge theo quy trình GitHub.
