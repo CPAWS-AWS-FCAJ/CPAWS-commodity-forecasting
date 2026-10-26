@@ -17,7 +17,11 @@ INFRA_DIR = Path(__file__).resolve().parents[1] / "infra"
 PREDICT_TAG = "def5678"
 
 
-def _synth(*, predict_repo_only: bool = False) -> dict:
+def _synth(
+    *,
+    predict_repo_only: bool = False,
+    eia_parameter_name: str | None = None,
+) -> dict:
     """Synth CpawsData, CpawsOps và CpawsServing cho env dev, trả về template dạng dict."""
     sys.path.insert(0, str(INFRA_DIR))
     try:
@@ -37,6 +41,7 @@ def _synth(*, predict_repo_only: bool = False) -> dict:
             predict_image_tag=PREDICT_TAG,
             predict_model_version="baseline-q252",
             predict_repo_only=predict_repo_only,
+            eia_parameter_name=eia_parameter_name,
         )
         ops = CpawsOpsStack(
             app,
@@ -279,3 +284,49 @@ def test_scheduler_trust_policy_is_scoped_to_account_and_schedule_group(template
 def test_schedule_belongs_to_the_group_allowed_by_the_trust_policy(templates):
     (schedule,) = _resources(templates["data"], "AWS::Scheduler::Schedule")
     assert schedule["Properties"]["GroupName"] == EXPECTED_SCHEDULE_GROUP
+
+def test_ingest_role_can_read_only_configured_eia_parameter():
+    t = _synth(eia_parameter_name="/cpaws/dev/eia-api-key")["data"]
+    fn = t["Resources"][_function_id(t, "cpaws-dev-ingest")]["Properties"]
+    env = fn["Environment"]["Variables"]
+
+    assert env["EIA_SECRET_ID"] == "/cpaws/dev/eia-api-key"
+
+    role_id = fn["Role"]["Fn::GetAtt"][0]
+    statements = _role_statements(t, role_id)
+    eia_statements = [
+        st for st in statements if "ssm:GetParameter" in st.get("Action", [])
+    ]
+
+    assert len(eia_statements) == 1
+    resource = eia_statements[0]["Resource"]
+    assert isinstance(resource, dict)
+    assert resource["Fn::Join"][1][-1] == ":parameter/cpaws/dev/eia-api-key"
+
+
+@pytest.mark.parametrize("parameter_name", ["", " ", "\t"])
+def test_empty_eia_parameter_name_is_rejected(parameter_name):
+    with pytest.raises(ValueError, match="must not be empty"):
+        _synth(eia_parameter_name=parameter_name)
+
+
+def test_eia_parameter_arn_is_rejected():
+    with pytest.raises(ValueError, match="not an ARN"):
+        _synth(
+            eia_parameter_name=(
+                "arn:aws:ssm:ap-southeast-1:123456789012:"
+                "parameter/cpaws/dev/eia-api-key"
+            )
+        )
+
+
+def test_predict_role_has_no_ssm_permissions():
+    t = _synth(eia_parameter_name="/cpaws/dev/eia-api-key")["data"]
+    fn = t["Resources"][_function_id(t, "cpaws-dev-predict")]["Properties"]
+    role_id = fn["Role"]["Fn::GetAtt"][0]
+
+    for statement in _role_statements(t, role_id):
+        actions = statement.get("Action", [])
+        if isinstance(actions, str):
+            actions = [actions]
+        assert not any(action.startswith("ssm:") for action in actions)
