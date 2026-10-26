@@ -285,6 +285,7 @@ def test_schedule_belongs_to_the_group_allowed_by_the_trust_policy(templates):
     (schedule,) = _resources(templates["data"], "AWS::Scheduler::Schedule")
     assert schedule["Properties"]["GroupName"] == EXPECTED_SCHEDULE_GROUP
 
+
 def test_ingest_role_can_read_only_configured_eia_parameter():
     t = _synth(eia_parameter_name="/cpaws/dev/eia-api-key")["data"]
     fn = t["Resources"][_function_id(t, "cpaws-dev-ingest")]["Properties"]
@@ -294,9 +295,7 @@ def test_ingest_role_can_read_only_configured_eia_parameter():
 
     role_id = fn["Role"]["Fn::GetAtt"][0]
     statements = _role_statements(t, role_id)
-    eia_statements = [
-        st for st in statements if "ssm:GetParameter" in st.get("Action", [])
-    ]
+    eia_statements = [st for st in statements if "ssm:GetParameter" in st.get("Action", [])]
 
     assert len(eia_statements) == 1
     resource = eia_statements[0]["Resource"]
@@ -314,8 +313,7 @@ def test_eia_parameter_arn_is_rejected():
     with pytest.raises(ValueError, match="not an ARN"):
         _synth(
             eia_parameter_name=(
-                "arn:aws:ssm:ap-southeast-1:123456789012:"
-                "parameter/cpaws/dev/eia-api-key"
+                "arn:aws:ssm:ap-southeast-1:123456789012:parameter/cpaws/dev/eia-api-key"
             )
         )
 

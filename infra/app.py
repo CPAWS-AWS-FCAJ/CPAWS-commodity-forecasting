@@ -29,8 +29,7 @@ ingest_image_tag = app.node.try_get_context("ingest_image_tag") or DEFAULT_INGES
 # SSM SecureString parameter name for the EIA API key.
 # Pass only the parameter name, never the API key value.
 eia_parameter_name = (
-    app.node.try_get_context("eia_parameter_name")
-    or f"/cpaws/{env_name}/eia-api-key"
+    app.node.try_get_context("eia_parameter_name") or f"/cpaws/{env_name}/eia-api-key"
 )
 predict_image_tag = app.node.try_get_context("predict_image_tag") or DEFAULT_PREDICT_IMAGE_TAG
 predict_model_version = (

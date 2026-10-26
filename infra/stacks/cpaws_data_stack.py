@@ -1,4 +1,4 @@
-﻿"""Stack CpawsData: S3 data lake, ECR, Lambda ingest, Lambda predict và lịch chạy hằng ngày.
+"""Stack CpawsData: S3 data lake, ECR, Lambda ingest, Lambda predict và lịch chạy hằng ngày.
 
 Luồng hằng ngày: Scheduler → Lambda ingest (bất đồng bộ, retry 1) → destination OnSuccess và
 OnFailure đều gọi Lambda predict (retry 0). Ingest lỗi một nguồn vẫn ghi snapshot cho tài sản tốt
@@ -147,9 +147,7 @@ class CpawsDataStack(Stack):
             if not parameter_name:
                 raise ValueError("eia_parameter_name must not be empty")
             if parameter_name.startswith("arn:"):
-                raise ValueError(
-                    "eia_parameter_name must be an SSM parameter name, not an ARN"
-                )
+                raise ValueError("eia_parameter_name must be an SSM parameter name, not an ARN")
 
             ingest_role.add_to_policy(
                 iam.PolicyStatement(
