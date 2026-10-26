@@ -14,11 +14,7 @@ QUESTION_SETS = {
             "complex": "tests/chatbot/haiku_complex_questions.jsonl",
         },
         "fixtures_dir": "tests/chatbot/fixtures",
-        "prompts": {
-            "simple": "docs/prompts/chatbot-nova-v1.md",
-            "complex": "docs/prompts/chatbot-haiku-v1.md",
-        },
-        "prompt_versions": {"simple": "chatbot-nova-v1", "complex": "chatbot-haiku-v1"},
+        "prompt_set": "v1",  # bộ prompt mặc định; lần chạy dev đổi được bằng --prompts
         "news_default_to": "2026-10-14",  # base_date của fixture v1
         "require_lock": False,
         "holdout": False,  # được chạy dev thật
@@ -30,13 +26,9 @@ QUESTION_SETS = {
             "complex": "tests/chatbot/v2/haiku_complex_questions.jsonl",
         },
         "fixtures_dir": "tests/chatbot/v2/fixtures",
-        # Khải chốt 25/10: chạy chính thức bằng prompt + tool v2. Đổi sang chatbot-*-v2.md khi
-        # prompt v2 được duyệt, TRƯỚC khi khóa SHA-256.
-        "prompts": {
-            "simple": "docs/prompts/chatbot-nova-v1.md",
-            "complex": "docs/prompts/chatbot-haiku-v1.md",
-        },
-        "prompt_versions": {"simple": "chatbot-nova-v1", "complex": "chatbot-haiku-v1"},
+        # Khải chốt 25/10: chạy chính thức bằng prompt + tool v2 (prompt v2 phải được duyệt trước
+        # khi khóa SHA-256)
+        "prompt_set": "v2",
         "news_default_to": "2026-10-21",  # base_date của fixture v2
         "require_lock": True,
         # Bộ giữ riêng: chỉ chạy official sau khi khóa; chạy dev thật bị chặn (Khải review PR #35)
@@ -46,9 +38,35 @@ QUESTION_SETS = {
     },
 }
 DEFAULT_QUESTION_SET = "v1"
-# Code được khóa cùng bộ câu hỏi (Khải 25/10: khóa cả code tool chatbot). Thêm file tool v2
-# (ví dụ src/chatbot/tools.py) vào đây khi có.
-TOOL_CODE_PATHS = ("scripts/benchmark/chatbot_benchmark.py",)
+
+# Bộ prompt và dạng đầu ra của tool get_forecast đi kèm.
+# contract: trả nguyên JSON GET /forecasts/{asset} (như lần chạy 23/10).
+# v2: qua src/chatbot/tools.py (q10/q50/q90 có tên, vàng/bạc không có giá), dùng chung hàm định
+#     dạng với Lambda API (infra/lambda/forecast_api/forecast_format.py).
+PROMPT_SETS = {
+    "v1": {
+        "prompts": {
+            "simple": "docs/prompts/chatbot-nova-v1.md",
+            "complex": "docs/prompts/chatbot-haiku-v1.md",
+        },
+        "prompt_versions": {"simple": "chatbot-nova-v1", "complex": "chatbot-haiku-v1"},
+        "tool_format": "contract",
+    },
+    "v2": {
+        "prompts": {
+            "simple": "docs/prompts/chatbot-nova-v2.md",
+            "complex": "docs/prompts/chatbot-haiku-v2.md",
+        },
+        "prompt_versions": {"simple": "chatbot-nova-v2", "complex": "chatbot-haiku-v2"},
+        "tool_format": "v2",
+    },
+}
+# Code được khóa cùng bộ câu hỏi (Khải 25/10: khóa cả code tool chatbot)
+TOOL_CODE_PATHS = (
+    "scripts/benchmark/chatbot_benchmark.py",
+    "src/chatbot/tools.py",
+    "infra/lambda/forecast_api/forecast_format.py",
+)
 RUN_TYPES = (
     "official",
     "dev",

@@ -166,7 +166,7 @@ def test_brent_forecast_numbers_never_contain_150():
 
 @pytest.mark.parametrize("branch", CB.BRANCHES)
 def test_system_prompt_is_single_text_block(branch):
-    text = CB.load_system_prompt(ROOT / CB.qcfg("v1")["prompts"][branch])
+    text = CB.load_system_prompt(ROOT / CB.pcfg("v1")["prompts"][branch])
     assert text.startswith("Bạn là trợ lý") and "Ghi chú thiết kế" not in text
 
 
@@ -725,3 +725,73 @@ def test_lock_detects_scoring_config_change(monkeypatch):
     after = CB.lock_hashes("v2")
     assert before["scoring_config"] != after["scoring_config"]
     assert {k for k in before if before[k] != after[k]} == {"scoring_config"}
+
+
+# ---------- tool get_forecast v2 trong benchmark (Khải 26/10: dùng chung định dạng Lambda API) ----------
+
+
+def _raw(path):
+    return {r["id"]: r for r in CB.load_questions(path / "raw.jsonl")}
+
+
+def test_v2_set_runs_prompt_v2_through_real_tool(tmp_path):
+    summary = CB.run(
+        CB.FakeStreamClient(V2["complex"]), "complex", tmp_path, dry_run=True, qset="v2"
+    )
+    assert (summary["prompt_set"], summary["tool_format"]) == ("v2", "v2")
+    assert summary["prompt_version"] == "chatbot-haiku-v2"
+    gold = next(
+        c for c in _raw(tmp_path)["HAIKU2-001"]["tool_calls"] if c["name"] == "get_forecast"
+    )
+    h1 = gold["result"]["horizons"][0]
+    assert {"q10_pct", "q50_pct", "q90_pct", "prob_up_pct"} <= set(h1)
+    assert "returns" not in h1 and "last_price" not in gold["result"]  # vàng: không có giá
+    assert gold["result"]["fx"] == {"usd_vnd": 26285, "date": "2026-10-21"}
+    assert len(gold["source"]["horizons"][0]["returns"]) == 7  # bản contract đứng sau, để soát nhãn
+
+
+def test_dev_run_v1_with_prompts_v2(tmp_path):
+    summary = CB.run(
+        CB.FakeStreamClient(QUESTIONS["complex"]),
+        "complex",
+        tmp_path,
+        dry_run=True,
+        run_type="dev",
+        prompt_set="v2",
+    )
+    assert (summary["question_set"], summary["prompt_set"], summary["tool_format"]) == (
+        "v1",
+        "v2",
+        "v2",
+    )
+    assert summary["auto_pass"] == 30, summary["auto_failures"]
+    nf = _raw(tmp_path)["HAIKU-022"]["tool_calls"][0]  # silver__not_found qua tool v2
+    assert nf["result"]["error"] == "not_found" and not nf["ok"]
+
+
+def test_official_run_cannot_override_prompts(tmp_path):
+    with pytest.raises(RuntimeError, match="--prompts"):
+        CB.run(CB.FakeStreamClient(QUESTIONS["simple"]), "simple", tmp_path, dry_run=False,
+               prompt_set="v2")  # fmt: skip
+
+
+def test_tool_config_v2_uses_tool_module_spec():
+    assert CB.tool_config("v2")["tools"][0] is CB.T.GET_FORECAST_TOOL_SPEC
+    assert CB.tool_config()["tools"][0]["toolSpec"]["name"] == "get_forecast"
+
+
+def test_interval_label_checked_against_source_for_v2_tool():
+    contract = json.loads((FIX_V2 / "forecasts" / "silver.json").read_text(encoding="utf-8"))
+    result = CB.T.build_forecast_result(contract)
+    call = {"name": "get_forecast", "input": {"asset": "silver"}, "ok": True, "result": result,
+            "source": contract}  # fmt: skip
+    bad = "Bạc 7 phiên: khoảng dự báo 80% từ -7,59% đến +7,48%."
+    assert CB.interval_label_errors(bad, [call]) == ["7,59"]
+    assert CB.interval_label_errors(bad, [{**call, "source": None}]) == []  # không có source
+
+
+def test_lock_includes_tool_and_shared_formatter():
+    assert {"src/chatbot/tools.py", "infra/lambda/forecast_api/forecast_format.py"} <= set(
+        C.TOOL_CODE_PATHS
+    )
+    assert all((ROOT / p).is_file() for p in C.TOOL_CODE_PATHS)

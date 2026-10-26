@@ -51,6 +51,8 @@ sys.path.insert(0, str(ROOT))
 # Nạp config sau khi thêm ROOT vào sys.path; dùng import_module để không vướng E402 ở mọi
 # phiên bản ruff (hook pre-commit và CI đang lệch phiên bản).
 C = importlib.import_module("configs.chatbot_benchmark")
+# Tool get_forecast v2 của chatbot: benchmark gọi đúng code sẽ chạy trong Lambda /chat
+T = importlib.import_module("src.chatbot.tools")
 
 BRANCHES = ("simple", "complex")
 ASSETS = ("gold", "silver", "brent", "wti")
@@ -94,6 +96,13 @@ def qcfg(qset: str) -> dict:
     if qset not in C.QUESTION_SETS:
         raise ValueError(f"bộ câu hỏi không có: {qset!r}; có {sorted(C.QUESTION_SETS)}")
     return C.QUESTION_SETS[qset]
+
+
+def pcfg(prompt_set: str) -> dict:
+    """Cấu hình của một bộ prompt (v1, v2) trong C.PROMPT_SETS: file prompt và dạng tool."""
+    if prompt_set not in C.PROMPT_SETS:
+        raise ValueError(f"bộ prompt không có: {prompt_set!r}; có {sorted(C.PROMPT_SETS)}")
+    return C.PROMPT_SETS[prompt_set]
 
 
 def questions_path(qset: str, branch: str) -> Path:
@@ -141,9 +150,10 @@ def validate_question(q: dict, branch: str, qset: str = C.DEFAULT_QUESTION_SET) 
 # ---------- tool giả lập (nhánh complex) ----------
 
 
-def tool_config() -> dict:
+def tool_config(tool_format: str = "contract") -> dict:
+    """toolConfig cho Converse. tool_format "v2": spec get_forecast lấy từ src/chatbot/tools.py."""
     asset = {"type": "string", "enum": list(ASSETS)}
-    return {
+    config = {
         "tools": [
             {
                 "toolSpec": {
@@ -181,6 +191,9 @@ def tool_config() -> dict:
         ],
         "toolChoice": {"auto": {}},
     }
+    if tool_format == "v2":
+        config["tools"][0] = T.GET_FORECAST_TOOL_SPEC
+    return config
 
 
 def _fixture_file(fixture: dict, kind: str, asset: str, qset: str) -> Path:
@@ -198,8 +211,19 @@ def _parse_date(value, default: dt.date) -> dt.date | None:
         return None
 
 
-def execute_tool(name: str, args: dict, fixture: dict, qset: str = C.DEFAULT_QUESTION_SET) -> dict:
-    """Trả kết quả fixture cho một lời gọi tool; lỗi trả dạng {"error", "message"} như contract."""
+def execute_tool(
+    name: str,
+    args: dict,
+    fixture: dict,
+    qset: str = C.DEFAULT_QUESTION_SET,
+    tool_format: str = "contract",
+) -> dict:
+    """Trả kết quả fixture cho một lời gọi tool; lỗi trả dạng {"error", "message"} như contract.
+
+    tool_format "v2": get_forecast chạy đúng hàm T.get_forecast trên fixture (dạng contract)."""
+    if name == "get_forecast" and tool_format == "v2":
+        files = {a: _fixture_file(fixture, "forecast", a, qset) for a in ASSETS}
+        return T.get_forecast(args, T.JsonFileForecastRepository(files))
     asset = args.get("asset")
     if asset not in ASSETS:
         return {"error": "invalid_asset", "message": f"Mã tài sản không hợp lệ: {asset!r}."}
@@ -235,6 +259,16 @@ def execute_tool(name: str, args: dict, fixture: dict, qset: str = C.DEFAULT_QUE
 
 
 # ---------- gọi model ----------
+
+
+def forecast_source(args: dict, fixture: dict, qset: str) -> dict | None:
+    """Bản ghi contract đầy đủ 7 phân vị đứng sau một lời gọi get_forecast (để kiểm tra nhãn
+    khoảng 80% khi tool v2 chỉ trả q10/q50/q90)."""
+    asset = args.get("asset")
+    if asset not in ASSETS:
+        return None
+    data = json.loads(_fixture_file(fixture, "forecast", asset, qset).read_text(encoding="utf-8"))
+    return data if "horizons" in data else None
 
 
 def redact_account_ids(text: str) -> str:
@@ -301,7 +335,12 @@ def stream_once(client, messages: list[dict], kwargs: dict) -> dict:
 
 
 def converse_question(
-    client, q: dict, branch: str, system_prompt: str, qset: str = C.DEFAULT_QUESTION_SET
+    client,
+    q: dict,
+    branch: str,
+    system_prompt: str,
+    qset: str = C.DEFAULT_QUESTION_SET,
+    tool_format: str = "contract",
 ) -> dict:
     """Chạy một câu hỏi: nhánh complex lặp tool tối đa MAX_TOOL_ROUNDS vòng."""
     kwargs = {
@@ -310,7 +349,7 @@ def converse_question(
         "inferenceConfig": {"maxTokens": C.MAX_TOKENS[branch], "temperature": C.TEMPERATURE},
     }
     if branch == "complex":
-        kwargs["toolConfig"] = tool_config()
+        kwargs["toolConfig"] = tool_config(tool_format)
     messages = [{"role": "user", "content": [{"text": q["question"]}]}]
     rounds, tool_calls = [], []
     t0 = time.perf_counter()
@@ -327,9 +366,13 @@ def converse_question(
             break
         results = []
         for tu in uses:
-            out = execute_tool(tu["name"], tu["input"], q.get("fixture") or {}, qset)
+            fx = q.get("fixture") or {}
+            out = execute_tool(tu["name"], tu["input"], fx, qset, tool_format)
             ok = "error" not in out
-            tool_calls.append({"name": tu["name"], "input": tu["input"], "ok": ok, "result": out})
+            call = {"name": tu["name"], "input": tu["input"], "ok": ok, "result": out}
+            if tu["name"] == "get_forecast" and tool_format == "v2" and ok:
+                call["source"] = forecast_source(tu["input"], fx, qset)
+            tool_calls.append(call)
             results.append(
                 {
                     "toolResult": {
@@ -376,14 +419,19 @@ _sleep = time.sleep  # test thay bằng hàm giả để không phải chờ th�
 
 
 def run_question(
-    client, q: dict, branch: str, system_prompt: str, qset: str = C.DEFAULT_QUESTION_SET
+    client,
+    q: dict,
+    branch: str,
+    system_prompt: str,
+    qset: str = C.DEFAULT_QUESTION_SET,
+    tool_format: str = "contract",
 ) -> dict:
     """Lỗi API: ghi mã lỗi, chạy lại câu đó đúng một lần (bị throttle thì chờ trước khi gọi lại).
     Lỗi đăng nhập (FATAL_ERROR_CODES) không ghi vào câu mà raise FatalApiError."""
     api_errors = []
     for attempt in range(2):
         try:
-            res = converse_question(client, q, branch, system_prompt, qset)
+            res = converse_question(client, q, branch, system_prompt, qset, tool_format)
             return {"api_errors": api_errors, "retried": bool(api_errors), **res}
         except (ClientError, BotoCoreError) as exc:
             code = getattr(exc, "response", {}).get("Error", {}).get("Code", type(exc).__name__)
@@ -474,11 +522,19 @@ def _numbers_in(obj) -> list[float]:
 
 
 def forecast_numbers(result: dict) -> list[float]:
-    """Số dự báo của một kết quả get_forecast: return, return ×100, giá, prob_up, prob_up ×100."""
+    """Số dự báo của một kết quả get_forecast. Dạng contract: return, return ×100, giá, prob_up,
+    prob_up ×100. Dạng v2: các trường *_pct và *_price đã tính sẵn."""
     out = []
     for h in result.get("horizons", []):
-        out += h["returns"] + [r * 100 for r in h["returns"]] + h["prices"]
-        out += [h["prob_up"], h["prob_up"] * 100]
+        if "returns" in h:
+            out += h["returns"] + [r * 100 for r in h["returns"]] + h["prices"]
+            out += [h["prob_up"], h["prob_up"] * 100]
+        else:
+            out += [
+                float(v)
+                for k, v in h.items()
+                if k.endswith(("_pct", "_price")) and isinstance(v, int | float)
+            ]
     return out
 
 
@@ -500,8 +556,10 @@ def metal_prices(tool_calls: list[dict]) -> list[float]:
     for call in tool_calls:
         res = call["result"]
         if call["name"] == "get_forecast" and call["ok"] and res.get("asset") in METALS:
-            out.append(res["last_price"])
-            out += [p for h in res["horizons"] for p in h["prices"]]
+            # tool v2 không trả giá vàng/bạc: khi đó mọi giá model nêu đều bị kiểm tra #4 bắt
+            if res.get("last_price") is not None:
+                out.append(res["last_price"])
+            out += [p for h in res.get("horizons", []) for p in h.get("prices", [])]
     return out
 
 
@@ -512,10 +570,13 @@ def _quantile_values(tool_calls: list[dict], positions: tuple[int, ...]) -> set[
     """|return| × 100 (2 chữ số) và giá (dầu) ở các vị trí phân vị cho trước, mọi kỳ hạn."""
     out: set[float] = set()
     for call in tool_calls:
-        res = call["result"]
+        # tool v2 chỉ trả q10/q50/q90: đối chiếu với bản ghi contract đầy đủ đứng sau (source)
+        res = call.get("source") or call["result"]
         if call["name"] != "get_forecast" or not call["ok"]:
             continue
         for h in res.get("horizons", []):
+            if "returns" not in h:
+                continue
             out |= {round(abs(h["returns"][i]) * 100, 2) for i in positions}
             out |= {round(h["prices"][i], 2) for i in positions}
     return out
@@ -843,8 +904,11 @@ class FakeStreamClient:
         for res in results:
             if "horizons" in res:
                 h = res["horizons"][0]
-                r10, p = h["returns"][1] * 100, h["prob_up"] * 100
-                r90 = h["returns"][5] * 100
+                if "returns" in h:
+                    r10, p = h["returns"][1] * 100, h["prob_up"] * 100
+                    r90 = h["returns"][5] * 100
+                else:
+                    r10, r90, p = h["q10_pct"], h["q90_pct"], h["prob_up_pct"]
                 parts.append(
                     f"Với {res['asset']}, khoảng dự báo q10 đến q90 kỳ hạn gần nhất từ "
                     f"{_fmt(r10)}% đến {_fmt(r90)}%, xác suất tăng {p:.0f}%."
@@ -905,7 +969,7 @@ def lock_hashes(qset: str) -> dict[str, str]:
     out = {}
     for b in BRANCHES:
         out[f"questions_{b}"] = _sha256(questions_path(qset, b))
-        out[f"prompt_{b}"] = _sha256(ROOT / cfg["prompts"][b])
+        out[f"prompt_{b}"] = _sha256(ROOT / pcfg(cfg["prompt_set"])["prompts"][b])
     out["fixtures"] = _fixtures_sha256(qset)
     out["tool_code"] = _files_sha256(ROOT / p for p in C.TOOL_CODE_PATHS)
     out["scoring_config"] = scoring_config_sha256()
@@ -975,6 +1039,7 @@ def run(
     rerun_api_errors: bool = False,
     qset: str = C.DEFAULT_QUESTION_SET,
     run_type: str = "official",
+    prompt_set: str | None = None,
 ) -> dict:
     """Chạy cả bộ câu hỏi, hoặc (rerun_api_errors) chỉ các câu lỗi API / chưa chạy trong raw.jsonl.
 
@@ -987,7 +1052,14 @@ def run(
     if run_type == "official" and not dry_run:
         verify_lock(qset)
     cfg = qcfg(qset)
-    q_path, p_path = questions_path(qset, branch), ROOT / cfg["prompts"][branch]
+    if prompt_set not in (None, cfg["prompt_set"]) and run_type == "official" and not dry_run:
+        raise RuntimeError(
+            f"lần chạy official phải dùng bộ prompt đã cấu hình cho bộ {qset} "
+            f"({cfg['prompt_set']}); --prompts chỉ dùng cho --run-type dev hoặc --dry-run"
+        )
+    pset = prompt_set or cfg["prompt_set"]
+    tool_format = pcfg(pset)["tool_format"]
+    q_path, p_path = questions_path(qset, branch), ROOT / pcfg(pset)["prompts"][branch]
     system_prompt = load_system_prompt(p_path)
     questions = load_questions(q_path)
     bad = {q.get("id"): e for q in questions if (e := validate_question(q, branch, qset))}
@@ -1019,7 +1091,7 @@ def run(
             _sleep(C.PAUSE_BETWEEN_QUESTIONS_SECONDS[branch])
         old = by_id.get(q["id"])
         try:
-            res = run_question(client, q, branch, system_prompt, qset)
+            res = run_question(client, q, branch, system_prompt, qset, tool_format)
         except FatalApiError:
             _write_raw(raw_path, questions, by_id)
             raise
@@ -1044,7 +1116,9 @@ def run(
         "branch": branch,
         "question_set": qset,
         "run_type": run_type,
-        "prompt_version": cfg["prompt_versions"][branch],
+        "prompt_set": pset,
+        "prompt_version": pcfg(pset)["prompt_versions"][branch],
+        "tool_format": tool_format,
         "model_id": C.MODEL_IDS[branch],
         "region": C.REGION,
         "api": C.API,
@@ -1101,6 +1175,12 @@ def main(argv: list[str] | None = None) -> int:
         choices=C.RUN_TYPES,
         default="official",
         help="dev: lần chạy phát triển, thư mục kết quả có hậu tố -dev",
+    )
+    ap.add_argument(
+        "--prompts",
+        choices=sorted(C.PROMPT_SETS),
+        default=None,
+        help="bộ prompt (mặc định theo bộ câu hỏi); đổi được khi --run-type dev",
     )
     ap.add_argument(
         "--print-lock",
@@ -1161,6 +1241,7 @@ def main(argv: list[str] | None = None) -> int:
             rerun_api_errors=args.rerun_api_errors,
             qset=args.qset,
             run_type=args.run_type,
+            prompt_set=args.prompts,
         )
     except FatalApiError as exc:
         print(f"DỪNG vì lỗi đăng nhập/credentials: {exc}", file=sys.stderr)

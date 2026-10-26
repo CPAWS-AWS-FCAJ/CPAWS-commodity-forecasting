@@ -121,3 +121,34 @@ Còn lại trước khi khóa (3/11):
 5. Mục 8 "Còn lại" ghi rõ: tool v2 giữ `fx.usd_vnd` và `fx.date`.
 
 **Nhỏ, đã sửa:** dòng trạng thái ở đầu file; HAIKU2-010 thêm biến thể "không phải là mô hình", "không phải từ mô hình".
+
+**Quyết định của Phước sau review (26/10):** giữ nguyên NOVA2-030 và HAIKU2-003/013/014/015, như Khải đề xuất (dùng chung khuôn câu với v1 nhưng hỏi kỳ hạn hoặc chỉ số khác).
+
+## 10. Tool `get_forecast` v2 và prompt v2 trong benchmark (26/10/2026)
+
+**Quyết định của Khải (26/10):** chatbot đọc thẳng DynamoDB (Query `Forecasts`, `ScanIndexForward=False`, `Limit=1`) và dùng chung hàm định dạng với Lambda API để giống `contract.md`; không gọi vòng qua API Gateway. Quyền `dynamodb:Query` trên bảng `Forecasts` cho role chatbot chờ Tuấn cấp khi có Lambda `/chat`.
+
+**Đã làm:**
+- **Tách phần đọc và định dạng của Lambda API** sang `infra/lambda/forecast_api/forecast_format.py` (`latest_record`, `exact_record`, `summary_item`, `detail_item`):
+  - File nằm cùng asset Lambda nên **không phải đổi CDK**.
+  - Đầu ra API giữ nguyên; test API cũ vẫn xanh, có thêm test kiểm tra tham số Query.
+- **Tool `src/chatbot/tools.py`:**
+  - Đọc DynamoDB bằng đúng `latest_record` và `detail_item`, rồi chuyển sang dạng v2: q10/q50/q90 có tên; vàng/bạc không có giá; `fx` giữ dạng `{usd_vnd, date}`.
+  - Hằng số (`ASSETS`, mức phân vị, disclaimer) lấy từ module dùng chung.
+- **Benchmark:**
+  - Thêm `PROMPT_SETS`: v1 trả JSON contract như 23/10; v2 gọi đúng `T.get_forecast` trên fixture, với tool spec lấy từ `tools.py`.
+  - Bộ câu hỏi v2 mặc định dùng prompt v2.
+  - `--prompts v2` chỉ dùng cho `--run-type dev` hoặc `--dry-run`; lần chạy official không được đổi bộ prompt.
+  - Kiểm tra nhãn khoảng 80% đối chiếu với bản contract đầy đủ đứng sau mỗi lời gọi (`source`), vì tool v2 không trả q05/q25/q75/q95.
+- **`TOOL_CODE_PATHS`** gồm `scripts/benchmark/chatbot_benchmark.py`, `src/chatbot/tools.py`, `infra/lambda/forecast_api/forecast_format.py`.
+
+**Lệnh chạy dev (Phước chạy sau `aws login --profile cpaws-dev`):**
+```
+python scripts/benchmark/chatbot_benchmark.py --branch simple --set v1 --prompts v2 --run-type dev
+python scripts/benchmark/chatbot_benchmark.py --branch complex --set v1 --prompts v2 --run-type dev
+```
+Kết quả ghi vào `docs/experiments/results/chatbot-benchmark-<ngày>-dev/`, kèm `run_type: dev`.
+
+**Ghi chú cho Tiến:** khi làm Lambda `/chat`, đóng gói kèm `infra/lambda/forecast_api/forecast_format.py` ở gốc asset (tool import thẳng `forecast_format`; trong repo thì tool tự nạp theo đường dẫn).
+
+**Còn lại trước khi khóa (3/11):** Khải duyệt prompt v2; chạy `--print-lock --set v2`, dán vào `locked_sha256` và vào đề xuất này.

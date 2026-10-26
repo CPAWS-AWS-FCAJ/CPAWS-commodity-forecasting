@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import sys
 from decimal import Decimal
 from pathlib import Path
 
@@ -11,6 +12,8 @@ HANDLER_PATH = (
     Path(__file__).resolve().parents[1] / "infra" / "lambda" / "forecast_api" / "handler.py"
 )
 
+# handler import forecast_format cùng thư mục (trong Lambda, thư mục asset nằm trên sys.path)
+sys.path.insert(0, str(HANDLER_PATH.parent))
 spec = importlib.util.spec_from_file_location("forecast_api_handler", HANDLER_PATH)
 api = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(api)
@@ -195,3 +198,25 @@ def test_response_includes_cors_headers(monkeypatch):
     assert response["headers"]["Access-Control-Allow-Origin"] == ("http://localhost:5173")
     assert response["headers"]["Access-Control-Allow-Headers"] == ("Content-Type,Authorization")
     assert response["headers"]["Access-Control-Allow-Methods"] == "GET,OPTIONS"
+
+
+def test_latest_record_query_matches_contract():
+    """Query theo asset, mới nhất trước, Limit 1 (contract.md; dùng chung với chatbot)."""
+    seen = []
+
+    class Table:
+        def query(self, **kwargs):
+            seen.append(kwargs)
+            return {"Items": [make_record("wti")]}
+
+    record = api._latest_record(Table(), "wti")
+    assert record["asset"] == "wti"
+    assert seen == [
+        {
+            "KeyConditionExpression": "#asset = :asset",
+            "ExpressionAttributeNames": {"#asset": "asset"},
+            "ExpressionAttributeValues": {":asset": "wti"},
+            "ScanIndexForward": False,
+            "Limit": 1,
+        }
+    ]
