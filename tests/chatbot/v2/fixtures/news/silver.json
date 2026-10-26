@@ -1,0 +1,32 @@
+{
+  "asset": "silver",
+  "items": [
+    {
+      "title": "Electronics makers lift orders for components",
+      "summary": "Component suppliers reported higher orders from electronics makers, a possible support for industrial silver demand.",
+      "link": "https://example.com/news/silver-electronics-orders",
+      "source": "Harbor Commodity Desk",
+      "published_at": "2026-10-20T09:45:00Z",
+      "impact_score": 2,
+      "direction": "bullish"
+    },
+    {
+      "title": "Exchange-monitored silver inventories edge lower",
+      "summary": "Inventories in exchange-monitored vaults declined for a third week.",
+      "link": "https://example.com/news/silver-vault-inventories",
+      "source": "Northfield Markets Wire",
+      "published_at": "2026-10-18T15:20:00Z",
+      "impact_score": 2,
+      "direction": "bullish"
+    },
+    {
+      "title": "Dollar firms against major currencies",
+      "summary": "A firmer dollar made dollar-priced metals slightly more expensive for overseas buyers.",
+      "link": "https://example.com/news/silver-dollar-firms",
+      "source": "Northfield Markets Wire",
+      "published_at": "2026-10-16T11:00:00Z",
+      "impact_score": 1,
+      "direction": "bearish"
+    }
+  ]
+}

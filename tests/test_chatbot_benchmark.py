@@ -25,8 +25,8 @@ CB = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(CB)
 C = CB.C
 
-FIX = ROOT / C.FIXTURES_DIR
-QUESTIONS = {b: CB.load_questions(ROOT / C.QUESTIONS[b]) for b in CB.BRANCHES}
+FIX = ROOT / CB.qcfg("v1")["fixtures_dir"]
+QUESTIONS = {b: CB.load_questions(CB.questions_path("v1", b)) for b in CB.BRANCHES}
 EXPECTED_CATEGORIES = {
     "simple": {
         "greeting": 8,
@@ -166,7 +166,7 @@ def test_brent_forecast_numbers_never_contain_150():
 
 @pytest.mark.parametrize("branch", CB.BRANCHES)
 def test_system_prompt_is_single_text_block(branch):
-    text = CB.load_system_prompt(ROOT / C.PROMPTS[branch])
+    text = CB.load_system_prompt(ROOT / CB.qcfg("v1")["prompts"][branch])
     assert text.startswith("Bạn là trợ lý") and "Ghi chú thiết kế" not in text
 
 
@@ -511,3 +511,217 @@ def test_preliminary_policy_flag_does_not_decide_final(tmp_path):
     assert "no_policy_flags" not in final["checks"]
     assert final["preliminary_auto_flags"] == {"no_policy_flags": False}
     assert final["passed"]
+
+
+# ---------- bộ câu hỏi v2 (đề xuất v2, mục 4 và 7) ----------
+
+V2 = {b: CB.load_questions(CB.questions_path("v2", b)) for b in CB.BRANCHES}
+FIX_V2 = ROOT / CB.qcfg("v2")["fixtures_dir"]
+RESULTS_2310 = ROOT / "docs" / "experiments" / "results" / "chatbot-benchmark-2026-10-23"
+
+
+@pytest.mark.parametrize("branch", CB.BRANCHES)
+def test_v2_schema_allocation_and_no_overlap_with_v1(branch):
+    qs = V2[branch]
+    errors = {q["id"]: e for q in qs if (e := CB.validate_question(q, branch, "v2"))}
+    assert errors == {}
+    assert Counter(q["category"] for q in qs) == EXPECTED_CATEGORIES[branch]
+    assert all(q["id"].startswith(("NOVA2-", "HAIKU2-")) for q in qs)
+    assert not {q["question"] for q in qs} & {q["question"] for q in QUESTIONS[branch]}
+
+
+def test_v2_ids_unique_and_haiku2_013_has_h4_tails():
+    ids = [q["id"] for b in CB.BRANCHES for q in V2[b]]
+    assert len(ids) == len(set(ids)) == 60
+    q13 = next(q for q in V2["complex"] if q["id"] == "HAIKU2-013")
+    assert {"6,55", "7,27", "6.55", "7.27"} <= set(q13["must_not_include"])
+
+
+def test_validate_rejects_bad_must_include_any():
+    q = copy.deepcopy(V2["simple"][0])
+    q["must_include_any"] = [["ok"], []]
+    assert any("must_include_any" in e for e in CB.validate_question(q, "simple", "v2"))
+
+
+@pytest.mark.parametrize(
+    "path", sorted((FIX_V2 / "forecasts").glob("*.json")), ids=lambda p: p.stem
+)
+def test_v2_forecast_fixtures_follow_contract(path):
+    d = json.loads(path.read_text(encoding="utf-8"))
+    if "error" in d:
+        assert set(d) == {"error", "message"} and d["error"] == "not_found"
+        return
+    assert d["base_date"] == "2026-10-21" and d["disclaimer"] == C.DISCLAIMER
+    for h in d["horizons"]:
+        r = h["returns"]
+        assert r == sorted(r)
+        assert h["prices"] == [round(d["last_price"] * math.exp(x), 2) for x in r]
+        assert h["prob_up"] == round(prob_up(r), 2)
+
+
+def test_v2_fixture_scenarios():
+    def load(name: str) -> dict:
+        return json.loads((FIX_V2 / "forecasts" / f"{name}.json").read_text(encoding="utf-8"))
+
+    assert all(load(a)["model_version"] == "baseline-q252" for a in CB.ASSETS)
+    assert all(load(a)["is_sample"] is False for a in CB.ASSETS)
+    assert load("silver__sample")["is_sample"] is True
+    assert load("gold__stale")["stale_sources"] == ["gold"]
+    assert load("brent__roll")["roll_in_horizon"] is True
+
+
+@pytest.mark.parametrize("path", sorted((FIX_V2 / "news").glob("*.json")), ids=lambda p: p.stem)
+def test_v2_news_fixtures_have_no_hint_fields(path):
+    d = json.loads(path.read_text(encoding="utf-8"))
+    assert set(d) == {"asset", "items"}
+    assert all(it["link"].startswith("https://example.com/") for it in d["items"])
+    assert "fictional" not in path.read_text(encoding="utf-8").lower()
+
+
+def test_news_default_window_follows_question_set():
+    v1 = CB.execute_tool("get_news", {"asset": "brent"}, {"forecast": {}, "news": {}}, "v1")
+    v2 = CB.execute_tool("get_news", {"asset": "brent"}, {"forecast": {}, "news": {}}, "v2")
+    assert (v1["from_date"], v1["to_date"]) == ("2026-10-07", "2026-10-14")
+    assert (v2["from_date"], v2["to_date"]) == ("2026-10-14", "2026-10-21")
+    low = CB.execute_tool(
+        "get_news", {"asset": "silver"}, {"news": {"silver": "news/silver__low_impact.json"}}, "v2"
+    )
+    assert low["items"] == []  # chỉ có tin impact 1, min_impact mặc định 2
+
+
+def test_must_include_any_accepts_paraphrase():
+    q = next(q for q in V2["simple"] if q["id"] == "NOVA2-020")
+    ok = CB.check_answer(q, _res("Mình không cung cấp giá vàng nhẫn trong nước, chỉ hỗ trợ GLD."))
+    assert ok["checks"]["must_include_any"] == []
+    bad = CB.check_answer(q, _res("Vàng nhẫn là một sản phẩm phổ biến ở Việt Nam."))
+    assert bad["checks"]["must_include_any"] and not bad["auto_pass"]
+
+
+def test_integer_tokens_need_integer_sources():
+    assert not CB.number_matches("1", [0.6, 0.15])  # 0,6% hay 0,15% không còn khớp "1"
+    assert CB.number_matches("52", [0.52 * 100])  # prob_up × 100
+    assert CB.number_matches("0,15", [0.15])
+    assert CB.number_matches("26.285", [26285])
+
+
+def test_interval_label_regression_on_23_10_results():
+    """Trên kết quả thật 23/10, đúng 5 câu gắn sai nhãn khoảng 80% (đã xác nhận khi chấm tay)."""
+    rows = CB.load_questions(RESULTS_2310 / "complex" / "raw.jsonl")
+    flagged = {r["id"] for r in rows if CB.interval_label_errors(r["answer"], r["tool_calls"])}
+    assert flagged == {"HAIKU-004", "HAIKU-007", "HAIKU-016", "HAIKU-019", "HAIKU-025"}
+
+
+def test_interval_label_check_fails_answer_and_accepts_q10_q90():
+    q = next(q for q in V2["complex"] if q["id"] == "HAIKU2-003")
+    call = {"name": "get_forecast", "input": {"asset": "silver"}, "ok": True,
+            "result": json.loads((FIX_V2 / "forecasts" / "silver.json").read_text(encoding="utf-8"))}  # fmt: skip
+    good = f"Bạc (SLV), kỳ hạn 7 phiên: khoảng dự báo 80% từ -5,74% đến +7,48%, xác suất tăng 56%. {C.DISCLAIMER}"
+    out = CB.check_answer(q, _res(good, [call]))
+    assert out["checks"]["interval_label"] == [] and out["auto_pass"], out["failures"]
+    bad = good.replace("-5,74%", "-7,59%")
+    out = CB.check_answer(q, _res(bad, [call]))
+    assert out["checks"]["interval_label"] == ["7,59"] and "interval_label" in out["failures"]
+
+
+@pytest.mark.parametrize("branch", CB.BRANCHES)
+def test_v2_dry_run_all_auto_pass(tmp_path, branch):
+    summary = CB.run(CB.FakeStreamClient(V2[branch]), branch, tmp_path, dry_run=True, qset="v2")
+    assert summary["auto_pass"] == 30 and summary["auto_stage_passed"], summary["auto_failures"]
+    assert summary["question_set"] == "v2" and summary["run_type"] == "official"
+    assert summary["auto_checks"]["no_interval_mislabel"]
+    assert set(summary["manual_recheck_ids"]) <= {q["id"] for q in V2[branch]}
+
+
+def test_dev_run_is_marked(tmp_path):
+    summary = CB.run(
+        CB.FakeStreamClient(QUESTIONS["simple"]), "simple", tmp_path, dry_run=True, run_type="dev"
+    )
+    assert summary["run_type"] == "dev" and summary["final_note"].startswith("LẦN CHẠY PHÁT TRIỂN")
+
+
+def test_official_v2_requires_matching_lock(tmp_path, monkeypatch):
+    client = CB.FakeStreamClient(V2["simple"])
+    with pytest.raises(RuntimeError, match="chưa khóa"):
+        CB.run(client, "simple", tmp_path / "a", dry_run=False, qset="v2")
+    sets = copy.deepcopy(C.QUESTION_SETS)
+    sets["v2"]["locked_sha256"] = {**CB.lock_hashes("v2"), "fixtures": "0" * 64}
+    monkeypatch.setattr(C, "QUESTION_SETS", sets)
+    with pytest.raises(RuntimeError, match="fixtures"):
+        CB.run(client, "simple", tmp_path / "b", dry_run=False, qset="v2")
+    sets["v2"]["locked_sha256"] = CB.lock_hashes("v2")
+    summary = CB.run(client, "simple", tmp_path / "c", dry_run=False, qset="v2")
+    assert summary["auto_pass"] == 30
+
+
+def test_lock_covers_tool_code():
+    keys = set(CB.lock_hashes("v2"))
+    assert keys == {
+        "questions_simple",
+        "questions_complex",
+        "prompt_simple",
+        "prompt_complex",
+        "fixtures",
+        "tool_code",
+        "scoring_config",
+    }
+
+
+def test_print_lock_cli(capsys):
+    assert CB.main(["--print-lock", "--set", "v2"]) == 0
+    assert set(json.loads(capsys.readouterr().out)) == set(CB.lock_hashes("v2"))
+
+
+def test_instruction_compliance_is_recorded_not_counted(tmp_path):
+    CB.run(CB.FakeStreamClient(V2["simple"]), "simple", tmp_path, dry_run=True, qset="v2")
+    path = tmp_path / "manual_review.csv"
+    with path.open(encoding="utf-8-sig", newline="") as f:
+        rows = list(csv.DictReader(f))
+    assert "tuan_thu_chi_dan" in rows[0]
+    for r in rows:
+        r.update(
+            dung_y="1", du_y="1", dung_chinh_sach="1", tuan_thu_chi_dan="0", nguoi_cham="Phước"
+        )
+    with path.open("w", encoding="utf-8-sig", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=CB.MANUAL_COLUMNS)
+        w.writeheader()
+        w.writerows(rows)
+    final = CB.score_manual(tmp_path, "simple")["final"]
+    assert final["passed"] and final["passed_questions"] == 30
+    assert len(final["instruction_compliance"]["zero_ids"]) == 30
+
+
+def test_score_manual_reads_v1_csv_without_instruction_column():
+    """File chấm tay 23/10 (không có cột tuan_thu_chi_dan) vẫn đọc được."""
+    with (RESULTS_2310 / "simple" / "manual_review.csv").open(encoding="utf-8-sig") as f:
+        assert "tuan_thu_chi_dan" not in next(csv.reader(f))
+
+
+def test_cli_official_v2_without_lock_stops_before_bedrock(capsys, monkeypatch):
+    monkeypatch.setattr(CB, "bedrock_client", lambda *a: pytest.fail("không được tạo client"))
+    assert CB.main(["--branch", "simple", "--set", "v2"]) == 2
+    assert "chưa khóa" in capsys.readouterr().err
+
+
+def test_real_dev_run_on_holdout_v2_is_blocked(tmp_path, capsys, monkeypatch):
+    """Khải review PR #35: --set v2 --run-type dev (không --dry-run) không được gọi Bedrock."""
+    with pytest.raises(RuntimeError, match="giữ riêng"):
+        CB.run(CB.FakeStreamClient(V2["simple"]), "simple", tmp_path / "a", dry_run=False,
+               qset="v2", run_type="dev")  # fmt: skip
+    monkeypatch.setattr(CB, "bedrock_client", lambda *a: pytest.fail("không được tạo client"))
+    assert CB.main(["--branch", "complex", "--set", "v2", "--run-type", "dev"]) == 2
+    assert "giữ riêng" in capsys.readouterr().err
+    # dev thật trên v1 và dry-run trên v2 vẫn được phép
+    assert CB.run(CB.FakeStreamClient(QUESTIONS["simple"]), "simple", tmp_path / "b",
+                  dry_run=False, run_type="dev")["run_type"] == "dev"  # fmt: skip
+    assert CB.run(CB.FakeStreamClient(V2["simple"]), "simple", tmp_path / "c", dry_run=True,
+                  qset="v2", run_type="dev")["auto_pass"] == 30  # fmt: skip
+
+
+def test_lock_detects_scoring_config_change(monkeypatch):
+    before = CB.lock_hashes("v2")
+    monkeypatch.setattr(
+        C, "THRESHOLDS", {**C.THRESHOLDS, "simple": {"min_pass": 20, "max_truncated": 1}}
+    )
+    after = CB.lock_hashes("v2")
+    assert before["scoring_config"] != after["scoring_config"]
+    assert {k for k in before if before[k] != after[k]} == {"scoring_config"}

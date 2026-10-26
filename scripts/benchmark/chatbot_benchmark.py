@@ -5,6 +5,13 @@ Chạy:
     python scripts/benchmark/chatbot_benchmark.py --branch complex            # Bedrock thật
     python scripts/benchmark/chatbot_benchmark.py --branch complex --rerun-api-errors
     python scripts/benchmark/chatbot_benchmark.py --branch complex --score-manual <thư mục kết quả>
+    python scripts/benchmark/chatbot_benchmark.py --branch simple --set v1 --run-type dev   # phát triển
+    python scripts/benchmark/chatbot_benchmark.py --print-lock --set v2                    # khóa SHA-256
+
+Bộ câu hỏi chọn bằng --set (v1, v2; mặc định v1). Lần chạy official của bộ có require_lock (v2)
+phải khớp locked_sha256 trong config (câu hỏi, prompt, fixture, code tool), nếu không thì dừng
+trước khi gọi Bedrock. --run-type dev ghi run_type "dev" và thư mục có hậu tố -dev; kết quả dev
+không báo cáo như kết quả đạt.
 
 Mỗi câu gọi model một lần qua ConverseStream (temperature 0), đo TTFT, latency, token và
 stopReason. Nhánh complex có tool get_forecast/get_news trả về fixture, toolChoice auto, tối đa
@@ -16,7 +23,7 @@ chạy, giữ nguyên các câu đã có kết quả.
 
 Ghi raw.jsonl (từng câu), summary.json (kiểm tra tự động, ngưỡng, hiệu năng, chi phí) và
 manual_review.csv (mẫu chấm tay rubric 0/1) vào
-<RESULTS_DIR>/chatbot-benchmark-<YYYY-MM-DD>[-dryrun]/<nhánh>/. Không ghi đè kết quả chạy thật đã
+<RESULTS_DIR>/chatbot-benchmark-<YYYY-MM-DD>[-<bộ>][-dev][-dryrun]/<nhánh>/. Không ghi đè kết quả chạy thật đã
 có, trừ khi truyền --force. --score-manual đọc manual_review.csv đã chấm và ghi kết luận cuối vào
 summary.json. Cấu hình: configs/chatbot_benchmark.py.
 """
@@ -27,6 +34,7 @@ import argparse
 import csv
 import datetime as dt
 import hashlib
+import importlib
 import json
 import random
 import re
@@ -40,8 +48,9 @@ from botocore.exceptions import BotoCoreError, ClientError
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
-
-from configs import chatbot_benchmark as C
+# Nạp config sau khi thêm ROOT vào sys.path; dùng import_module để không vướng E402 ở mọi
+# phiên bản ruff (hook pre-commit và CI đang lệch phiên bản).
+C = importlib.import_module("configs.chatbot_benchmark")
 
 BRANCHES = ("simple", "complex")
 ASSETS = ("gold", "silver", "brent", "wti")
@@ -80,8 +89,20 @@ def load_questions(path: Path) -> list[dict]:
     return [json.loads(line) for line in lines if line.strip()]
 
 
-def validate_question(q: dict, branch: str) -> list[str]:
-    """Schema một dòng JSONL (mục 5 và 12 của đề xuất) và fixture được tham chiếu tồn tại."""
+def qcfg(qset: str) -> dict:
+    """Cấu hình của một bộ câu hỏi (v1, v2) trong C.QUESTION_SETS."""
+    if qset not in C.QUESTION_SETS:
+        raise ValueError(f"bộ câu hỏi không có: {qset!r}; có {sorted(C.QUESTION_SETS)}")
+    return C.QUESTION_SETS[qset]
+
+
+def questions_path(qset: str, branch: str) -> Path:
+    return ROOT / qcfg(qset)["questions"][branch]
+
+
+def validate_question(q: dict, branch: str, qset: str = C.DEFAULT_QUESTION_SET) -> list[str]:
+    """Schema một dòng JSONL (mục 5 và 12 của đề xuất; must_include_any từ đề xuất v2) và fixture
+    được tham chiếu tồn tại trong thư mục fixture của bộ câu hỏi."""
     errors = [
         f"{k}: thiếu hoặc sai kiểu"
         for k, t in REQUIRED_FIELDS.items()
@@ -89,6 +110,11 @@ def validate_question(q: dict, branch: str) -> list[str]:
     ]
     if errors:
         return errors
+    groups = q.get("must_include_any", [])
+    if not isinstance(groups, list) or not all(
+        isinstance(g, list) and g and all(isinstance(s, str) and s for s in g) for g in groups
+    ):
+        errors.append("must_include_any phải là danh sách các nhóm chuỗi không rỗng")
     if q["branch"] != branch:
         errors.append(f"branch {q['branch']} khác {branch}")
     unknown = set(q["expected_tools"]) - set(TOOLS)
@@ -107,7 +133,7 @@ def validate_question(q: dict, branch: str) -> list[str]:
         for asset, rel in fx[kind].items():
             if asset not in ASSETS:
                 errors.append(f"fixture {kind}: tài sản lạ {asset}")
-            elif not (ROOT / C.FIXTURES_DIR / rel).is_file():
+            elif not (ROOT / qcfg(qset)["fixtures_dir"] / rel).is_file():
                 errors.append(f"fixture {kind}: không thấy {rel}")
     return errors
 
@@ -157,10 +183,10 @@ def tool_config() -> dict:
     }
 
 
-def _fixture_file(fixture: dict, kind: str, asset: str) -> Path:
+def _fixture_file(fixture: dict, kind: str, asset: str, qset: str) -> Path:
     folder = "forecasts" if kind == "forecast" else "news"
     rel = fixture.get(kind, {}).get(asset, f"{folder}/{asset}.json")
-    return ROOT / C.FIXTURES_DIR / rel
+    return ROOT / qcfg(qset)["fixtures_dir"] / rel
 
 
 def _parse_date(value, default: dt.date) -> dt.date | None:
@@ -172,16 +198,17 @@ def _parse_date(value, default: dt.date) -> dt.date | None:
         return None
 
 
-def execute_tool(name: str, args: dict, fixture: dict) -> dict:
+def execute_tool(name: str, args: dict, fixture: dict, qset: str = C.DEFAULT_QUESTION_SET) -> dict:
     """Trả kết quả fixture cho một lời gọi tool; lỗi trả dạng {"error", "message"} như contract."""
     asset = args.get("asset")
     if asset not in ASSETS:
         return {"error": "invalid_asset", "message": f"Mã tài sản không hợp lệ: {asset!r}."}
     if name == "get_forecast":
-        return json.loads(_fixture_file(fixture, "forecast", asset).read_text(encoding="utf-8"))
+        path = _fixture_file(fixture, "forecast", asset, qset)
+        return json.loads(path.read_text(encoding="utf-8"))
     if name != "get_news":
         return {"error": "unknown_tool", "message": f"Không có tool {name!r}."}
-    to_default = dt.date.fromisoformat(C.NEWS_DEFAULT_TO)
+    to_default = dt.date.fromisoformat(qcfg(qset)["news_default_to"])
     to_date = _parse_date(args.get("to_date"), to_default)
     from_date = _parse_date(
         args.get("from_date"), (to_date or to_default) - dt.timedelta(days=C.NEWS_DEFAULT_DAYS)
@@ -191,7 +218,7 @@ def execute_tool(name: str, args: dict, fixture: dict) -> dict:
     min_impact = args.get("min_impact", C.NEWS_DEFAULT_MIN_IMPACT)
     if not isinstance(min_impact, int) or isinstance(min_impact, bool):
         min_impact = C.NEWS_DEFAULT_MIN_IMPACT
-    data = json.loads(_fixture_file(fixture, "news", asset).read_text(encoding="utf-8"))
+    data = json.loads(_fixture_file(fixture, "news", asset, qset).read_text(encoding="utf-8"))
     items = [
         it
         for it in data["items"]
@@ -273,7 +300,9 @@ def stream_once(client, messages: list[dict], kwargs: dict) -> dict:
     }
 
 
-def converse_question(client, q: dict, branch: str, system_prompt: str) -> dict:
+def converse_question(
+    client, q: dict, branch: str, system_prompt: str, qset: str = C.DEFAULT_QUESTION_SET
+) -> dict:
     """Chạy một câu hỏi: nhánh complex lặp tool tối đa MAX_TOOL_ROUNDS vòng."""
     kwargs = {
         "modelId": C.MODEL_IDS[branch],
@@ -298,7 +327,7 @@ def converse_question(client, q: dict, branch: str, system_prompt: str) -> dict:
             break
         results = []
         for tu in uses:
-            out = execute_tool(tu["name"], tu["input"], q.get("fixture") or {})
+            out = execute_tool(tu["name"], tu["input"], q.get("fixture") or {}, qset)
             ok = "error" not in out
             tool_calls.append({"name": tu["name"], "input": tu["input"], "ok": ok, "result": out})
             results.append(
@@ -346,13 +375,15 @@ class FatalApiError(RuntimeError):
 _sleep = time.sleep  # test thay bằng hàm giả để không phải chờ thật
 
 
-def run_question(client, q: dict, branch: str, system_prompt: str) -> dict:
+def run_question(
+    client, q: dict, branch: str, system_prompt: str, qset: str = C.DEFAULT_QUESTION_SET
+) -> dict:
     """Lỗi API: ghi mã lỗi, chạy lại câu đó đúng một lần (bị throttle thì chờ trước khi gọi lại).
     Lỗi đăng nhập (FATAL_ERROR_CODES) không ghi vào câu mà raise FatalApiError."""
     api_errors = []
     for attempt in range(2):
         try:
-            res = converse_question(client, q, branch, system_prompt)
+            res = converse_question(client, q, branch, system_prompt, qset)
             return {"api_errors": api_errors, "retried": bool(api_errors), **res}
         except (ClientError, BotoCoreError) as exc:
             code = getattr(exc, "response", {}).get("Error", {}).get("Code", type(exc).__name__)
@@ -413,9 +444,15 @@ def _candidates(token: str) -> list[tuple[float, int]]:
 
 
 def number_matches(token: str, sources) -> bool:
-    """Khớp nếu nguồn làm tròn đến số chữ số thập phân của token bằng token (so trị tuyệt đối)."""
+    """Khớp nếu nguồn làm tròn đến số chữ số thập phân của token bằng token (so trị tuyệt đối).
+
+    Số nguyên chỉ khớp nguồn cũng là số nguyên (đề xuất v2, mục 4.4): "1" hay "0" không còn
+    khớp nhờ làm tròn một return như 0,6% hay 0,15%. prob_up × 100, tỷ giá, mức h vẫn là số nguyên.
+    """
     for value, decimals in _candidates(token):
         for s in sources:
+            if decimals == 0 and abs(s - round(s)) > 1e-6:
+                continue
             if abs(round(abs(s), decimals) - value) < 1e-9:
                 return True
     return False
@@ -468,8 +505,54 @@ def metal_prices(tool_calls: list[dict]) -> list[float]:
     return out
 
 
+_SEGMENT = re.compile(r"\n|[.;!?](?!\d)")
+
+
+def _quantile_values(tool_calls: list[dict], positions: tuple[int, ...]) -> set[float]:
+    """|return| × 100 (2 chữ số) và giá (dầu) ở các vị trí phân vị cho trước, mọi kỳ hạn."""
+    out: set[float] = set()
+    for call in tool_calls:
+        res = call["result"]
+        if call["name"] != "get_forecast" or not call["ok"]:
+            continue
+        for h in res.get("horizons", []):
+            out |= {round(abs(h["returns"][i]) * 100, 2) for i in positions}
+            out |= {round(h["prices"][i], 2) for i in positions}
+    return out
+
+
+def interval_label_errors(answer: str, tool_calls: list[dict]) -> list[str]:
+    """Số bị gọi là "khoảng 80%" nhưng là q05/q25/q75/q95 (đề xuất v2 mục 4.3, Khải 25/10).
+
+    Xét từng đoạn (dòng, câu) có cụm trong INTERVAL_LABEL_TRIGGERS; số trong đoạn khớp q05/q25/
+    q75/q95 mà không khớp q10/q90 (của bất kỳ kỳ hạn nào) là gắn sai nhãn."""
+    wrong = _quantile_values(tool_calls, (0, 2, 4, 6))
+    right = _quantile_values(tool_calls, (1, 5))
+    if not wrong:
+        return []
+    bad = []
+    for seg in _SEGMENT.split(_norm(answer)):
+        if not any(trig in seg for trig in C.INTERVAL_LABEL_TRIGGERS):
+            continue
+        for tok in extract_numbers(seg):
+            values = {round(v, 2) for v, _ in _candidates(tok)}
+            if values & wrong and not values & right:
+                bad.append(tok)
+    return bad
+
+
+def missing_any_groups(q: dict, normalized_answer: str) -> list[list[str]]:
+    """Các nhóm trong must_include_any không có cụm nào xuất hiện trong câu trả lời."""
+    return [
+        g
+        for g in q.get("must_include_any", [])
+        if not any(_norm(s) in normalized_answer for s in g)
+    ]
+
+
 def check_answer(q: dict, res: dict) -> dict:
-    """Kiểm tra tự động #1–#6 (mục 6) và kiểm tra giá vàng/bạc (mục 12)."""
+    """Kiểm tra tự động #1–#6 (mục 6), giá vàng/bạc (mục 12), must_include_any và nhãn khoảng
+    80% (đề xuất v2, mục 4 và 7)."""
     answer = res["answer"]
     a = _norm(answer)
     calls = res.get("tool_calls", [])
@@ -498,11 +581,13 @@ def check_answer(q: dict, res: dict) -> dict:
         "answered": bool(answer),
         "vietnamese": is_vietnamese(answer),
         "must_include": [s for s in q["must_include"] if _norm(s) not in a],
+        "must_include_any": missing_any_groups(q, a),
         "must_not_include": [s for s in q["must_not_include"] if _norm(s) in a],
         "tools_missing": sorted(set(q["expected_tools"]) - set(called)),
         "tool_called_when_not_expected": bool(called) and not q["expects_tool"],
         "unsourced_numbers": unsourced,
         "metal_price_numbers": sorted(set(metal_hits)),
+        "interval_label": interval_label_errors(answer, calls),
         "forecast_answer": has_forecast,
         "forecast_missing": [],
         "truncated": res.get("truncated", False),
@@ -532,13 +617,19 @@ def _pct(values: list[float], p: float) -> float | None:
     return round(statistics.quantiles(values, n=100, method="inclusive")[int(p) - 1], 1)
 
 
-def manual_recheck_ids() -> list[str]:
-    """10 câu Khải chấm lại, chọn ngẫu nhiên (seed 7) trên cả 60 câu của hai bài."""
-    ids = sorted(q["id"] for b in BRANCHES for q in load_questions(ROOT / C.QUESTIONS[b]))
+def manual_recheck_ids(qset: str = C.DEFAULT_QUESTION_SET) -> list[str]:
+    """10 câu Khải chấm lại, chọn ngẫu nhiên (seed 7) trên cả 60 câu của hai bài trong bộ."""
+    ids = sorted(q["id"] for b in BRANCHES for q in load_questions(questions_path(qset, b)))
     return sorted(random.Random(C.MANUAL_RECHECK_SEED).sample(ids, C.MANUAL_RECHECK_SIZE))
 
 
-def summarize(branch: str, questions: list[dict], records: list[dict]) -> dict:
+def summarize(
+    branch: str,
+    questions: list[dict],
+    records: list[dict],
+    qset: str = C.DEFAULT_QUESTION_SET,
+    run_type: str = "official",
+) -> dict:
     by_id = {r["id"]: r for r in records}
     ok = [r for r in records if r["status"] != "api_error"]
     n_pass = sum(r["auto_pass"] for r in ok)
@@ -560,6 +651,7 @@ def summarize(branch: str, questions: list[dict], records: list[dict]) -> dict:
     unsourced = [r["id"] for r in ok if r["checks"]["unsourced_numbers"]]
     metal = [r["id"] for r in ok if r["checks"]["metal_price_numbers"]]
     truncated = [r["id"] for r in ok if r["checks"]["truncated"]]
+    mislabeled = [r["id"] for r in ok if r["checks"].get("interval_label")]
     checks = {
         "auto_pass_at_least_min": n_pass >= th["min_pass"],
         "no_policy_flags": not policy,
@@ -567,6 +659,7 @@ def summarize(branch: str, questions: list[dict], records: list[dict]) -> dict:
         "truncated_within_limit": len(truncated) <= th["max_truncated"],
         "no_api_error_left": len(ok) == len(records),
         "all_questions_run": len(records) == len(questions),
+        "no_interval_mislabel": not mislabeled,
     }
     tool_acc = round(tool_hit / len(tool_q), 4) if tool_q else None
     if "min_tool_accuracy" in th:
@@ -578,7 +671,13 @@ def summarize(branch: str, questions: list[dict], records: list[dict]) -> dict:
     tin = sum(r.get("input_tokens", 0) for r in ok)
     tout = sum(r.get("output_tokens", 0) for r in ok)
     price = C.PRICES_PER_M[branch]
-    recheck = [i for i in manual_recheck_ids() if i in by_id]
+    recheck = [i for i in manual_recheck_ids(qset) if i in by_id]
+    note = (
+        "Kết luận cuối cần rubric chấm tay: điền manual_review.csv rồi chạy --score-manual. "
+        "Câu đạt = qua mọi kiểm tra tự động và rubric = 1."
+    )
+    if run_type == "dev":
+        note = "LẦN CHẠY PHÁT TRIỂN: không báo cáo như kết quả đạt. " + note
     return {
         "n_questions": len(questions),
         "auto_pass": n_pass,
@@ -587,6 +686,7 @@ def summarize(branch: str, questions: list[dict], records: list[dict]) -> dict:
         "injection_followed": injection if branch == "complex" else None,
         "unsourced_number_questions": unsourced,
         "metal_price_questions": metal,
+        "interval_mislabel_questions": mislabeled,
         "truncated": truncated,
         "tool_accuracy": tool_acc if branch == "complex" else None,
         "api_errors": {r["id"]: r["api_errors"] for r in records if r["api_errors"]},
@@ -594,8 +694,7 @@ def summarize(branch: str, questions: list[dict], records: list[dict]) -> dict:
         "auto_checks": checks,
         "auto_stage_passed": all(checks.values()),
         "final": None,
-        "final_note": "Kết luận cuối cần rubric chấm tay: điền manual_review.csv rồi chạy "
-        "--score-manual. Câu đạt = qua mọi kiểm tra tự động và rubric = 1.",
+        "final_note": note,
         "manual_recheck_ids": recheck,
         "performance": {
             "ttft_ms_median": _pct(ttft, 50),
@@ -625,6 +724,7 @@ MANUAL_COLUMNS = [
     "dung_y",
     "du_y",
     "dung_chinh_sach",
+    "tuan_thu_chi_dan",  # chỉ ghi nhận, không tính vào câu đạt (Khải 25/10)
     "nguoi_cham",
     "ghi_chu",
 ]
@@ -669,6 +769,13 @@ def score_manual(out_dir: Path, branch: str) -> dict:
     }
     passed_ids = [r["id"] for r in rows if r["auto_pass"] == "1" and rubric[r["id"]]]
     policy_manual = [r["id"] for r in rows if r["dung_chinh_sach"].strip() == "0"]
+    # tuan_thu_chi_dan: tùy chọn (file v1 không có cột này), chỉ ghi nhận
+    instruction = [(r.get("tuan_thu_chi_dan") or "").strip() for r in rows]
+    bad_instruction = [
+        r["id"] for r, v in zip(rows, instruction, strict=True) if v not in ("", "0", "1")
+    ]
+    if bad_instruction:
+        raise ValueError(f"tuan_thu_chi_dan chỉ nhận 0, 1 hoặc để trống: {bad_instruction}")
     checks = dict(summary["auto_checks"])
     checks.pop("auto_pass_at_least_min")
     # Cờ chính sách tự động chỉ là cờ sơ bộ (dựa trên must_include/must_not_include); vi phạm
@@ -683,6 +790,11 @@ def score_manual(out_dir: Path, branch: str) -> dict:
         "graders": sorted({r["nguoi_cham"].strip() for r in rows}),
         "checks": checks,
         "preliminary_auto_flags": preliminary,
+        "instruction_compliance": {
+            "note": "Chỉ ghi nhận, không tính vào câu đạt.",
+            "graded": sum(v in ("0", "1") for v in instruction),
+            "zero_ids": [r["id"] for r, v in zip(rows, instruction, strict=True) if v == "0"],
+        },
         "passed": all(checks.values()),
     }
     (out_dir / "summary.json").write_text(
@@ -742,6 +854,7 @@ class FakeStreamClient:
                 d = dt.date.fromisoformat(it["published_at"][:10]).strftime("%d/%m/%Y")
                 parts.append(f"Tin đáng chú ý (Nguồn: {it['source']}, {d}, {it['link']}).")
         parts += q["must_include"]
+        parts += [g[0] for g in q.get("must_include_any", [])]
         if forecast:
             parts.append(C.DISCLAIMER)
         return " ".join(parts)
@@ -773,11 +886,76 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def _fixtures_sha256() -> str:
+def _files_sha256(paths) -> str:
+    """Một SHA-256 cho nhiều file: băm theo thứ tự đường dẫn, gồm cả đường dẫn tương đối."""
     h = hashlib.sha256()
-    for p in sorted((ROOT / C.FIXTURES_DIR).rglob("*.json")):
+    for p in sorted(paths):
         h.update(p.relative_to(ROOT).as_posix().encode() + b"\0" + p.read_bytes())
     return h.hexdigest()
+
+
+def _fixtures_sha256(qset: str = C.DEFAULT_QUESTION_SET) -> str:
+    return _files_sha256((ROOT / qcfg(qset)["fixtures_dir"]).rglob("*.json"))
+
+
+def lock_hashes(qset: str) -> dict[str, str]:
+    """SHA-256 khóa trước lần chạy chính thức (đề xuất v2, mục 5 và 7): câu hỏi, prompt, fixture,
+    code tool/chấm điểm (TOOL_CODE_PATHS) và cấu hình chấm điểm (scoring_config)."""
+    cfg = qcfg(qset)
+    out = {}
+    for b in BRANCHES:
+        out[f"questions_{b}"] = _sha256(questions_path(qset, b))
+        out[f"prompt_{b}"] = _sha256(ROOT / cfg["prompts"][b])
+    out["fixtures"] = _fixtures_sha256(qset)
+    out["tool_code"] = _files_sha256(ROOT / p for p in C.TOOL_CODE_PATHS)
+    out["scoring_config"] = scoring_config_sha256()
+    return out
+
+
+def scoring_config_sha256() -> str:
+    """SHA-256 của các tham số gọi model và chấm điểm trong config (Khải review PR #35): đổi
+    ngưỡng, số được phép, nhãn khoảng 80% hay cấu hình model sau khi khóa thì lệch khóa."""
+    names = sorted(
+        (
+            "THRESHOLDS", "INTERVAL_LABEL_TRIGGERS", "GENERIC_ALLOWED_NUMBERS", "MODEL_IDS",
+            "MAX_TOKENS", "TEMPERATURE", "MAX_TOOL_ROUNDS", "DISCLAIMER", "METAL_PRICE_REL_TOL",
+            "VIETNAMESE_MIN_WORD_RATIO", "POLICY_CATEGORIES", "INJECTION_CATEGORY",
+            "NEWS_DEFAULT_DAYS", "NEWS_DEFAULT_MIN_IMPACT", "MANUAL_RECHECK_SIZE",
+            "MANUAL_RECHECK_SEED",
+        )
+    )  # fmt: skip
+    payload = json.dumps(
+        {n: getattr(C, n) for n in names}, sort_keys=True, ensure_ascii=False, default=list
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def check_dev_allowed(qset: str) -> None:
+    """Bộ giữ riêng (holdout, ví dụ v2) không được chạy dev thật: chỉ chạy official một lần sau
+    khi khóa, để kết quả chính thức không bị ảnh hưởng bởi việc sửa prompt/tool theo bộ đó."""
+    if qcfg(qset).get("holdout"):
+        raise RuntimeError(
+            f"bộ {qset} là bộ giữ riêng: không chạy dev thật trên bộ này (dùng --set v1 cho "
+            "lần chạy phát triển, hoặc --dry-run để kiểm tra luồng)"
+        )
+
+
+def verify_lock(qset: str) -> None:
+    """Lần chạy official của bộ có require_lock phải khớp locked_sha256; lệch hoặc chưa khóa thì
+    dừng trước khi gọi model."""
+    cfg = qcfg(qset)
+    if not cfg["require_lock"]:
+        return
+    locked = cfg["locked_sha256"]
+    if not locked:
+        raise RuntimeError(
+            f"bộ {qset} chưa khóa SHA-256: chạy --print-lock --set {qset}, dán vào "
+            "locked_sha256 trong configs/chatbot_benchmark.py sau khi Khải duyệt"
+        )
+    current = lock_hashes(qset)
+    diff = sorted(k for k in set(locked) | set(current) if locked.get(k) != current.get(k))
+    if diff:
+        raise RuntimeError(f"bộ {qset} lệch khóa SHA-256 ở: {diff}")
 
 
 def _write_raw(path: Path, questions: list[dict], by_id: dict[str, dict]) -> None:
@@ -795,15 +973,24 @@ def run(
     dry_run: bool,
     force: bool = False,
     rerun_api_errors: bool = False,
+    qset: str = C.DEFAULT_QUESTION_SET,
+    run_type: str = "official",
 ) -> dict:
     """Chạy cả bộ câu hỏi, hoặc (rerun_api_errors) chỉ các câu lỗi API / chưa chạy trong raw.jsonl.
 
     raw.jsonl được ghi lại sau mỗi câu, nên khi gặp FatalApiError các câu đã xong vẫn còn; đăng
     nhập lại rồi chạy với --rerun-api-errors để chạy nốt."""
-    q_path, p_path = ROOT / C.QUESTIONS[branch], ROOT / C.PROMPTS[branch]
+    if run_type not in C.RUN_TYPES:
+        raise ValueError(f"run_type phải là một trong {C.RUN_TYPES}")
+    if run_type == "dev" and not dry_run:
+        check_dev_allowed(qset)
+    if run_type == "official" and not dry_run:
+        verify_lock(qset)
+    cfg = qcfg(qset)
+    q_path, p_path = questions_path(qset, branch), ROOT / cfg["prompts"][branch]
     system_prompt = load_system_prompt(p_path)
     questions = load_questions(q_path)
-    bad = {q.get("id"): e for q in questions if (e := validate_question(q, branch))}
+    bad = {q.get("id"): e for q in questions if (e := validate_question(q, branch, qset))}
     if bad:
         raise ValueError(f"bộ câu hỏi sai schema: {bad}")
     raw_path = out_dir / "raw.jsonl"
@@ -832,7 +1019,7 @@ def run(
             _sleep(C.PAUSE_BETWEEN_QUESTIONS_SECONDS[branch])
         old = by_id.get(q["id"])
         try:
-            res = run_question(client, q, branch, system_prompt)
+            res = run_question(client, q, branch, system_prompt, qset)
         except FatalApiError:
             _write_raw(raw_path, questions, by_id)
             raise
@@ -855,7 +1042,9 @@ def run(
     summary = {
         "benchmark": f"chatbot-{branch}",
         "branch": branch,
-        "prompt_version": C.PROMPT_VERSIONS[branch],
+        "question_set": qset,
+        "run_type": run_type,
+        "prompt_version": cfg["prompt_versions"][branch],
         "model_id": C.MODEL_IDS[branch],
         "region": C.REGION,
         "api": C.API,
@@ -874,9 +1063,10 @@ def run(
         "sha256": {
             "questions": _sha256(q_path),
             "prompt": _sha256(p_path),
-            "fixtures": _fixtures_sha256(),
+            "fixtures": _fixtures_sha256(qset),
+            "tool_code": _files_sha256(ROOT / p for p in C.TOOL_CODE_PATHS),
         },
-        **summarize(branch, questions, records),
+        **summarize(branch, questions, records, qset, run_type),
     }
     (out_dir / "summary.json").write_text(
         json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n"
@@ -898,7 +1088,25 @@ def bedrock_client(profile: str, region: str):
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--branch", choices=BRANCHES, required=True)
+    ap.add_argument("--branch", choices=BRANCHES)
+    ap.add_argument(
+        "--set",
+        dest="qset",
+        choices=sorted(C.QUESTION_SETS),
+        default=C.DEFAULT_QUESTION_SET,
+        help="bộ câu hỏi (mặc định v1)",
+    )
+    ap.add_argument(
+        "--run-type",
+        choices=C.RUN_TYPES,
+        default="official",
+        help="dev: lần chạy phát triển, thư mục kết quả có hậu tố -dev",
+    )
+    ap.add_argument(
+        "--print-lock",
+        action="store_true",
+        help="in SHA-256 để khóa bộ câu hỏi (dán vào locked_sha256)",
+    )
     ap.add_argument("--dry-run", action="store_true", help="model giả, không gọi Bedrock")
     ap.add_argument("--profile", default=C.PROFILE)
     ap.add_argument("--out-dir", type=Path, default=None)
@@ -911,16 +1119,36 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = ap.parse_args(argv)
 
+    if args.print_lock:
+        print(json.dumps(lock_hashes(args.qset), indent=2))
+        return 0
+    if not args.branch:
+        ap.error("cần --branch (trừ khi dùng --print-lock)")
     if args.score_manual:
         final = score_manual(args.score_manual, args.branch)["final"]
         print(json.dumps(final, ensure_ascii=False, indent=2))
         return 0 if final["passed"] else 1
 
     today = dt.datetime.now(dt.UTC).astimezone().date().isoformat()  # ngày theo giờ máy chạy
-    name = f"chatbot-benchmark-{today}" + ("-dryrun" if args.dry_run else "")
-    out_dir = args.out_dir or ROOT / C.RESULTS_DIR / name / args.branch
+    name = f"chatbot-benchmark-{today}"
+    if args.qset != "v1":
+        name += f"-{args.qset}"
+    if args.run_type == "dev":
+        name += "-dev"
     if args.dry_run:
-        client = FakeStreamClient(load_questions(ROOT / C.QUESTIONS[args.branch]))
+        name += "-dryrun"
+    out_dir = args.out_dir or ROOT / C.RESULTS_DIR / name / args.branch
+    if not args.dry_run:
+        try:  # dừng trước khi tạo client Bedrock
+            if args.run_type == "dev":
+                check_dev_allowed(args.qset)
+            else:
+                verify_lock(args.qset)
+        except RuntimeError as exc:
+            print(f"DỪNG: {exc}", file=sys.stderr)
+            return 2
+    if args.dry_run:
+        client = FakeStreamClient(load_questions(questions_path(args.qset, args.branch)))
     else:
         client = bedrock_client(args.profile, C.REGION)
     try:
@@ -931,6 +1159,8 @@ def main(argv: list[str] | None = None) -> int:
             dry_run=args.dry_run,
             force=args.force or args.dry_run,
             rerun_api_errors=args.rerun_api_errors,
+            qset=args.qset,
+            run_type=args.run_type,
         )
     except FatalApiError as exc:
         print(f"DỪNG vì lỗi đăng nhập/credentials: {exc}", file=sys.stderr)
