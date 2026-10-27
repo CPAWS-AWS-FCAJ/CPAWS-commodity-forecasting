@@ -3,7 +3,7 @@
 - Ngày: 2026-10-16 (cập nhật theo review của Long trên PR #6)
 - Trạng thái: Đề xuất (chốt cùng ADR-0008 sau buổi họp 16/10)
 - Cập nhật 2026-10-25: thêm bản đề xuất `POST /chat` (Phước), chờ Tiến, Tuấn, Khải chốt các mục ở cuối phần đó
-- Cập nhật 2026-10-27: `POST /chat` theo prompt và tool v2 (PR #38), tool đọc thẳng bảng `Forecasts` (Khải chốt 26/10), số liệu chi phí và thời gian theo lần chạy dev 26/10
+- Cập nhật 2026-10-27: nguồn tin cho `get_news` (bảng `NewsLabels`, ADR-0003); `POST /chat` theo prompt và tool v2 (PR #38), tool đọc thẳng bảng `Forecasts` (Khải chốt 26/10), số liệu chi phí và thời gian theo lần chạy dev 26/10
 - Người viết: Khải; góp ý: Long (bản "Chốt target, phân vị và đánh giá mô hình" và "Đánh giá các metric trong metrics.py", 15/10; review PR #6)
 - Người dùng: Tuấn (API, Cognito), Tiến (web, Lambda `predict`), Long (DLinear), Phước (tool `get_forecast` của chatbot)
 
@@ -172,6 +172,14 @@ Hỏi đáp tiếng Việt về dự báo vàng, bạc, Brent, WTI. Lambda nhậ
 - Tool đọc thẳng bảng DynamoDB `Forecasts`, không gọi vòng qua `GET /forecasts/{asset}`: Query theo `asset`, `ScanIndexForward=False`, `Limit=1`, rồi định dạng bằng đúng hàm của Lambda API (`infra/lambda/forecast_api/forecast_format.py`: `latest_record`, `detail_item`). Số trong câu trả lời vì vậy khớp với số trên trang dự báo.
 - Sau bước đó, tool chuyển sang dạng rút gọn cho model (`src/chatbot/tools.py`, đặc tả ở `docs/prompts/chatbot-haiku-v2.md`): chỉ q10/q50/q90 theo %, độ rộng khoảng 80% tính sẵn, xác suất tăng theo %; vàng/bạc không có giá. Đây là dữ liệu nội bộ giữa Lambda và model, không phải một phần của API này.
 - Lambda chat đóng gói kèm `forecast_format.py` ở gốc asset, và cần quyền `dynamodb:Query` trên bảng `Forecasts`.
+
+**Nguồn dữ liệu của tool `get_news` (đề xuất, chờ Tuấn chốt)**
+
+- Theo ADR-0003, MVP không cần Knowledge Base: tool đọc bảng DynamoDB `NewsLabels` (ADR-0003 mục 6: PK `asset`, SK `<published_at ISO UTC>#<article_id>`), Query theo `asset` và SK `BETWEEN` khoảng ngày, mới nhất trước.
+- Mỗi item (một bài × một tài sản) cần có: `title`, `summary` (tóm tắt nhóm tự viết, không lưu toàn văn), `link`, `source`, `published_at`, `impact_score` (0–3), `direction` (`bullish`, `bearish`, `mixed`, `uncertain`). Tool chỉ trả các trường này cho model, bỏ tin không có link `http(s)`, tối đa 10 tin.
+- Mặc định: 7 ngày gần nhất đến hôm nay (giờ Việt Nam), `min_impact = 2`, khớp prompt `chatbot-haiku-v2`.
+- Lambda chat cần thêm quyền `dynamodb:Query` trên bảng `NewsLabels`.
+- Nếu bảng chưa có dữ liệu trước demo 8/11: Lambda đọc một bộ nhỏ thông cáo Fed/EIA thật, gắn nhãn tay, để trong file JSON đóng gói cùng Lambda. Không có nguồn nào thì `get_news` trả rỗng và câu trả lời nói không tìm thấy tin đáng kể.
 
 **Request**
 
@@ -342,12 +350,13 @@ Nguồn (tra 25/10/2026):
 | 1 | Trả một lần hay streaming | A: REST API hiện có, trả một lần; B để sau demo | Tiến, Tuấn |
 | 2 | Lambda riêng cho chat hay gộp vào `cpaws-<env>-forecasts-api` | Lambda riêng (timeout khoảng 28 giây, hạn chót nội bộ 25 giây; Lambda dự báo giữ 10 giây) | Tiến |
 | 3 | Giới hạn lượt hỏi | 20 lượt/người/ngày theo giờ Việt Nam; giới hạn chung 100 lượt/ngày; lỗi 5xx không hoàn lượt | Tuấn (chi phí), Khải |
-| 4 | Bảng `cpaws-<env>-chat-usage`, TTL; quyền IAM của Lambda chat | `dynamodb:UpdateItem` trên bảng chat-usage, `dynamodb:Query` trên `Forecasts`, `bedrock:InvokeModel`/`InvokeModelWithResponseStream` cho đúng hai model và inference profile; đóng gói kèm `forecast_format.py` | Tuấn (IAM), Tiến (CDK) |
+| 4 | Bảng `cpaws-<env>-chat-usage`, TTL; quyền IAM của Lambda chat | `dynamodb:UpdateItem` trên bảng chat-usage, `dynamodb:Query` trên `Forecasts` và `NewsLabels`, `bedrock:InvokeModel`/`InvokeModelWithResponseStream` cho đúng hai model và inference profile; đóng gói kèm `forecast_format.py` | Tuấn (IAM), Tiến (CDK) |
 | 5 | Giới hạn đầu vào và lịch sử hội thoại | `question` 500 ký tự; `history` tối đa 6 phần tử, mỗi phần tử 2000 ký tự, do client gửi | Khải (ảnh hưởng prompt và benchmark), Tiến (web) |
 | 6 | Các trường response | `branch`, `prompt_version`, `forecasts_used`, `citations` (chỉ từ `get_news` và có link trong `answer`), `truncated`, `blocked`, `quota` | Khải, Tiến |
 | 7 | Chính sách log | Không ghi nguyên văn câu hỏi/câu trả lời ở `prod` | Tuấn |
 | 8 | Thân lỗi do API Gateway tự sinh (401, 429 throttling, 504) | Giữ mặc định, web xử lý theo mã HTTP; hoặc sửa `GatewayResponse` cho đúng dạng chung | Tuấn, Tiến |
 | 9 | Router cho demo 8/11 | Router theo luật nếu kịp; nếu không, mọi câu đi `complex` (đắt hơn, chậm hơn với câu chào hỏi nhưng đúng chính sách) | Khải, Phước |
+| 10 | Nguồn tin cho `get_news` | Bảng `NewsLabels`: tên thuộc tính SK, đủ các trường ở mục "Nguồn dữ liệu của tool `get_news`", lịch có dữ liệu Fed/EIA; nếu chưa kịp thì demo bằng file JSON gắn nhãn tay | Tuấn |
 
 ## Dữ liệu mẫu
 
