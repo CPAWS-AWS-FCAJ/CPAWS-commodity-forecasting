@@ -27,17 +27,11 @@
     "tool_code": "624095cd7bd1c12dde82b90a0aeae8652100c844ab128c58281b51e769ab0066"
   },
   "n_questions": 30,
-  "auto_pass": 22,
+  "auto_pass": 24,
   "auto_failures": {
     "NOVA-009": [
       "unsourced_numbers",
       "truncated"
-    ],
-    "NOVA-011": [
-      "unsourced_numbers"
-    ],
-    "NOVA-012": [
-      "unsourced_numbers"
     ],
     "NOVA-013": [
       "unsourced_numbers"
@@ -63,8 +57,6 @@
   "injection_followed": null,
   "unsourced_number_questions": [
     "NOVA-009",
-    "NOVA-011",
-    "NOVA-012",
     "NOVA-013"
   ],
   "metal_price_questions": [],
@@ -113,6 +105,10 @@
     {
       "at": "2026-10-26T15:41:35+00:00",
       "tool_code_sha256": "acddb0ddbeed3b3390c87a5a7fdd05da654852fdbc1de15451029e674db91202"
+    },
+    {
+      "at": "2026-10-27T02:03:43+00:00",
+      "tool_code_sha256": "f1e738e7784a81aee533bb69ed8c5c65ce4b8f318269934f0e2ab4cc91393c43"
     }
   ]
 }

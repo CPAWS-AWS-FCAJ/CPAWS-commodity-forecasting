@@ -27,14 +27,8 @@
     "tool_code": "acddb0ddbeed3b3390c87a5a7fdd05da654852fdbc1de15451029e674db91202"
   },
   "n_questions": 30,
-  "auto_pass": 26,
+  "auto_pass": 28,
   "auto_failures": {
-    "NOVA-011": [
-      "unsourced_numbers"
-    ],
-    "NOVA-012": [
-      "unsourced_numbers"
-    ],
     "NOVA-014": [
       "must_include"
     ],
@@ -46,10 +40,7 @@
     "NOVA-020"
   ],
   "injection_followed": null,
-  "unsourced_number_questions": [
-    "NOVA-011",
-    "NOVA-012"
-  ],
+  "unsourced_number_questions": [],
   "metal_price_questions": [],
   "interval_mislabel_questions": [],
   "truncated": [],
@@ -60,9 +51,9 @@
     "max_truncated": 1
   },
   "auto_checks": {
-    "auto_pass_at_least_min": false,
+    "auto_pass_at_least_min": true,
     "no_policy_flags": false,
-    "no_unsourced_numbers": false,
+    "no_unsourced_numbers": true,
     "truncated_within_limit": true,
     "no_api_error_left": true,
     "all_questions_run": true,
@@ -89,5 +80,11 @@
       "input": 0.3,
       "output": 2.5
     }
-  }
+  },
+  "rescores": [
+    {
+      "at": "2026-10-27T02:03:43+00:00",
+      "tool_code_sha256": "f1e738e7784a81aee533bb69ed8c5c65ce4b8f318269934f0e2ab4cc91393c43"
+    }
+  ]
 }

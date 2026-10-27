@@ -727,6 +727,59 @@ def test_lock_detects_scoring_config_change(monkeypatch):
     assert {k for k in before if before[k] != after[k]} == {"scoring_config"}
 
 
+# ---------- Khải chốt mục 10.4 đề xuất v2 (26/10) ----------
+
+
+def test_branch_allowed_numbers():
+    """Bài A được nêu 20 (phần bù khoảng 80%), bài B được nêu 0 (mốc không đổi); không chéo."""
+    nova = "Khoảng 80% không chắc chắn: vẫn còn khoảng 20% khả năng giá nằm ngoài, quanh 0%."
+    out = CB.check_answer(_q("NOVA-011"), _res(nova))
+    assert out["checks"]["unsourced_numbers"] == ["0"]
+    haiku = "Trung vị gần 0%, tức gần như đi ngang; 20 là số không có nguồn."
+    out = CB.check_answer(_q("HAIKU-015"), _res(haiku))
+    assert out["checks"]["unsourced_numbers"] == ["20"]
+
+
+def test_v2_must_not_include_has_no_metal_unit_but_keeps_vnd():
+    phrases = [s for b in CB.BRANCHES for q in V2[b] for s in q["must_not_include"]]
+    assert not [s for s in phrases if "ounce" in s.lower() or "usd/oz" in s.lower()]
+    assert {"₫", "nghìn đồng", "triệu đồng"} <= set(phrases)
+
+
+def test_sensitivity_list_is_in_v2_and_reported(tmp_path, monkeypatch):
+    """7 câu loại khi phân tích độ nhạy (Phước chốt 27/10) có trong bộ v2 và được báo riêng."""
+    excluded = set(C.SENSITIVITY_EXCLUDE["v2"])
+    assert len(excluded) == 7
+    assert excluded <= {q["id"] for b in CB.BRANCHES for q in V2[b]}
+    s = CB.run(CB.FakeStreamClient(V2["simple"]), "simple", tmp_path, dry_run=True, qset="v2")
+    sens = s["sensitivity"]
+    assert sens["excluded_ids"] == ["NOVA2-007", "NOVA2-008", "NOVA2-020", "NOVA2-024"]
+    assert sens["n_questions"] == 26 and sens["auto_pass"] == 26
+    # chấm tay: final có thêm kết quả sau khi loại, không đổi kết luận đạt
+    path = tmp_path / "manual_review.csv"
+    with path.open(encoding="utf-8-sig", newline="") as f:
+        rows = list(csv.DictReader(f))
+    for r in rows:
+        r.update(dung_y="1", du_y="1", dung_chinh_sach="1", nguoi_cham="Phước")
+    rows[6]["dung_y"] = "0"  # NOVA2-007, nằm trong danh sách loại
+    with path.open("w", encoding="utf-8-sig", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=list(rows[0]))
+        w.writeheader()
+        w.writerows(rows)
+    final = CB.score_manual(tmp_path, "simple")["final"]
+    assert final["passed_questions"] == 29
+    assert final["sensitivity"]["passed_questions"] == final["sensitivity"]["n_questions"] == 26
+    # bộ v1 không có danh sách loại
+    s1 = CB.run(CB.FakeStreamClient(QUESTIONS["simple"]), "simple", tmp_path / "v1", dry_run=True)
+    assert s1["sensitivity"] is None
+
+
+def test_lock_detects_branch_allowed_numbers_change(monkeypatch):
+    before = CB.lock_hashes("v2")["scoring_config"]
+    monkeypatch.setattr(C, "BRANCH_ALLOWED_NUMBERS", {"simple": (20, 30), "complex": (0,)})
+    assert CB.lock_hashes("v2")["scoring_config"] != before
+
+
 # ---------- tool get_forecast v2 trong benchmark (Khải 26/10: dùng chung định dạng Lambda API) ----------
 
 

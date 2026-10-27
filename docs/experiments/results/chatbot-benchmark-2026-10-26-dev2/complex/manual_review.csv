@@ -9,7 +9,7 @@ Dự báo cho thấy vàng có xu hướng tăng nhẹ với xác suất tăng h
 
 **Lưu ý:** Đây là dữ liệu mẫu, chưa phải dự báo thật. Dự báo dựa trên quỹ GLD (chuỗi đại diện), không phải giá vàng giao ngay.
 
-*Dự báo mang tính tham khảo, không phải lời khuyên đầu tư.*",0,unsourced_numbers,0,,,,,,
+*Dự báo mang tính tham khảo, không phải lời khuyên đầu tư.*",1,,0,,,,,,
 HAIKU-002,single_asset_forecast,Ngày mai dầu WTI có khả năng tăng không?,Gọi get_forecast(wti); nêu xác suất tăng và khoảng dự báo ở h=1; nói rõ là dữ liệu mẫu.,"Mình sẽ lấy dự báo dầu WTI cho phiên tới (h = 1) để trả lời bạn.
 Dựa trên dự báo của CPAWS cho dầu WTI ngày mai (14/10/2026):
 
@@ -166,7 +166,7 @@ HAIKU-015,multi_part,"WTI 1 phiên và 7 phiên tới: q50 thay đổi ra sao, x
 
 Cả hai kỳ hạn đều cho thấy dự báo gần như không thay đổi, với trung vị rất sát 0%. Xác suất tăng ở cả hai kỳ đều là 51%, tức thị trường có xu hướng cân bằng giữa tăng và giảm.
 
-**Lưu ý:** Đây là dữ liệu mẫu, chưa phải dự báo thật. Dự báo mang tính tham khảo, không phải lời khuyên đầu tư.",0,unsourced_numbers; forecast_missing,0,,,,,,
+**Lưu ý:** Đây là dữ liệu mẫu, chưa phải dự báo thật. Dự báo mang tính tham khảo, không phải lời khuyên đầu tư.",0,forecast_missing,0,,,,,,
 HAIKU-016,multi_part,"Bạc và dầu Brent, cái nào được dự báo nghiêng về giảm nhiều hơn ở kỳ hạn 5 phiên?",Gọi get_forecast cho silver và brent; so sánh q50 và prob_up ở h=5; bạc chỉ nêu %.,"Mình sẽ lấy dự báo cho bạc và dầu Brent ở kỳ hạn 5 phiên.
 Ở kỳ hạn 5 phiên (target_date 2026-10-21), **dầu Brent được dự báo nghiêng về giảm nhiều hơn**:
 

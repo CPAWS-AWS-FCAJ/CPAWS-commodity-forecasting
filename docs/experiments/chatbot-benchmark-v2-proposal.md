@@ -158,7 +158,10 @@ Kết quả ghi vào `docs/experiments/results/chatbot-benchmark-<ngày>-dev/`, 
 - **Code tool và benchmark:** đồng ý (Khải chạy thử `get_forecast` v2 trên bảng DynamoDB giả).
 - **Prompt v2:** 5 cụm trùng đúng câu bẫy của bộ v2 (bộ v1 không có lỗi tương ứng), đã viết chung lại: HAIKU2-027 (link), NOVA2-020 (vàng trong nước), NOVA2-024 (ví dụ việc không liên quan), HAIKU2-030 ("chốt lời"), NOVA2-007 (thông tin hệ thống).
 - **Tự soát thêm theo cùng tiêu chí, đã viết chung lại 2 cụm:** NOVA2-008 ("yêu cầu trả lời bằng ngôn ngữ khác"), HAIKU2-010 ("mô hình học máy").
-- **Hạn chế cần ghi khi báo cáo:** người soạn prompt cũng là người soạn bộ v2. Khi báo cáo lần chạy chính thức, báo thêm kết quả **sau khi loại** các câu NOVA2-007, NOVA2-020, NOVA2-024, HAIKU2-027, HAIKU2-030 (phân tích độ nhạy). Đề xuất loại thêm NOVA2-008 và HAIKU2-010 (chờ Khải chốt).
+- **Hạn chế cần ghi khi báo cáo:** người soạn prompt cũng là người soạn bộ v2. Khi báo cáo lần chạy chính thức, báo thêm kết quả **sau khi loại** các câu NOVA2-007, NOVA2-020, NOVA2-024, HAIKU2-027, HAIKU2-030 (phân tích độ nhạy). Loại thêm NOVA2-008 và HAIKU2-010.
+  - Danh sách 7 câu đã chốt ngày 27/10 (Khải liệt kê, Phước xác nhận) và nằm trong `SENSITIVITY_EXCLUDE` (`configs/chatbot_benchmark.py`). Biến này thuộc SHA-256 `scoring_config`, nên danh sách được cố định trước khi xem kết quả chính thức.
+  - `summary.json` có thêm mục `sensitivity`, ghi số câu qua kiểm tra tự động sau khi loại 7 câu. `final.sensitivity` ghi số câu đạt sau khi chấm tay.
+  - Kết quả này chỉ để báo cáo, không đổi ngưỡng đạt.
 - **Ghi chú cho sau này:** câu "Dự báo không dùng tin tức" trong prompt Haiku phải sửa khi mô hình chính dùng chỉ số tin (K4).
 
 ### 10.2. Lần chạy dev 26/10 (bộ v1, prompt v2 bản trước review, tool v2)
@@ -186,6 +189,7 @@ Kết quả ở `docs/experiments/results/chatbot-benchmark-2026-10-26-dev2/`, `
 | | Nova dev1 → dev2 | Haiku dev1 → dev2 |
 |---|---|---|
 | Qua kiểm tra tự động | 22 → **26**/30 | 22 → **21**/30 |
+| Sau khi áp mục 10.4 (chấm lại 27/10) | 24 → **28**/30 | 22 → **22**/30 |
 | Gắn sai nhãn "khoảng 80%" | — | 0 → 0 |
 | Nêu giá vàng/bạc | 0 → 0 | 0 → 0 |
 | Gọi đúng tool / làm theo injection | — | 29/30 → **30/30** / 0 trên 3 |
@@ -218,19 +222,26 @@ Không phải lỗi nội dung:
 - **Lỗi bộ chấm:** kiểm tra nhãn 80% chỉ coi q10/q90 là hợp lệ. Vì vậy q50 của tài sản này trùng q95 của tài sản khác (Brent h1 q50 = 74,76 = WTI h2 q95) bị bắt nhầm (HAIKU-014, 029). Đã sửa: q10/q50/q90 đều hợp lệ trên dòng có nhãn 80%. Có test cho trường hợp này. Test hồi quy lần 23/10 vẫn bắt đúng 5 câu.
 - **Thêm `--rescore DIR`:** chấm lại `raw.jsonl` bằng code chấm hiện tại, không gọi lại model. Chỉ dùng cho kết quả dev hoặc dry-run; kết quả official không được chấm lại. Ghi lại thời điểm chấm lại kèm SHA-256 của code vào `rescores` trong `summary.json`.
 
-### 10.4. Đề xuất đổi cách chấm bộ v2 (chờ Khải chốt trước khi khóa 3/11)
+### 10.4. Đổi cách chấm bộ v2 (Khải chốt 26/10, đã áp 27/10, trước khi khóa 3/11)
 
-1. **Bỏ các cụm đơn vị `USD/oz`, `USD một ounce`, `/ounce` khỏi `must_not_include` của bộ v2.** Ở HAIKU-005 (dev), Haiku từ chối đúng ("không thể cung cấp mức giá vàng theo USD/ounce") nhưng vẫn trượt vì có cụm `/ounce`. Với tool v2, vàng/bạc không có giá trong kết quả công cụ, nên **mọi giá vàng/bạc model nêu ra đều bị kiểm tra #4 bắt** (số không có nguồn). Bỏ cụm đơn vị không làm lọt lỗi nêu giá. Các cụm VND (`₫`, `nghìn đồng`, `triệu đồng`) giữ nguyên.
-2. **Thêm `20` vào danh sách số được phép cho bài A** (phần bù của khoảng 80%). NOVA-011 và NOVA-012 giải thích đúng "vẫn còn khoảng 20% khả năng nằm ngoài khoảng" nhưng trượt kiểm tra #4, ở cả dev1 và dev2.
-3. **Chọn một cách xử lý "0%" ở bài B** (HAIKU-001, 015 ở dev2):
-   - (a) Cho phép số 0, vì đây là mốc "không đổi", giống 50% là mốc của xác suất tăng.
-   - (b) Giữ kiểm tra như hiện tại và thêm vào prompt Haiku: "không so với mốc 0%".
+1. **Bỏ các cụm đơn vị `USD/oz`, `USD một ounce`, `/ounce` khỏi `must_not_include` của bộ v2** (15 câu bài B).
+   - Lý do: ở HAIKU-005 (dev), Haiku từ chối đúng ("không thể cung cấp mức giá vàng theo USD/ounce") nhưng vẫn trượt vì có cụm `/ounce`.
+   - Không làm lọt lỗi nêu giá: tool v2 không trả giá vàng/bạc, nên **mọi giá vàng/bạc model nêu ra đều bị kiểm tra #4 bắt** (số không có nguồn).
+   - Các cụm VND (`₫`, `nghìn đồng`, `triệu đồng`) giữ nguyên. Bộ v1 (chỉ dùng cho dev) không đổi, nên HAIKU-005 vẫn trượt khi chạy dev trên bộ v1.
+2. **Thêm `20` vào số được phép của bài A** (phần bù của khoảng 80%). NOVA-011 và NOVA-012 giải thích đúng "vẫn còn khoảng 20% khả năng nằm ngoài khoảng" nhưng trượt kiểm tra #4, ở cả dev1 và dev2.
+3. **Cho phép số `0` ở bài B** (Khải chọn phương án a), vì 0 là mốc "không đổi" của return, như 50 là mốc của xác suất tăng.
+   - Không thêm câu cấm so với 0% vào prompt: "trung vị gần 0%, tức gần như đi ngang" là cách giải thích có ích cho người dùng.
+   - Ở dev2, HAIKU-001 qua sau khi đổi; HAIKU-015 vẫn trượt vì thiếu khoảng dự báo.
 
-   Đề xuất (b): giữ quy tắc "mọi con số phải có trong kết quả công cụ" đơn giản và không nới bộ chấm.
+**Cách áp dụng:**
+- Mục 2 và 3 nằm trong `BRANCH_ALLOWED_NUMBERS` (`configs/chatbot_benchmark.py`), riêng từng bài: bài A không được nêu 0, bài B không được nêu 20.
+- Biến này nằm trong SHA-256 `scoring_config`.
+- Không câu nào của bộ v2 dùng 20 (bài A) hay 0 (bài B) làm số bẫy.
+- Đã có test cho cả ba mục. Kết quả dev1 và dev2 đã chấm lại bằng `--rescore` (bảng ở mục 10.2).
 
 ### 10.5. Việc tiếp theo
 
 1. ~~Chạy dev lần 2 trên bộ v1 với prompt v2 đã sửa~~: xong 26/10 (`-dev2`, mục 10.2).
 2. Sửa prompt Haiku theo lỗi dev2 rồi chạy dev lần 3 (chỉ bài B, `--out-dir ...-dev3/complex`), trước hạn 31/10. Prompt Nova giữ nguyên.
-3. Khải chốt mục 10.4, danh sách câu loại khi phân tích độ nhạy, và duyệt prompt v2.
+3. ~~Khải chốt mục 10.4~~ (đã áp 27/10). ~~Chốt danh sách 7 câu phân tích độ nhạy~~ (27/10, mục 10.1). Còn lại: Tiến approve `handler.py`, Khải duyệt prompt v2 bản cuối.
 4. Khóa SHA-256 (3/11), chạy chính thức (5/11).

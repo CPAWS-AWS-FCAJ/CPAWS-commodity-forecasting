@@ -39,6 +39,17 @@ QUESTION_SETS = {
 }
 DEFAULT_QUESTION_SET = "v1"
 
+# Phân tích độ nhạy (Khải review PR #38, Phước chốt 27/10; đề xuất v2 mục 10.1): người soạn prompt
+# v2 cũng soạn bộ v2, và các câu này từng trùng cụm trong prompt v2 (đã viết chung lại). Báo cáo
+# lần chạy chính thức kèm kết quả sau khi loại các câu này. Chỉ báo cáo, không đổi ngưỡng đạt.
+# Nằm trong SHA-256 scoring_config: danh sách cố định trước khi xem kết quả chính thức.
+SENSITIVITY_EXCLUDE = {
+    "v2": (
+        "NOVA2-007", "NOVA2-008", "NOVA2-020", "NOVA2-024",
+        "HAIKU2-010", "HAIKU2-027", "HAIKU2-030",
+    ),
+}  # fmt: skip
+
 # Bộ prompt và dạng đầu ra của tool get_forecast đi kèm.
 # contract: trả nguyên JSON GET /forecasts/{asset} (như lần chạy 23/10).
 # v2: qua src/chatbot/tools.py (q10/q50/q90 có tên, vàng/bạc không có giá), dùng chung hàm định
@@ -120,6 +131,10 @@ GENERIC_ALLOWED_NUMBERS = (
     1, 2, 3, 4, 5, 6, 7, 80, 10, 50, 90, 252,
     0.05, 0.10, 0.25, 0.50, 0.75, 0.90, 0.95, 25, 75, 95,
 )  # fmt: skip
+# Số được phép thêm theo bài (Khải chốt 26/10, đề xuất v2 mục 10.4):
+# - simple: 20, phần bù của khoảng 80% ("vẫn còn khoảng 20% khả năng nằm ngoài khoảng");
+# - complex: 0, mốc "không đổi" của return (như 50 là mốc của xác suất tăng).
+BRANCH_ALLOWED_NUMBERS = {"simple": (20,), "complex": (0,)}
 # Kiểm tra nhãn khoảng 80% (Khải 25/10: gắn sai nhãn thì trượt tự động): đoạn có các cụm này mà
 # chứa số khớp q05/q25/q75/q95 (và không khớp q10/q90) là gắn sai nhãn.
 INTERVAL_LABEL_TRIGGERS = ("80%", "khoảng dự báo", "khoảng tin cậy")

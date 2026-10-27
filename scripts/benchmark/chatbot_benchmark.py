@@ -540,6 +540,7 @@ def forecast_numbers(result: dict) -> list[float]:
 
 def allowed_numbers(q: dict, tool_calls: list[dict]) -> list[float]:
     nums = [float(x) for x in C.GENERIC_ALLOWED_NUMBERS]
+    nums += [float(x) for x in C.BRANCH_ALLOWED_NUMBERS.get(q.get("branch"), ())]
     for tok in _NUM.findall(_norm(q["question"])):
         for v, _ in _candidates(tok):
             nums += [v, v * 100]
@@ -759,6 +760,7 @@ def summarize(
         "final": None,
         "final_note": note,
         "manual_recheck_ids": recheck,
+        "sensitivity": _sensitivity_auto(qset, questions, ok),
         "performance": {
             "ttft_ms_median": _pct(ttft, 50),
             "ttft_ms_p90": _pct(ttft, 90),
@@ -772,6 +774,25 @@ def summarize(
             ),
             "price_per_m_tokens": price,
         },
+    }
+
+
+def sensitivity_ids(qset: str, ids) -> list[str]:
+    """Các câu của bài này nằm trong danh sách loại khi phân tích độ nhạy (đề xuất v2 mục 10.1)."""
+    excluded = set(C.SENSITIVITY_EXCLUDE.get(qset, ()))
+    return sorted(i for i in ids if i in excluded)
+
+
+def _sensitivity_auto(qset: str, questions: list[dict], ok: list[dict]) -> dict | None:
+    excluded = sensitivity_ids(qset, [q["id"] for q in questions])
+    if not excluded:
+        return None
+    kept = [r for r in ok if r["id"] not in excluded]
+    return {
+        "note": "Chỉ báo cáo, không đổi ngưỡng đạt.",
+        "excluded_ids": excluded,
+        "n_questions": len(questions) - len(excluded),
+        "auto_pass": sum(r["auto_pass"] for r in kept),
     }
 
 
@@ -860,6 +881,14 @@ def score_manual(out_dir: Path, branch: str) -> dict:
         },
         "passed": all(checks.values()),
     }
+    excluded = sensitivity_ids(summary.get("question_set", C.DEFAULT_QUESTION_SET), rubric)
+    if excluded:
+        summary["final"]["sensitivity"] = {
+            "note": "Chỉ báo cáo, không đổi ngưỡng đạt.",
+            "excluded_ids": excluded,
+            "n_questions": len(rubric) - len(excluded),
+            "passed_questions": len([i for i in passed_ids if i not in excluded]),
+        }
     (out_dir / "summary.json").write_text(
         json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n"
     )
@@ -1020,7 +1049,8 @@ def scoring_config_sha256() -> str:
     ngưỡng, số được phép, nhãn khoảng 80% hay cấu hình model sau khi khóa thì lệch khóa."""
     names = sorted(
         (
-            "THRESHOLDS", "INTERVAL_LABEL_TRIGGERS", "GENERIC_ALLOWED_NUMBERS", "MODEL_IDS",
+            "THRESHOLDS", "INTERVAL_LABEL_TRIGGERS", "GENERIC_ALLOWED_NUMBERS",
+            "BRANCH_ALLOWED_NUMBERS", "SENSITIVITY_EXCLUDE", "MODEL_IDS",
             "MAX_TOKENS", "TEMPERATURE", "MAX_TOOL_ROUNDS", "DISCLAIMER", "METAL_PRICE_REL_TOL",
             "VIETNAMESE_MIN_WORD_RATIO", "POLICY_CATEGORIES", "INJECTION_CATEGORY",
             "NEWS_DEFAULT_DAYS", "NEWS_DEFAULT_MIN_IMPACT", "MANUAL_RECHECK_SIZE",
