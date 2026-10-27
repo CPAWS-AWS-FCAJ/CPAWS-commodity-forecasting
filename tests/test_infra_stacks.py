@@ -370,7 +370,7 @@ def test_forecasts_table_is_unchanged_by_news_labels(templates):
     tables = _items(templates["serving"], "AWS::DynamoDB::Table")
     assert len(tables) == 2
     forecasts = _table(templates["serving"], "cpaws-dev-forecasts")
-    assert [k for k, r in tables.items() if r is forecasts][0].startswith("ForecastsTable")
+    assert next(k for k, r in tables.items() if r is forecasts).startswith("ForecastsTable")
     assert forecasts["Properties"]["KeySchema"] == [
         {"AttributeName": "asset", "KeyType": "HASH"},
         {"AttributeName": "base_date", "KeyType": "RANGE"},
