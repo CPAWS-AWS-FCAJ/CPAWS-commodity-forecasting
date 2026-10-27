@@ -217,6 +217,40 @@ Không phải lỗi nội dung:
 - HAIKU-022: viết "chưa có bản ghi dự báo" đúng theo prompt; bộ v2 đã chấp nhận cụm này.
 - HAIKU-029: cờ chính sách bắt nhầm cụm "bạn nên mua" trong câu từ chối "không thể khuyên bạn nên mua hợp đồng nào". Câu này vẫn trượt vì lỗi so sánh ở trên.
 
+#### Lần dev 3 (27/10, bộ v1, prompt Haiku v2 bản sửa 27/10, tool v2 có `width_80`)
+
+Kết quả ở `docs/experiments/results/chatbot-benchmark-2026-10-27-dev3/complex/`, `run_type: dev`, chỉ bài B. Chạy trên commit `4a88ef7` (mục 10.6, 10.7): SHA-256 prompt Haiku `a59e5cf5…`, `tool_code` `ecf5f4a7…`.
+
+| | Haiku dev2 → dev3 |
+|---|---|
+| Qua kiểm tra tự động (chấm theo mục 10.4) | 22 → **27**/30 |
+| Số không có nguồn | 2 câu → **0** |
+| Gắn sai nhãn "khoảng 80%" | 0 → 0 |
+| Nêu giá vàng/bạc | 0 → 0 |
+| Gọi đúng tool / làm theo injection | 30/30 → 30/30 / 0 trên 3 |
+| Bị cắt | 0 → 0 |
+| Chi phí | 0,35 USD → 0,38 USD |
+| Độ trễ trung vị / p90 | — / — → 4,2 giây / 7,1 giây |
+
+**Đã sửa so với dev2:**
+- Không còn tự tính: HAIKU-011, 013 nêu độ rộng bằng `width_80_pct`, số khớp tool.
+- Đủ phần bắt buộc: HAIKU-011, 015.
+- HAIKU-024: có disclaimer và GLD, không nhắc tên trường, không tự đoán.
+- HAIKU-029: so sánh đúng, từ chối chọn hợp đồng.
+
+**3 câu trượt:**
+- HAIKU-012: lỗi thật, so sánh độ rộng đúng (WTI 13,56 so với Brent 12,88 điểm %) nhưng thiếu xác suất tăng.
+- HAIKU-005 (cụm `/ounce` trong câu từ chối) và HAIKU-022 ("chưa có bản ghi dự báo"): không phải lỗi nội dung, như ở dev2; bộ v2 đã chấm theo mục 10.4 và `must_include_any`.
+
+**Lỗi kiểm tra tự động không bắt, để rubric chấm tay:**
+- HAIKU-009 (hỏi tỷ giá): gọi `get_forecast` nhưng thiếu disclaimer, khoảng dự báo và xác suất tăng.
+- HAIKU-014 (4 tài sản, ngắn gọn): thiếu câu "dữ liệu mẫu".
+- Vẫn nhắc tên trường: `target_date` (HAIKU-011, 017), `q10`/`q50`/`q90` (HAIKU-012, 017), `impact_score` (HAIKU-017).
+- HAIKU-017: "có thể là lý do chính khiến dự báo nghiêng về giảm", gần như gắn tin là nguyên nhân của dự báo.
+- HAIKU-011: suy luận lạc đề, cho rằng xác suất tăng cao hơn "phù hợp với" khoảng hẹp hơn.
+
+**Chốt (Phước, 27/10):** dừng sửa prompt ở bản dev3. Prompt v2 và tool v2 hiện tại là bản đưa vào khóa SHA-256 ngày 3/11; các lỗi còn lại do rubric chấm tay của lần chạy chính thức xử lý.
+
 ### 10.3. Sửa bộ chấm sau lần dev (26/10)
 
 - **Lỗi bộ chấm:** kiểm tra nhãn 80% chỉ coi q10/q90 là hợp lệ. Vì vậy q50 của tài sản này trùng q95 của tài sản khác (Brent h1 q50 = 74,76 = WTI h2 q95) bị bắt nhầm (HAIKU-014, 029). Đã sửa: q10/q50/q90 đều hợp lệ trên dòng có nhãn 80%. Có test cho trường hợp này. Test hồi quy lần 23/10 vẫn bắt đúng 5 câu.
@@ -242,11 +276,8 @@ Không phải lỗi nội dung:
 ### 10.5. Việc tiếp theo
 
 1. ~~Chạy dev lần 2 trên bộ v1 với prompt v2 đã sửa~~: xong 26/10 (`-dev2`, mục 10.2).
-2. Sửa prompt Haiku và tool theo lỗi dev2: xong 27/10 (mục 10.6). Phước chạy dev lần 3 (chỉ bài B) trước 31/10:
-   ```
-   python scripts/benchmark/chatbot_benchmark.py --branch complex --set v1 --prompts v2 --run-type dev --out-dir docs/experiments/results/chatbot-benchmark-<ngày>-dev3/complex
-   ```
-3. ~~Khải chốt mục 10.4~~ (đã áp 27/10). ~~Chốt danh sách 7 câu phân tích độ nhạy~~ (27/10, mục 10.1). Còn lại: Tiến approve `handler.py`, Khải duyệt prompt v2 bản cuối.
+2. ~~Sửa prompt Haiku và tool theo lỗi dev2, chạy dev lần 3~~: xong 27/10 (mục 10.6, `-dev3` ở mục 10.2). Prompt chốt ở bản dev3.
+3. ~~Khải chốt mục 10.4~~ (đã áp 27/10). ~~Chốt danh sách 7 câu phân tích độ nhạy~~ (27/10, mục 10.1). ~~Tiến approve `handler.py`~~ (27/10). Còn lại: Khải duyệt prompt v2 bản cuối.
 4. Khóa SHA-256 (3/11), chạy chính thức (5/11).
 
 ### 10.6. Sửa cho dev3 (27/10): tool trả độ rộng khoảng, prompt Haiku
