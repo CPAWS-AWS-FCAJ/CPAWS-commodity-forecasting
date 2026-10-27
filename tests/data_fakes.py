@@ -70,8 +70,11 @@ class FakeYF:
         fail: set[str] | None = None,
         spikes: dict[str, str] | None = None,
         empty: set[str] | None = None,
+        ends: dict[str, str] | None = None,
     ):
         self.end = end
+        # {symbol: ngày}: mã này chỉ có dữ liệu tới ngày đó (giả lập Yahoo trễ phiên)
+        self.ends = ends or {}
         self.fail = fail or set()
         self.empty = empty or set()  # mã trả về bảng rỗng (yfinance khi bị chặn hoặc đổi mã)
         # {symbol: ngày hoặc list ngày}: nhân Close các ngày đó lên 5% (spike một hay nhiều phiên)
@@ -82,7 +85,7 @@ class FakeYF:
         self.calls.append((symbol, start))
         if symbol in self.fail:
             raise ConnectionError("blocked")
-        df = synthetic_bars(symbol, "2020-03-02", self.end)
+        df = synthetic_bars(symbol, "2020-03-02", self.ends.get(symbol, self.end))
         if symbol in self.empty:
             return df.iloc[0:0]
         if symbol in self.spikes:
