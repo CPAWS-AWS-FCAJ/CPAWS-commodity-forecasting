@@ -33,7 +33,7 @@ Chọn **phương án 2**.
 
    S1a hơn S1b 0,24 điểm % (trên ngưỡng hòa 0,1). Trên tập K3 (245/245/202/202) thứ tự chọn không đổi; K3 chấm lại trên tập đó ra −2,53, khớp ADR-0009.
 2. **Không tài sản nào đạt tiêu chí ADR-0009 mục 4.** CI 95% của `pinball_skill` trung bình 7 h ở S1a đều chứa 0: vàng [−1,33; +2,29], bạc [−2,85; +3,93], Brent [−3,72; +2,30], WTI [−3,42; +1,41]; dầu ở mẫu `excl_roll` cùng kết luận. 0/42 nhóm tài sản × h có cận dưới CI > 0. DM sau Holm: không nhóm nào có ý nghĩa.
-3. **Production giữ `MODEL_VERSION=baseline-q252`** cho cả 4 tài sản. Challenger vẫn là CEEMDAN-DLinear `w252-k3-l30` (ADR-0009); S1a không thay challenger vì không đạt và không cần train (có thể chấm lại bất kỳ lúc nào từ code).
+3. **Production giữ `MODEL_VERSION=baseline-q252`** cho cả 4 tài sản. **Challenger đổi sang S1a**, thay CEEMDAN-DLinear `w252-k3-l30` (ADR-0009): S1a gần mốc hơn nhiều (−0,32 so với −2,79 điểm %), cao hơn K3 ở 34/42 nhóm, không cần train, và chỉ cần NumPy (không cần PyEMD hay cache CEEMDAN), nên chấm song song với mốc trong luồng hằng ngày dễ nhất. K3 giữ trong repo để tái lập và cho buổi bảo vệ.
 4. **Dừng dò mô hình chỉ dùng giá trên validation 2019.** Đã nhìn vào 2019 hai lần, tổng 11 cấu hình. Thí nghiệm mô hình tiếp theo (nếu có) chỉ là tín hiệu ngoài giá (K4: OVX/GVZ, GPR, lịch sự kiện, chỉ số tin), với kế hoạch riêng commit trước khi chạy, và phải ghi đây là lần nhìn thứ 3.
 
 ## Hệ quả
