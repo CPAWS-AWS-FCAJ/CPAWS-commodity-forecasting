@@ -1,7 +1,7 @@
 """Dự báo hằng ngày cho vàng, bạc, Brent, WTI → bảng `Forecasts` (docs/api/contract.md, ADR-0008).
 
-Chạy sau Lambda ingest (kích hoạt bởi Lambda destination OnSuccess của Lambda ingest; hạ tầng do
-Tiến cấu hình). Với mỗi tài sản:
+Chạy sau Lambda ingest (kích hoạt bởi Lambda destination OnSuccess và OnFailure của Lambda ingest,
+xem src/forecast/lambda_predict.py; hạ tầng do Tiến cấu hình). Với mỗi tài sản:
   1. Đọc snapshot clean mới nhất: clean/prices/dt=D/ (có quality.json, file ingest ghi cuối) và
      clean/display_factors/dt=D/ cùng ngày.
   2. build_feature_frame(prices, asset, invalid_dates=<ngày bị loại>) → latest_base_date →

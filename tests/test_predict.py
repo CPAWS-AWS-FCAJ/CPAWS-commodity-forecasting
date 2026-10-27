@@ -834,6 +834,41 @@ def test_handler_destination_event_runs_all_assets(aws, monkeypatch):
         _assert_contract(items[0], asset, mv=BL)
 
 
+# Event destination OnFailure: ingest raise sau khi đã retry (ví dụ một nguồn lỗi)
+DESTINATION_FAILURE_EVENT = {
+    **DESTINATION_EVENT,
+    "requestContext": {
+        **DESTINATION_EVENT["requestContext"],
+        "condition": "RetriesExhausted",
+        "approximateInvokeCount": 2,
+    },
+    "responseContext": {
+        "statusCode": 200,
+        "executedVersion": "$LATEST",
+        "functionError": "Unhandled",
+    },
+    "responsePayload": {"errorMessage": "sources failed: gold", "errorType": "IngestFailed"},
+}
+
+
+def test_handler_failure_destination_event_writes_good_assets(aws, monkeypatch):
+    """OnFailure vẫn gọi predict: tài sản có phiên mới nhất được ghi, tài sản thiếu phiên bị bỏ qua
+    (bản ghi cũ giữ nguyên), rồi raise PredictFailed để metric Errors bật alarm."""
+    s3, table = aws
+    monkeypatch.setenv("MODEL_VERSION", BL)
+    _forbid_artifact_download(monkeypatch)
+    prices = _prices(BL_START)
+    missing = (prices["asset"] == "gold") & (prices["date"] == pd.Timestamp(BASE))
+    _write_lake(storage.S3Storage(BUCKET, client=s3), prices.loc[~missing].reset_index(drop=True))
+    with pytest.raises(lambda_predict.PredictFailed, match="gold"):
+        lambda_predict.handler(DESTINATION_FAILURE_EVENT, None)
+    assert _items(table, "gold") == []
+    for asset in ("silver", "brent", "wti"):
+        items = _items(table, asset)
+        assert len(items) == 1
+        _assert_contract(items[0], asset, mv=BL)
+
+
 # ---------- module ----------
 
 

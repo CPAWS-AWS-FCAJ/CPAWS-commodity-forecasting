@@ -1,14 +1,24 @@
 """Lambda predict: dự báo hằng ngày, ghi bảng DynamoDB `Forecasts` (docs/api/contract.md).
 
-Entrypoint: src.forecast.lambda_predict.handler. Chạy sau Lambda ingest (kích hoạt bởi Lambda
-destination OnSuccess của Lambda ingest; hạ tầng do Tiến cấu hình), không đặt lịch riêng; xem
-config.INGEST_SCHEDULE_EXPRESSION.
+Entrypoint: src.forecast.lambda_predict.handler. Chạy sau Lambda ingest, kích hoạt bởi Lambda
+destination OnSuccess VÀ OnFailure của Lambda ingest (infra/stacks/cpaws_data_stack.py, PR #32);
+không đặt lịch riêng, xem config.INGEST_SCHEDULE_EXPRESSION.
+- OnSuccess: ingest xong bình thường.
+- OnFailure: ingest raise sau khi đã retry (ví dụ một nguồn lỗi). Snapshot của các tài sản tốt vẫn
+  đã ghi, nên predict vẫn chạy cho cả 4 tài sản; tài sản thiếu phiên mới nhất bị bỏ qua
+  (latest_session_missing), bản ghi cũ giữ nguyên, rồi raise PredictFailed như dưới.
+Destination chỉ gọi khi ingest được gọi bất đồng bộ (Scheduler hoặc aws lambda invoke
+--invocation-type Event). Gọi đồng bộ (RequestResponse) thì predict không chạy.
 Biến môi trường: LAKE_BUCKET (bắt buộc trên AWS), LAKE_PREFIX (tùy chọn), FORECASTS_TABLE (bắt buộc
 trừ dry_run), MODEL_VERSION (bắt buộc; artifact ở models/<asset>/<MODEL_VERSION>/ trong lake),
 CPAWS_ENV.
 
 event:
   {}                         dự báo 4 tài sản từ snapshot clean mới nhất, ghi DynamoDB
+  <bản ghi destination>      như {}: event từ destination (version, requestContext.condition =
+                             Success / RetriesExhausted / EventAgeExceeded, requestPayload,
+                             responsePayload) không có khóa "assets" hay "dry_run", nên luôn
+                             chạy cả 4 tài sản và ghi thật; nội dung bản ghi không được đọc
   {"assets": ["gold", ...]}  chỉ các tài sản này ([] hoặc null → PredictConfigError)
   {"dry_run": true}          tính nhưng không ghi; trả bản tóm tắt (không raise khi có tài sản lỗi)
 Tài sản bị bỏ qua (cửa sổ không hợp lệ, thiếu phiên cuối, ...) hoặc lỗi (thiếu artifact, artifact
