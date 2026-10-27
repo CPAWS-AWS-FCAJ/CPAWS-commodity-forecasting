@@ -3,7 +3,7 @@
 - Ngày: 2026-10-16 (cập nhật theo review của Long trên PR #6)
 - Trạng thái: Đề xuất (chốt cùng ADR-0008 sau buổi họp 16/10)
 - Cập nhật 2026-10-25: thêm bản đề xuất `POST /chat` (Phước), chờ Tiến, Tuấn, Khải chốt các mục ở cuối phần đó
-- Cập nhật 2026-10-27: nguồn tin cho `get_news` (bảng `NewsLabels`, ADR-0003); `POST /chat` theo prompt và tool v2 (PR #38), tool đọc thẳng bảng `Forecasts` (Khải chốt 26/10), số liệu chi phí và thời gian theo lần chạy dev 26/10; sửa theo review của Tiến và Tuấn trên PR #41 (quyền IAM Bedrock cho global inference profile, hạn chót tính từ `requestTimeEpoch`, vị trí tài nguyên, hai loại `429`)
+- Cập nhật 2026-10-27: nguồn tin cho `get_news` (bảng `NewsLabels`, ADR-0003); `POST /chat` theo prompt và tool v2 (PR #38), tool đọc thẳng bảng `Forecasts` (Khải chốt 26/10), số liệu chi phí và thời gian theo lần chạy dev 26/10; sửa theo review của Tiến và Tuấn trên PR #41 (quyền IAM Bedrock cho global inference profile, hạn chót tính từ `requestTimeEpoch`, vị trí tài nguyên, hai loại `429`); chốt schema 7 trường của `NewsLabels` và cách chọn nguồn tin bằng `NEWS_TABLE_NAME`/`NEWS_DIR`
 - Người viết: Khải; góp ý: Long (bản "Chốt target, phân vị và đánh giá mô hình" và "Đánh giá các metric trong metrics.py", 15/10; review PR #6)
 - Người dùng: Tuấn (API, Cognito), Tiến (web, Lambda `predict`), Long (DLinear), Phước (tool `get_forecast` của chatbot)
 
@@ -173,13 +173,62 @@ Hỏi đáp tiếng Việt về dự báo vàng, bạc, Brent, WTI. Lambda nhậ
 - Sau bước đó, tool chuyển sang dạng rút gọn cho model (`src/chatbot/tools.py`, đặc tả ở `docs/prompts/chatbot-haiku-v2.md`): chỉ q10/q50/q90 theo %, độ rộng khoảng 80% tính sẵn, xác suất tăng theo %; vàng/bạc không có giá. Đây là dữ liệu nội bộ giữa Lambda và model, không phải một phần của API này.
 - Lambda chat đóng gói kèm `forecast_format.py` ở gốc asset, và cần quyền `dynamodb:Query` trên bảng `Forecasts`.
 
-**Nguồn dữ liệu của tool `get_news` (đề xuất, chờ Tuấn chốt)**
+**Nguồn dữ liệu của tool `get_news` (chốt schema 27/10 theo review của Tuấn, mục 10)**
 
-- Theo ADR-0003, MVP không cần Knowledge Base: tool đọc bảng DynamoDB `NewsLabels` (ADR-0003 mục 6: PK `asset`, SK `<published_at ISO UTC>#<article_id>`), Query theo `asset` và SK `BETWEEN` khoảng ngày, mới nhất trước.
-- Mỗi item (một bài × một tài sản) cần có: `title`, `summary` (tóm tắt nhóm tự viết, không lưu toàn văn), `link`, `source`, `published_at`, `impact_score` (0–3), `direction` (`bullish`, `bearish`, `mixed`, `uncertain`). Tool chỉ trả các trường này cho model, bỏ tin không có link `http(s)`, tối đa 10 tin.
-- Mặc định: 7 ngày gần nhất đến hôm nay (giờ Việt Nam), `min_impact = 2`, khớp prompt `chatbot-haiku-v2`.
-- Lambda chat cần thêm quyền `dynamodb:Query` trên bảng `NewsLabels`.
-- Nếu bảng chưa có dữ liệu trước demo 8/11: Lambda đọc một bộ nhỏ thông cáo Fed/EIA thật, gắn nhãn tay, để trong file JSON đóng gói cùng Lambda. Không có nguồn nào thì `get_news` trả rỗng và câu trả lời nói không tìm thấy tin đáng kể.
+Theo ADR-0003, MVP không cần Knowledge Base. Lambda chat đọc tin từ bảng DynamoDB `NewsLabels` hoặc từ file JSON, chọn bằng biến môi trường. Hai nguồn dùng chung schema 7 trường dưới đây. Collector (Tuấn) ghi bảng; Lambda chat chỉ đọc. Code đọc: `src/chatbot/news.py`, chọn nguồn: `infra/lambda/chat_api/handler.py`.
+
+*Khóa của bảng `NewsLabels`*
+
+- Partition key `asset` (S): `gold`, `silver`, `brent` hoặc `wti`.
+- Sort key `sk` (S): `<published_at>#<article_id>`, ví dụ `2026-10-13T10:45:00Z#3f9a1c0b7e2d4a61`.
+- Một bài liên quan nhiều tài sản thì ghi mỗi tài sản một item, cùng `article_id`.
+- `article_id` cố định cho một bài (ví dụ 16 ký tự hex đầu của SHA-256 của `link`), chỉ gồm chữ thường, số và `-`. Nhờ vậy ghi lại cùng một bài sẽ ghi đè item cũ, không tạo bản trùng.
+- Lambda đọc bằng `Query`: `asset = :asset AND sk BETWEEN "<from_date>" AND "<to_date>T23:59:59Z#~"`, `ScanIndexForward = false`, tối đa 5 trang. So sánh chuỗi chỉ đúng thứ tự thời gian khi `sk` bắt đầu bằng `published_at` đúng định dạng bên dưới.
+
+*7 trường của mỗi tin (bảng và file JSON giống nhau)*
+
+| Trường | Kiểu (DynamoDB / JSON) | Quy tắc |
+|---|---|---|
+| `title` | S / string | Tiêu đề gốc của bài, tối đa 300 ký tự |
+| `summary` | S / string | Tóm tắt 1–3 câu do nhóm hoặc bước gắn nhãn viết, tối đa 600 ký tự. Không chép toàn văn hay đoạn dài của bài (quy tắc tin tức: chỉ lưu tiêu đề, tóm tắt, link, thời gian, nguồn) |
+| `link` | S / string | URL bắt đầu bằng `https://` hoặc `http://`. Tin sai điều kiện này bị bỏ, vì chatbot phải trích nguồn có link |
+| `source` | S / string | Tên nguồn để hiển thị, ví dụ `The Guardian`, `EIA` |
+| `published_at` | S / string | ISO 8601 UTC đúng dạng `YYYY-MM-DDTHH:MM:SSZ`: hậu tố `Z`, không có phần lẻ giây, không ghi `+00:00`. Phải trùng phần trước `#` của `sk`. Thời điểm gốc theo múi giờ nguồn (ADR-0003 mục 5) lưu ở thuộc tính khác nếu cần |
+| `impact_score` | N / integer | Số nguyên 0–3, theo `docs/prompts/news-labeling-schema.json`. Phải lưu kiểu Number: lưu kiểu String thì tool lỗi khi so sánh với `min_impact` |
+| `direction` | S / string | `bullish`, `bearish`, `mixed` hoặc `uncertain` |
+
+- Cả 7 trường đều bắt buộc. Tin thiếu `impact_score` bị coi là 0, nên bị lọc khi `min_impact` ≥ 1.
+- Item được có thêm thuộc tính khác, ví dụ `article_id`, `confidence`, `event_type`, `prompt_version`, `model_id`, `fetched_at`, `labeled_at` (ADR-0003 mục 4). Tool bỏ qua chúng và chỉ đưa 7 trường trên cho model.
+
+*Tool trả cho model*
+
+- Mặc định lấy 7 ngày gần nhất tính đến hôm nay (giờ Việt Nam), `min_impact = 2`, khớp prompt `chatbot-haiku-v2`.
+- Lọc theo ngày UTC của `published_at` (cùng cách cho cả bảng và file JSON).
+- Bỏ tin có `impact_score` < `min_impact` hoặc `link` không hợp lệ. Sắp tin theo `impact_score` giảm dần, cùng mức thì tin mới trước, rồi lấy tối đa 10 tin.
+- Lambda chat cần quyền `dynamodb:Query` trên bảng `NewsLabels`.
+
+*Chọn nguồn tin bằng biến môi trường của Lambda chat*
+
+| `NEWS_TABLE_NAME` | `NEWS_DIR` | `get_news` đọc từ |
+|---|---|---|
+| Có giá trị | Bất kỳ | Bảng DynamoDB có tên đó; `NEWS_DIR` bị bỏ qua |
+| Không đặt hoặc rỗng | Có giá trị | File JSON `<NEWS_DIR>/<asset>.json` |
+| Không đặt hoặc rỗng | Không đặt hoặc rỗng | Không có nguồn: luôn trả danh sách rỗng, Lambda ghi log cảnh báo |
+
+- **Không tự chuyển nguồn.** Đã đặt `NEWS_TABLE_NAME` mà bảng không có tin trong khoảng ngày thì trả rỗng, không đọc thêm file JSON.
+  - Muốn demo bằng JSON: bỏ `NEWS_TABLE_NAME` khỏi cấu hình Lambda và đặt `NEWS_DIR`.
+  - Muốn chuyển sang bảng khi collector đã có dữ liệu: đặt `NEWS_TABLE_NAME` (có thể giữ `NEWS_DIR`, vì nó bị bỏ qua).
+  - Lambda chọn nguồn một lần khi môi trường chạy khởi tạo. Đổi biến môi trường là cập nhật cấu hình Lambda; các lần gọi sau cập nhật dùng giá trị mới.
+- **`NEWS_SORT_KEY`:** tên thuộc tính sort key, mặc định `sk`. Đã chốt `sk` nên không cần đặt.
+- **File JSON:**
+  - mỗi tài sản một file UTF-8 dạng `{"asset": "wti", "items": [ ... ]}`, mỗi phần tử của `items` theo đúng 7 trường trên; giống định dạng `tests/chatbot/fixtures/news/`;
+  - thiếu file của tài sản nào thì tài sản đó không có tin;
+  - các file được đóng gói cùng asset Lambda. `NEWS_DIR` là đường dẫn tuyệt đối trong môi trường Lambda, ví dụ `/var/task/news`.
+- **Lỗi khi đọc bảng** (sai tên bảng, thiếu quyền, DynamoDB lỗi):
+  - `get_news` bắt lỗi và trả cho model `{"error": "news_unavailable", "message": ...}`, kèm log có `request_id`;
+  - câu trả lời vẫn có phần dự báo và nói chưa lấy được tin; request không thành `500`.
+  - Code hiện chưa làm vậy (lỗi đang lan ra thành `500 internal_error` cho cả request); Phước sửa trong PR code.
+- **Demo:** nếu bảng chưa có dữ liệu trước 8/11, dùng bộ nhỏ thông cáo Fed/EIA thật, gắn nhãn tay, đóng gói thành file JSON theo đúng schema trên. Không có nguồn nào thì `get_news` trả rỗng và câu trả lời nói không tìm thấy tin đáng kể.
 
 **Request**
 
@@ -401,7 +450,7 @@ Nguồn bổ sung (tra 27/10/2026):
 | 7 | Chính sách log | Không ghi nguyên văn câu hỏi/câu trả lời ở `prod` | Tuấn |
 | 8 | Thân lỗi do API Gateway tự sinh (401, 429 throttling, 504) | Giữ mặc định cho demo; web phân biệt `429 rate_limited` với `429` do throttling theo thân lỗi; thêm `POST` vào CORS | Tuấn, Tiến |
 | 9 | Router cho demo 8/11 | Router theo luật nếu kịp; nếu không, mọi câu đi `complex` (đắt hơn, chậm hơn với câu chào hỏi nhưng đúng chính sách) | Khải, Phước |
-| 10 | Nguồn tin cho `get_news` | Bảng `NewsLabels`: tên thuộc tính SK, đủ các trường ở mục "Nguồn dữ liệu của tool `get_news`", lịch có dữ liệu Fed/EIA; nếu chưa kịp thì demo bằng file JSON gắn nhãn tay | Tuấn |
+| 10 | Nguồn tin cho `get_news` | Đã chốt (27/10): khóa `asset`/`sk`, 7 trường và cách chọn nguồn bằng `NEWS_TABLE_NAME`/`NEWS_DIR` ở mục "Nguồn dữ liệu của tool `get_news`". Còn mở: ngày có dữ liệu Fed/EIA; nếu chưa kịp thì demo bằng file JSON gắn nhãn tay | Tuấn |
 
 ## Dữ liệu mẫu
 
