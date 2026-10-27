@@ -5,6 +5,8 @@ gắn với một lỗi của benchmark 23/10 (`docs/experiments/bedrock-model-t
 - Chỉ trả q10, q50, q90 dưới dạng trường có tên, đã đổi sang % (`q10_pct`...), không trả q05, q25,
   q75, q95: Haiku từng gọi q05/q95 hoặc q25/q75 là "khoảng 80%".
 - `prob_up_pct` tính sẵn để model không phải tự nhân 100.
+- `width_80_pct` (và `width_80_price` cho dầu) = q90 − q10 tính sẵn: dev2 ngày 26/10 Haiku tự so
+  độ rộng khoảng bằng lời và sai (HAIKU-012, 029), tự tính "±" (HAIKU-013).
 - Vàng, bạc không có `last_price`, `price_unit`, `qXX_price`; kèm `proxy_note` nói rõ chuỗi đại
   diện GLD/SLV. Dầu có giá USD/bbl cho q10, q50, q90.
 - `disclaimer` luôn là câu cố định của contract, không lấy từ bản ghi.
@@ -83,9 +85,10 @@ GET_FORECAST_TOOL_SPEC: dict[str, Any] = {
         "description": (
             "Dự báo mới nhất của một tài sản (gold, silver, brent, wti) cho kỳ hạn h = 1–7 phiên "
             "giao dịch. Mỗi kỳ hạn có target_date, q10_pct, q50_pct, q90_pct (mức thay đổi theo %, "
-            "khoảng dự báo 80% là từ q10 đến q90, trung vị là q50) và prob_up_pct (xác suất tăng "
-            "theo %). Brent và WTI có thêm last_price, price_unit và q10_price, q50_price, "
-            "q90_price theo USD/bbl. Vàng và bạc không có giá: dự báo dựa trên quỹ GLD/SLV (chuỗi "
+            "khoảng dự báo 80% là từ q10 đến q90, trung vị là q50), width_80_pct (độ rộng khoảng "
+            "80% theo điểm %, tính sẵn) và prob_up_pct (xác suất tăng theo %). Brent và WTI có "
+            "thêm last_price, price_unit, q10_price, q50_price, q90_price và width_80_price theo "
+            "USD/bbl. Vàng và bạc không có giá: dự báo dựa trên quỹ GLD/SLV (chuỗi "
             "đại diện). Kèm base_date, model_version, is_sample, stale, stale_sources, "
             "roll_in_horizon, fx (usd_vnd, date) và disclaimer."
         ),
@@ -250,6 +253,13 @@ def _fx(record: Mapping[str, Any]) -> tuple[float | int, str]:
     return _plain_number(rate_d), day
 
 
+def _width(entry: Mapping[str, Any], unit: str) -> float | int:
+    """Độ rộng khoảng 80% = q90 − q10, tính từ chính hai số đã làm tròn trả cho model, để model
+    đọc thấy độ rộng khớp đúng hai đầu khoảng (dev2 26/10: HAIKU-012, 013, 029 tự so độ rộng sai)."""
+    hi, lo = Decimal(repr(entry[f"q90_{unit}"])), Decimal(repr(entry[f"q10_{unit}"]))
+    return _round(hi - lo, _CENT)
+
+
 def build_forecast_result(
     record: Mapping[str, Any], *, asset: str | None = None, horizon: int | None = None
 ) -> dict[str, Any]:
@@ -309,11 +319,13 @@ def build_forecast_result(
         entry: dict[str, Any] = {"h": h, "target_date": target_date}
         for name, i in INTERVAL_INDEX.items():
             entry[f"{name}_pct"] = _round(q[i] * 100, _CENT)
+        entry["width_80_pct"] = _width(entry, "pct")
         entry["prob_up_pct"] = _round(p_up * 100, _ONE)
         if last_price is not None:
             for name, i in INTERVAL_INDEX.items():
                 price = float(last_price) * math.exp(float(q[i]))
                 entry[f"{name}_price"] = _round(Decimal(repr(price)), _CENT)
+            entry["width_80_price"] = _width(entry, "price")
         out_horizons.append(entry)
 
     stale_sources = _require(record, "stale_sources", list)

@@ -583,6 +583,18 @@ def _quantile_values(tool_calls: list[dict], positions: tuple[int, ...]) -> set[
     return out
 
 
+def _widths(tool_calls: list[dict]) -> set[float]:
+    """width_80_pct/width_80_price mà tool v2 trả: độ rộng khoảng 80% đứng cạnh nhãn 80% là hợp lệ."""
+    return {
+        round(abs(v), 2)
+        for call in tool_calls
+        if call["name"] == "get_forecast" and call["ok"]
+        for h in call["result"].get("horizons", [])
+        for k, v in h.items()
+        if k.startswith("width_80_") and isinstance(v, int | float)
+    }
+
+
 def interval_label_errors(answer: str, tool_calls: list[dict]) -> list[str]:
     """Số bị gọi là "khoảng 80%" nhưng là q05/q25/q75/q95 (đề xuất v2 mục 4.3, Khải 25/10).
 
@@ -591,7 +603,7 @@ def interval_label_errors(answer: str, tool_calls: list[dict]) -> list[str]:
     wrong = _quantile_values(tool_calls, (0, 2, 4, 6))
     # q50 cũng hợp lệ trên dòng có nhãn 80% (trung vị thường đứng cạnh khoảng); thiếu q50 thì
     # q50 của tài sản này trùng q95 của tài sản khác bị bắt nhầm (dev 26/10, HAIKU-014, 029)
-    right = _quantile_values(tool_calls, (1, 3, 5))
+    right = _quantile_values(tool_calls, (1, 3, 5)) | _widths(tool_calls)
     if not wrong:
         return []
     bad = []
@@ -900,6 +912,10 @@ def rescore(out_dir: Path, branch: str) -> dict:
     lại model (ví dụ sau khi sửa lỗi bộ chấm). Kết quả chính thức không được chấm lại bằng code
     mới, vì cách chấm đã chốt trước khi chạy."""
     old = json.loads((out_dir / "summary.json").read_text(encoding="utf-8"))
+    if old.get("branch", branch) != branch:
+        raise ValueError(
+            f"{out_dir} là kết quả bài {old['branch']!r}, không phải {branch!r}: sửa --branch"
+        )
     run_type = old.get("run_type", "official")
     if run_type != "dev" and not old.get("dry_run"):
         raise RuntimeError("chỉ chấm lại được kết quả dev hoặc dry-run, không chấm lại official")
@@ -1032,7 +1048,8 @@ def _fixtures_sha256(qset: str = C.DEFAULT_QUESTION_SET) -> str:
 
 def lock_hashes(qset: str) -> dict[str, str]:
     """SHA-256 khóa trước lần chạy chính thức (đề xuất v2, mục 5 và 7): câu hỏi, prompt, fixture,
-    code tool/chấm điểm (TOOL_CODE_PATHS) và cấu hình chấm điểm (scoring_config)."""
+    code tool/chấm điểm (TOOL_CODE_PATHS), cấu hình chấm điểm (scoring_config) và cấu hình của bộ
+    câu hỏi cùng bộ prompt đi kèm (set_config)."""
     cfg = qcfg(qset)
     out = {}
     for b in BRANCHES:
@@ -1041,7 +1058,21 @@ def lock_hashes(qset: str) -> dict[str, str]:
     out["fixtures"] = _fixtures_sha256(qset)
     out["tool_code"] = _files_sha256(ROOT / p for p in C.TOOL_CODE_PATHS)
     out["scoring_config"] = scoring_config_sha256()
+    out["set_config"] = set_config_sha256(qset)
     return out
+
+
+def set_config_sha256(qset: str) -> str:
+    """SHA-256 của QUESTION_SETS[qset] (trừ locked_sha256) và PROMPT_SETS của bộ prompt đi kèm
+    (review PR #38): đổi news_default_to, thư mục fixture, bộ prompt hay tool_format sau khi khóa
+    là đổi dữ liệu model nhận được, nên phải lệch khóa."""
+    cfg = {k: v for k, v in qcfg(qset).items() if k != "locked_sha256"}
+    payload = json.dumps(
+        {"question_set": cfg, "prompt_set": pcfg(cfg["prompt_set"])},
+        sort_keys=True,
+        ensure_ascii=False,
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def scoring_config_sha256() -> str:
@@ -1280,7 +1311,11 @@ def main(argv: list[str] | None = None) -> int:
     if not args.branch:
         ap.error("cần --branch (trừ khi dùng --print-lock)")
     if args.rescore:
-        summary = rescore(args.rescore, args.branch)
+        try:
+            summary = rescore(args.rescore, args.branch)
+        except (RuntimeError, ValueError) as exc:
+            print(f"DỪNG: {exc}", file=sys.stderr)
+            return 2
         keys = ("auto_pass", "auto_checks", "auto_failures")
         print(json.dumps({k: summary[k] for k in keys}, ensure_ascii=False, indent=2))
         return 0

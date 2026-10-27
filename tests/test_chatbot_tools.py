@@ -168,6 +168,7 @@ def test_all_assets_return_named_80pct_interval(asset):
         assert got["prob_up_pct"] == round(src["prob_up"] * 100)
         assert isinstance(got["prob_up_pct"], int)
         assert got["q10_pct"] <= got["q50_pct"] <= got["q90_pct"]
+        assert got["width_80_pct"] == round(got["q90_pct"] - got["q10_pct"], 2) >= 0
     # chỉ q10/q50/q90: không có q05, q25, q75, q95 hay mảng 7 phân vị
     keys = all_keys(res)
     assert not {k for k in keys if k.startswith(DROPPED_LEVELS)}
@@ -184,6 +185,7 @@ def test_gold_h1_values_from_fixture():
         "q10_pct": -1.16,
         "q50_pct": 0.06,
         "q90_pct": 1.28,
+        "width_80_pct": 2.44,
         "prob_up_pct": 52,
     }
 
@@ -221,11 +223,15 @@ def test_oil_has_usd_bbl_prices_for_q10_q50_q90(asset):
             "q10_pct",
             "q50_pct",
             "q90_pct",
+            "width_80_pct",
             "prob_up_pct",
             "q10_price",
             "q50_price",
             "q90_price",
+            "width_80_price",
         }
+        # độ rộng tính từ hai đầu khoảng đã làm tròn: model đọc thấy khớp đúng
+        assert got["width_80_price"] == round(got["q90_price"] - got["q10_price"], 2)
 
 
 # ---------- horizon ----------

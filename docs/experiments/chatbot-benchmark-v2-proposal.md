@@ -242,6 +242,40 @@ Không phải lỗi nội dung:
 ### 10.5. Việc tiếp theo
 
 1. ~~Chạy dev lần 2 trên bộ v1 với prompt v2 đã sửa~~: xong 26/10 (`-dev2`, mục 10.2).
-2. Sửa prompt Haiku theo lỗi dev2 rồi chạy dev lần 3 (chỉ bài B, `--out-dir ...-dev3/complex`), trước hạn 31/10. Prompt Nova giữ nguyên.
+2. Sửa prompt Haiku và tool theo lỗi dev2: xong 27/10 (mục 10.6). Phước chạy dev lần 3 (chỉ bài B) trước 31/10:
+   ```
+   python scripts/benchmark/chatbot_benchmark.py --branch complex --set v1 --prompts v2 --run-type dev --out-dir docs/experiments/results/chatbot-benchmark-<ngày>-dev3/complex
+   ```
 3. ~~Khải chốt mục 10.4~~ (đã áp 27/10). ~~Chốt danh sách 7 câu phân tích độ nhạy~~ (27/10, mục 10.1). Còn lại: Tiến approve `handler.py`, Khải duyệt prompt v2 bản cuối.
 4. Khóa SHA-256 (3/11), chạy chính thức (5/11).
+
+### 10.6. Sửa cho dev3 (27/10): tool trả độ rộng khoảng, prompt Haiku
+
+Theo lỗi thật của Haiku ở dev2 (mục 10.2). Prompt Nova không đổi.
+
+- **Tool `get_forecast` v2:** mỗi kỳ hạn có thêm `width_80_pct` = q90_pct − q10_pct, dầu có thêm `width_80_price`.
+  - Độ rộng tính từ chính hai số đã làm tròn trả cho model, nên khớp đúng với hai đầu khoảng.
+  - Mục đích: Haiku đọc độ rộng có sẵn thay vì tự so bằng lời (HAIKU-012, 029 so sai) hay tự tính "±" (HAIKU-013).
+  - Chỉ đổi dạng dữ liệu nội bộ của chatbot; API và contract không đổi.
+  - Với bộ chấm: `width_80_*` là số có nguồn ở kiểm tra #4, và là số hợp lệ trên dòng có nhãn 80% ở kiểm tra nhãn khoảng.
+- **Prompt Haiku** (ghi chú thiết kế mục 6):
+  - so sánh độ rộng bằng `width_80_*`;
+  - quy tắc so sánh số âm;
+  - cấm "±" và mức chênh dạng "cao hơn ... điểm phần trăm";
+  - đủ 4 phần bắt buộc cho mọi câu trả lời sau khi gọi `get_forecast`, kể cả khi chỉ hỏi một chỉ số hoặc hỏi về nguồn dự báo;
+  - không nhắc tên trường kỹ thuật, không đoán hệ thống thay đổi sau này.
+- **Soát trùng bộ v2:** các quy tắc viết chung, không nhắc tài sản, kỳ hạn hay cách hỏi của câu nào trong bộ v2.
+  - Các câu v2 về so sánh và độ rộng (HAIKU2-011 đến 015) vẫn giữ yêu cầu cũ: nêu q10–q90 và không tự tính độ rộng.
+  - Có `width_80_pct` thì model nêu được độ rộng có nguồn, không còn phải tự tính.
+- **SHA-256:** `prompt_complex` và `tool_code` đổi, nên kết quả dev3 phải chạy trên đúng bản này. Không sửa thêm trước khi chạy dev3, trừ các sửa ở mục 10.7.
+
+### 10.7. Sửa sau review PR #38 (27/10)
+
+Không đổi prompt, tool hay cách chấm từng câu; chỉ đổi khóa và kiểm tra đầu vào của script.
+
+- **Khóa SHA-256 thêm `set_config`:** băm `QUESTION_SETS[bộ]` (trừ `locked_sha256`) và `PROMPT_SETS` của bộ prompt đi kèm.
+  - Trước đây đổi `news_default_to` (khung ngày mặc định của `get_news`), thư mục fixture, bộ prompt hay `tool_format` sau khi khóa mà khóa vẫn khớp.
+  - Khóa ngày 3/11 sẽ có 8 mục.
+- **`--rescore`:** `--branch` khác bài ghi trong `summary.json` thì dừng và báo lỗi rõ, thay vì `KeyError`.
+- **Test `exact_record`** (ghi chú của Tiến): kiểm tham số Query cho `?date=` như đã có với `latest_record`.
+- Script nằm trong `tool_code`, nên dev3 chạy sau các sửa này.

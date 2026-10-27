@@ -220,3 +220,29 @@ def test_latest_record_query_matches_contract():
             "Limit": 1,
         }
     ]
+
+
+@pytest.mark.parametrize(
+    ("items", "expected_asset"),
+    [([], None), (["found"], "gold")],
+)
+def test_exact_record_query_matches_contract(items, expected_asset):
+    """`?date=`: Query đúng khóa asset + base_date, Limit 1; không có bản ghi thì None
+    (Tiến review PR #38: trước đây chỉ có test cho latest_record)."""
+    seen = []
+
+    class Table:
+        def query(self, **kwargs):
+            seen.append(kwargs)
+            return {"Items": [make_record("gold")] if items else []}
+
+    record = api._exact_record(Table(), "gold", "2026-10-23")
+    assert (record or {}).get("asset") == expected_asset
+    assert seen == [
+        {
+            "KeyConditionExpression": "#asset = :asset AND #base_date = :base_date",
+            "ExpressionAttributeNames": {"#asset": "asset", "#base_date": "base_date"},
+            "ExpressionAttributeValues": {":asset": "gold", ":base_date": "2026-10-23"},
+            "Limit": 1,
+        }
+    ]

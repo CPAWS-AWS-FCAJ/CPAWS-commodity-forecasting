@@ -663,7 +663,26 @@ def test_lock_covers_tool_code():
         "fixtures",
         "tool_code",
         "scoring_config",
+        "set_config",
     }
+
+
+def test_lock_detects_set_config_change(monkeypatch):
+    """Review PR #38: đổi news_default_to (khung ngày mặc định của get_news) hay tool_format sau
+    khi khóa phải lệch khóa; locked_sha256 không tính vào khóa."""
+    before = CB.lock_hashes("v2")
+    sets = copy.deepcopy(C.QUESTION_SETS)
+    sets["v2"]["locked_sha256"] = before
+    monkeypatch.setattr(C, "QUESTION_SETS", sets)
+    assert CB.lock_hashes("v2") == before
+    sets["v2"]["news_default_to"] = "2026-10-22"
+    after = CB.lock_hashes("v2")
+    assert {k for k in before if before[k] != after[k]} == {"set_config"}
+    sets["v2"]["news_default_to"] = C.QUESTION_SETS["v2"]["news_default_to"]
+    prompt_sets = copy.deepcopy(C.PROMPT_SETS)
+    prompt_sets["v2"]["tool_format"] = "contract"
+    monkeypatch.setattr(C, "PROMPT_SETS", prompt_sets)
+    assert CB.lock_hashes("v2")["set_config"] != before["set_config"]
 
 
 def test_print_lock_cli(capsys):
@@ -862,6 +881,21 @@ def test_interval_label_accepts_median_that_equals_other_asset_tail():
     assert CB.interval_label_errors(wrong, calls) == ["69.03"]
 
 
+def test_interval_label_accepts_width_from_tool_v2():
+    """Độ rộng khoảng 80% (width_80_pct của tool v2) đứng cạnh nhãn 80% là hợp lệ, kể cả khi trùng
+    giá trị một phân vị đuôi (ở đây ép trùng |q05| vàng h1 = 1,5)."""
+    fixture = _forecast("gold")
+    result = CB.T.build_forecast_result(fixture)
+    q05 = round(abs(fixture["horizons"][0]["returns"][0]) * 100, 2)
+    result["horizons"][0]["width_80_pct"] = q05
+    calls = [{"name": "get_forecast", "input": {"asset": "gold"}, "ok": True,
+              "result": result, "source": fixture}]  # fmt: skip
+    assert CB.interval_label_errors(f"Khoảng 80% rộng {q05} điểm %.", calls) == []
+    # width không trùng thì q05 gọi là đầu khoảng 80% vẫn bị bắt như cũ
+    result["horizons"][0]["width_80_pct"] = 2.44
+    assert CB.interval_label_errors(f"Khoảng 80% từ -{q05}% đến 1.28%.", calls)
+
+
 def test_rescore_dev_results_and_refuse_official(tmp_path):
     dev = tmp_path / "dev"
     CB.run(CB.FakeStreamClient(QUESTIONS["complex"]), "complex", dev, dry_run=False, run_type="dev")
@@ -880,6 +914,17 @@ def test_rescore_dev_results_and_refuse_official(tmp_path):
     CB.run(CB.FakeStreamClient(QUESTIONS["simple"]), "simple", official, dry_run=False)
     with pytest.raises(RuntimeError, match="không chấm lại official"):
         CB.rescore(official, "simple")
+
+
+def test_rescore_rejects_wrong_branch(tmp_path, capsys):
+    """Review PR #38: --branch khác bài ghi trong summary.json thì báo lỗi rõ, không KeyError."""
+    CB.run(
+        CB.FakeStreamClient(QUESTIONS["complex"]), "complex", tmp_path, dry_run=True, run_type="dev"
+    )
+    with pytest.raises(ValueError, match="sửa --branch"):
+        CB.rescore(tmp_path, "simple")
+    assert CB.main(["--branch", "simple", "--rescore", str(tmp_path)]) == 2
+    assert "sửa --branch" in capsys.readouterr().err
 
 
 def test_rescore_keeps_graded_manual_csv(tmp_path):
