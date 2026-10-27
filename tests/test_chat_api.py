@@ -33,7 +33,7 @@ NEWS = [
         "source": "Example Energy Brief",
         "published_at": "2026-10-13T10:45:00Z",
         "impact_score": 3,
-        "direction": "down",
+        "direction": "bearish",
     },
     {
         "title": "Minor note",
@@ -42,7 +42,7 @@ NEWS = [
         "source": "Example",
         "published_at": "2026-10-12T08:00:00Z",
         "impact_score": 1,
-        "direction": "neutral",
+        "direction": "uncertain",
     },
     {
         "title": "No link item",
@@ -51,7 +51,7 @@ NEWS = [
         "source": "Example",
         "published_at": "2026-10-13T09:00:00Z",
         "impact_score": 3,
-        "direction": "up",
+        "direction": "bullish",
     },
 ]
 
