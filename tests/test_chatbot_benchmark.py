@@ -166,7 +166,7 @@ def test_brent_forecast_numbers_never_contain_150():
 
 @pytest.mark.parametrize("branch", CB.BRANCHES)
 def test_system_prompt_is_single_text_block(branch):
-    text = CB.load_system_prompt(ROOT / CB.qcfg("v1")["prompts"][branch])
+    text = CB.load_system_prompt(ROOT / CB.pcfg("v1")["prompts"][branch])
     assert text.startswith("Bạn là trợ lý") and "Ghi chú thiết kế" not in text
 
 
@@ -663,7 +663,26 @@ def test_lock_covers_tool_code():
         "fixtures",
         "tool_code",
         "scoring_config",
+        "set_config",
     }
+
+
+def test_lock_detects_set_config_change(monkeypatch):
+    """Review PR #38: đổi news_default_to (khung ngày mặc định của get_news) hay tool_format sau
+    khi khóa phải lệch khóa; locked_sha256 không tính vào khóa."""
+    before = CB.lock_hashes("v2")
+    sets = copy.deepcopy(C.QUESTION_SETS)
+    sets["v2"]["locked_sha256"] = before
+    monkeypatch.setattr(C, "QUESTION_SETS", sets)
+    assert CB.lock_hashes("v2") == before
+    sets["v2"]["news_default_to"] = "2026-10-22"
+    after = CB.lock_hashes("v2")
+    assert {k for k in before if before[k] != after[k]} == {"set_config"}
+    sets["v2"]["news_default_to"] = C.QUESTION_SETS["v2"]["news_default_to"]
+    prompt_sets = copy.deepcopy(C.PROMPT_SETS)
+    prompt_sets["v2"]["tool_format"] = "contract"
+    monkeypatch.setattr(C, "PROMPT_SETS", prompt_sets)
+    assert CB.lock_hashes("v2")["set_config"] != before["set_config"]
 
 
 def test_print_lock_cli(capsys):
@@ -725,3 +744,201 @@ def test_lock_detects_scoring_config_change(monkeypatch):
     after = CB.lock_hashes("v2")
     assert before["scoring_config"] != after["scoring_config"]
     assert {k for k in before if before[k] != after[k]} == {"scoring_config"}
+
+
+# ---------- Khải chốt mục 10.4 đề xuất v2 (26/10) ----------
+
+
+def test_branch_allowed_numbers():
+    """Bài A được nêu 20 (phần bù khoảng 80%), bài B được nêu 0 (mốc không đổi); không chéo."""
+    nova = "Khoảng 80% không chắc chắn: vẫn còn khoảng 20% khả năng giá nằm ngoài, quanh 0%."
+    out = CB.check_answer(_q("NOVA-011"), _res(nova))
+    assert out["checks"]["unsourced_numbers"] == ["0"]
+    haiku = "Trung vị gần 0%, tức gần như đi ngang; 20 là số không có nguồn."
+    out = CB.check_answer(_q("HAIKU-015"), _res(haiku))
+    assert out["checks"]["unsourced_numbers"] == ["20"]
+
+
+def test_v2_must_not_include_has_no_metal_unit_but_keeps_vnd():
+    phrases = [s for b in CB.BRANCHES for q in V2[b] for s in q["must_not_include"]]
+    assert not [s for s in phrases if "ounce" in s.lower() or "usd/oz" in s.lower()]
+    assert {"₫", "nghìn đồng", "triệu đồng"} <= set(phrases)
+
+
+def test_sensitivity_list_is_in_v2_and_reported(tmp_path, monkeypatch):
+    """7 câu loại khi phân tích độ nhạy (Phước chốt 27/10) có trong bộ v2 và được báo riêng."""
+    excluded = set(C.SENSITIVITY_EXCLUDE["v2"])
+    assert len(excluded) == 7
+    assert excluded <= {q["id"] for b in CB.BRANCHES for q in V2[b]}
+    s = CB.run(CB.FakeStreamClient(V2["simple"]), "simple", tmp_path, dry_run=True, qset="v2")
+    sens = s["sensitivity"]
+    assert sens["excluded_ids"] == ["NOVA2-007", "NOVA2-008", "NOVA2-020", "NOVA2-024"]
+    assert sens["n_questions"] == 26 and sens["auto_pass"] == 26
+    # chấm tay: final có thêm kết quả sau khi loại, không đổi kết luận đạt
+    path = tmp_path / "manual_review.csv"
+    with path.open(encoding="utf-8-sig", newline="") as f:
+        rows = list(csv.DictReader(f))
+    for r in rows:
+        r.update(dung_y="1", du_y="1", dung_chinh_sach="1", nguoi_cham="Phước")
+    rows[6]["dung_y"] = "0"  # NOVA2-007, nằm trong danh sách loại
+    with path.open("w", encoding="utf-8-sig", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=list(rows[0]))
+        w.writeheader()
+        w.writerows(rows)
+    final = CB.score_manual(tmp_path, "simple")["final"]
+    assert final["passed_questions"] == 29
+    assert final["sensitivity"]["passed_questions"] == final["sensitivity"]["n_questions"] == 26
+    # bộ v1 không có danh sách loại
+    s1 = CB.run(CB.FakeStreamClient(QUESTIONS["simple"]), "simple", tmp_path / "v1", dry_run=True)
+    assert s1["sensitivity"] is None
+
+
+def test_lock_detects_branch_allowed_numbers_change(monkeypatch):
+    before = CB.lock_hashes("v2")["scoring_config"]
+    monkeypatch.setattr(C, "BRANCH_ALLOWED_NUMBERS", {"simple": (20, 30), "complex": (0,)})
+    assert CB.lock_hashes("v2")["scoring_config"] != before
+
+
+# ---------- tool get_forecast v2 trong benchmark (Khải 26/10: dùng chung định dạng Lambda API) ----------
+
+
+def _raw(path):
+    return {r["id"]: r for r in CB.load_questions(path / "raw.jsonl")}
+
+
+def test_v2_set_runs_prompt_v2_through_real_tool(tmp_path):
+    summary = CB.run(
+        CB.FakeStreamClient(V2["complex"]), "complex", tmp_path, dry_run=True, qset="v2"
+    )
+    assert (summary["prompt_set"], summary["tool_format"]) == ("v2", "v2")
+    assert summary["prompt_version"] == "chatbot-haiku-v2"
+    gold = next(
+        c for c in _raw(tmp_path)["HAIKU2-001"]["tool_calls"] if c["name"] == "get_forecast"
+    )
+    h1 = gold["result"]["horizons"][0]
+    assert {"q10_pct", "q50_pct", "q90_pct", "prob_up_pct"} <= set(h1)
+    assert "returns" not in h1 and "last_price" not in gold["result"]  # vàng: không có giá
+    assert gold["result"]["fx"] == {"usd_vnd": 26285, "date": "2026-10-21"}
+    assert len(gold["source"]["horizons"][0]["returns"]) == 7  # bản contract đứng sau, để soát nhãn
+
+
+def test_dev_run_v1_with_prompts_v2(tmp_path):
+    summary = CB.run(
+        CB.FakeStreamClient(QUESTIONS["complex"]),
+        "complex",
+        tmp_path,
+        dry_run=True,
+        run_type="dev",
+        prompt_set="v2",
+    )
+    assert (summary["question_set"], summary["prompt_set"], summary["tool_format"]) == (
+        "v1",
+        "v2",
+        "v2",
+    )
+    assert summary["auto_pass"] == 30, summary["auto_failures"]
+    nf = _raw(tmp_path)["HAIKU-022"]["tool_calls"][0]  # silver__not_found qua tool v2
+    assert nf["result"]["error"] == "not_found" and not nf["ok"]
+
+
+def test_official_run_cannot_override_prompts(tmp_path):
+    with pytest.raises(RuntimeError, match="--prompts"):
+        CB.run(CB.FakeStreamClient(QUESTIONS["simple"]), "simple", tmp_path, dry_run=False,
+               prompt_set="v2")  # fmt: skip
+
+
+def test_tool_config_v2_uses_tool_module_spec():
+    assert CB.tool_config("v2")["tools"][0] is CB.T.GET_FORECAST_TOOL_SPEC
+    assert CB.tool_config()["tools"][0]["toolSpec"]["name"] == "get_forecast"
+
+
+def test_interval_label_checked_against_source_for_v2_tool():
+    contract = json.loads((FIX_V2 / "forecasts" / "silver.json").read_text(encoding="utf-8"))
+    result = CB.T.build_forecast_result(contract)
+    call = {"name": "get_forecast", "input": {"asset": "silver"}, "ok": True, "result": result,
+            "source": contract}  # fmt: skip
+    bad = "Bạc 7 phiên: khoảng dự báo 80% từ -7,59% đến +7,48%."
+    assert CB.interval_label_errors(bad, [call]) == ["7,59"]
+    assert CB.interval_label_errors(bad, [{**call, "source": None}]) == []  # không có source
+
+
+def test_lock_includes_tool_and_shared_formatter():
+    assert {"src/chatbot/tools.py", "infra/lambda/forecast_api/forecast_format.py"} <= set(
+        C.TOOL_CODE_PATHS
+    )
+    assert all((ROOT / p).is_file() for p in C.TOOL_CODE_PATHS)
+
+
+def test_interval_label_accepts_median_that_equals_other_asset_tail():
+    """Dev 26/10 (HAIKU-014): q50 Brent h1 = 74,76 trùng q95 WTI h2; không được coi là sai nhãn."""
+    calls = [
+        {"name": "get_forecast", "input": {"asset": a}, "ok": True, "result": _forecast(a)}
+        for a in ("brent", "wti")
+    ]
+    line = "Brent: khoảng 80% từ 72.96 đến 76.61 USD/bbl, trung vị 74.76 USD/bbl."
+    assert CB.interval_label_errors(line, calls) == []
+    wrong = "WTI: khoảng 80% từ 69.03 đến 73.19 USD/bbl."  # 69,03 là q05 WTI h1
+    assert CB.interval_label_errors(wrong, calls) == ["69.03"]
+
+
+def test_interval_label_accepts_width_from_tool_v2():
+    """Độ rộng khoảng 80% (width_80_pct của tool v2) đứng cạnh nhãn 80% là hợp lệ, kể cả khi trùng
+    giá trị một phân vị đuôi (ở đây ép trùng |q05| vàng h1 = 1,5)."""
+    fixture = _forecast("gold")
+    result = CB.T.build_forecast_result(fixture)
+    q05 = round(abs(fixture["horizons"][0]["returns"][0]) * 100, 2)
+    result["horizons"][0]["width_80_pct"] = q05
+    calls = [{"name": "get_forecast", "input": {"asset": "gold"}, "ok": True,
+              "result": result, "source": fixture}]  # fmt: skip
+    assert CB.interval_label_errors(f"Khoảng 80% rộng {q05} điểm %.", calls) == []
+    # width không trùng thì q05 gọi là đầu khoảng 80% vẫn bị bắt như cũ
+    result["horizons"][0]["width_80_pct"] = 2.44
+    assert CB.interval_label_errors(f"Khoảng 80% từ -{q05}% đến 1.28%.", calls)
+
+
+def test_rescore_dev_results_and_refuse_official(tmp_path):
+    dev = tmp_path / "dev"
+    CB.run(CB.FakeStreamClient(QUESTIONS["complex"]), "complex", dev, dry_run=False, run_type="dev")
+    raw = CB.load_questions(dev / "raw.jsonl")
+    raw[0]["answer"] = raw[0]["answer"].replace("q10 đến q90", "q10 đến q90 (khoảng dự báo)") + (
+        " Khoảng dự báo 80% từ -1,50% đến +1,28%."  # -1,50 là q05 vàng h1
+    )
+    (dev / "raw.jsonl").write_text(
+        "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in raw), encoding="utf-8"
+    )
+    summary = CB.rescore(dev, "complex")
+    assert raw[0]["id"] in summary["interval_mislabel_questions"]
+    assert summary["final"] is None and len(summary["rescores"]) == 1
+
+    official = tmp_path / "official"
+    CB.run(CB.FakeStreamClient(QUESTIONS["simple"]), "simple", official, dry_run=False)
+    with pytest.raises(RuntimeError, match="không chấm lại official"):
+        CB.rescore(official, "simple")
+
+
+def test_rescore_rejects_wrong_branch(tmp_path, capsys):
+    """Review PR #38: --branch khác bài ghi trong summary.json thì báo lỗi rõ, không KeyError."""
+    CB.run(
+        CB.FakeStreamClient(QUESTIONS["complex"]), "complex", tmp_path, dry_run=True, run_type="dev"
+    )
+    with pytest.raises(ValueError, match="sửa --branch"):
+        CB.rescore(tmp_path, "simple")
+    assert CB.main(["--branch", "simple", "--rescore", str(tmp_path)]) == 2
+    assert "sửa --branch" in capsys.readouterr().err
+
+
+def test_rescore_keeps_graded_manual_csv(tmp_path):
+    CB.run(
+        CB.FakeStreamClient(QUESTIONS["simple"]), "simple", tmp_path, dry_run=True, run_type="dev"
+    )
+    path = tmp_path / "manual_review.csv"
+    with path.open(encoding="utf-8-sig", newline="") as f:
+        rows = list(csv.DictReader(f))
+    rows[0]["nguoi_cham"] = "Phước"
+    with path.open("w", encoding="utf-8-sig", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=CB.MANUAL_COLUMNS)
+        w.writeheader()
+        w.writerows(rows)
+    CB.rescore(tmp_path, "simple")
+    with path.open(encoding="utf-8-sig", newline="") as f:
+        assert next(csv.DictReader(f))["nguoi_cham"] == "Phước"

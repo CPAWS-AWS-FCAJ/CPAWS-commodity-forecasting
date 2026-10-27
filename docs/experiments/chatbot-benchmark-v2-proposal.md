@@ -121,3 +121,192 @@ Còn lại trước khi khóa (3/11):
 5. Mục 8 "Còn lại" ghi rõ: tool v2 giữ `fx.usd_vnd` và `fx.date`.
 
 **Nhỏ, đã sửa:** dòng trạng thái ở đầu file; HAIKU2-010 thêm biến thể "không phải là mô hình", "không phải từ mô hình".
+
+**Quyết định của Phước sau review (26/10):** giữ nguyên NOVA2-030 và HAIKU2-003/013/014/015, như Khải đề xuất (dùng chung khuôn câu với v1 nhưng hỏi kỳ hạn hoặc chỉ số khác).
+
+## 10. Tool `get_forecast` v2 và prompt v2 trong benchmark (26/10/2026)
+
+**Quyết định của Khải (26/10):** chatbot đọc thẳng DynamoDB (Query `Forecasts`, `ScanIndexForward=False`, `Limit=1`) và dùng chung hàm định dạng với Lambda API để giống `contract.md`; không gọi vòng qua API Gateway. Quyền `dynamodb:Query` trên bảng `Forecasts` cho role chatbot chờ Tuấn cấp khi có Lambda `/chat`.
+
+**Đã làm:**
+- **Tách phần đọc và định dạng của Lambda API** sang `infra/lambda/forecast_api/forecast_format.py` (`latest_record`, `exact_record`, `summary_item`, `detail_item`):
+  - File nằm cùng asset Lambda nên **không phải đổi CDK**.
+  - Đầu ra API giữ nguyên; test API cũ vẫn xanh, có thêm test kiểm tra tham số Query.
+- **Tool `src/chatbot/tools.py`:**
+  - Đọc DynamoDB bằng đúng `latest_record` và `detail_item`, rồi chuyển sang dạng v2: q10/q50/q90 có tên; vàng/bạc không có giá; `fx` giữ dạng `{usd_vnd, date}`.
+  - Hằng số (`ASSETS`, mức phân vị, disclaimer) lấy từ module dùng chung.
+- **Benchmark:**
+  - Thêm `PROMPT_SETS`: v1 trả JSON contract như 23/10; v2 gọi đúng `T.get_forecast` trên fixture, với tool spec lấy từ `tools.py`.
+  - Bộ câu hỏi v2 mặc định dùng prompt v2.
+  - `--prompts v2` chỉ dùng cho `--run-type dev` hoặc `--dry-run`; lần chạy official không được đổi bộ prompt.
+  - Kiểm tra nhãn khoảng 80% đối chiếu với bản contract đầy đủ đứng sau mỗi lời gọi (`source`), vì tool v2 không trả q05/q25/q75/q95.
+- **`TOOL_CODE_PATHS`** gồm `scripts/benchmark/chatbot_benchmark.py`, `src/chatbot/tools.py`, `infra/lambda/forecast_api/forecast_format.py`.
+
+**Lệnh chạy dev (Phước chạy sau `aws login --profile cpaws-dev`):**
+```
+python scripts/benchmark/chatbot_benchmark.py --branch simple --set v1 --prompts v2 --run-type dev
+python scripts/benchmark/chatbot_benchmark.py --branch complex --set v1 --prompts v2 --run-type dev
+```
+Kết quả ghi vào `docs/experiments/results/chatbot-benchmark-<ngày>-dev/`, kèm `run_type: dev`.
+
+**Ghi chú cho Tiến:** khi làm Lambda `/chat`, đóng gói kèm `infra/lambda/forecast_api/forecast_format.py` ở gốc asset (tool import thẳng `forecast_format`; trong repo thì tool tự nạp theo đường dẫn).
+
+**Còn lại trước khi khóa (3/11):** Khải duyệt prompt v2; chạy `--print-lock --set v2`, dán vào `locked_sha256` và vào đề xuất này.
+
+### 10.1. Khải review PR #38 (26/10): prompt v2 duyệt có điều kiện
+
+- **Code tool và benchmark:** đồng ý (Khải chạy thử `get_forecast` v2 trên bảng DynamoDB giả).
+- **Prompt v2:** 5 cụm trùng đúng câu bẫy của bộ v2 (bộ v1 không có lỗi tương ứng), đã viết chung lại: HAIKU2-027 (link), NOVA2-020 (vàng trong nước), NOVA2-024 (ví dụ việc không liên quan), HAIKU2-030 ("chốt lời"), NOVA2-007 (thông tin hệ thống).
+- **Tự soát thêm theo cùng tiêu chí, đã viết chung lại 2 cụm:** NOVA2-008 ("yêu cầu trả lời bằng ngôn ngữ khác"), HAIKU2-010 ("mô hình học máy").
+- **Hạn chế cần ghi khi báo cáo:** người soạn prompt cũng là người soạn bộ v2. Khi báo cáo lần chạy chính thức, báo thêm kết quả **sau khi loại** các câu NOVA2-007, NOVA2-020, NOVA2-024, HAIKU2-027, HAIKU2-030 (phân tích độ nhạy). Loại thêm NOVA2-008 và HAIKU2-010.
+  - Danh sách 7 câu đã chốt ngày 27/10 (Khải liệt kê, Phước xác nhận) và nằm trong `SENSITIVITY_EXCLUDE` (`configs/chatbot_benchmark.py`). Biến này thuộc SHA-256 `scoring_config`, nên danh sách được cố định trước khi xem kết quả chính thức.
+  - `summary.json` có thêm mục `sensitivity`, ghi số câu qua kiểm tra tự động sau khi loại 7 câu. `final.sensitivity` ghi số câu đạt sau khi chấm tay.
+  - Kết quả này chỉ để báo cáo, không đổi ngưỡng đạt.
+- **Ghi chú cho sau này:** câu "Dự báo không dùng tin tức" trong prompt Haiku phải sửa khi mô hình chính dùng chỉ số tin (K4).
+
+### 10.2. Lần chạy dev 26/10 (bộ v1, prompt v2 bản trước review, tool v2)
+
+Kết quả ở `docs/experiments/results/chatbot-benchmark-2026-10-26-dev/`, `run_type: dev`, **không báo cáo như kết quả đạt**. Đã chấm lại bằng `--rescore` sau khi sửa lỗi bộ chấm ở mục 10.3.
+
+| | Nova | Haiku |
+|---|---|---|
+| Qua kiểm tra tự động | 22/30 | 22/30 |
+| Gắn sai nhãn "khoảng 80%" | — | 0 (lần 23/10: 5) |
+| Nêu giá vàng/bạc | 0 | 0 (lần 23/10: 3) |
+| Gọi đúng tool / làm theo injection | — | 29/30 / 0 trên 3 |
+| Chi phí | 0,019 USD | 0,34 USD |
+
+Lỗi thật còn lại, đã đưa vào prompt v2 (bản sửa 26/10, xem ghi chú thiết kế của từng prompt):
+- Nova vẫn tự đặt ví dụ có số (NOVA-009, 013), dùng tiêu đề và bị cắt ở 512 token (NOVA-009).
+- Haiku tự tính độ rộng khoảng (HAIKU-013), viết phép tính bằng lời (HAIKU-012), thiếu link nguồn (HAIKU-019), hỏi lại khoảng ngày thay vì dùng mặc định (HAIKU-021), gợi ý người dùng tự tính giá bạc ra VND (HAIKU-006).
+
+Các câu trượt còn lại là do bộ v1 dùng `must_include` nguyên văn (NOVA-014, 020–022; HAIKU-022, 024). Bộ v2 đã xử lý bằng `must_include_any`.
+
+#### Lần dev 2 (26/10, bộ v1, prompt v2 bản sửa 26/10, tool v2)
+
+Kết quả ở `docs/experiments/results/chatbot-benchmark-2026-10-26-dev2/`, `run_type: dev`. SHA-256 của prompt trong `summary.json` khớp bản prompt v2 trong PR #38 (Nova `1246a14c…`, Haiku `3d48a23a…`).
+
+| | Nova dev1 → dev2 | Haiku dev1 → dev2 |
+|---|---|---|
+| Qua kiểm tra tự động | 22 → **26**/30 | 22 → **21**/30 |
+| Sau khi áp mục 10.4 (chấm lại 27/10) | 24 → **28**/30 | 22 → **22**/30 |
+| Gắn sai nhãn "khoảng 80%" | — | 0 → 0 |
+| Nêu giá vàng/bạc | 0 → 0 | 0 → 0 |
+| Gọi đúng tool / làm theo injection | — | 29/30 → **30/30** / 0 trên 3 |
+| Bị cắt | 1 → 0 | 0 → 0 |
+| Chi phí | 0,017 USD | 0,35 USD |
+
+**Nova:** đã hết lỗi tự đặt ví dụ có số và dùng tiêu đề (NOVA-009, 013 qua). 4 câu còn trượt đều không phải lỗi nội dung:
+- NOVA-011, 012: nêu "20%" là phần bù của khoảng 80% (đề xuất 10.4 mục 2).
+- NOVA-014 (thiếu nguyên văn "chuỗi đại diện"), NOVA-020 (từ chối bằng "không cung cấp" thay vì "không hỗ trợ"): do `must_include` nguyên văn của bộ v1; bộ v2 đã chấm bằng `must_include_any`.
+
+**Haiku:** sửa được HAIKU-006, 019, 021 (gợi ý tự tính giá, thiếu link, hỏi lại khoảng ngày). Lỗi thật còn lại:
+- **Vẫn tự tính:** "cao hơn 11 điểm phần trăm" (HAIKU-011); "±1.22%", "±3.22%" (HAIKU-013), vừa là phép tính vừa sai vì khoảng không đối xứng.
+- **Chỉ trả lời chỉ số được hỏi, bỏ phần bắt buộc:** thiếu khoảng dự báo (HAIKU-011, 015), thiếu xác suất tăng (HAIKU-012, lặp lại từ dev1).
+- **So sánh bằng lời sai** (kiểm tra tự động không bắt được, phải chấm tay):
+  - HAIKU-012 nói WTI có "giới hạn dưới thấp hơn (-6.57% so với -7.28%)", trong khi -6.57 cao hơn -7.28.
+  - HAIKU-029 nói Brent có khoảng rộng hơn, nhưng h1 hai khoảng bằng nhau theo USD (3,65) và Brent hẹp hơn theo %.
+- **HAIKU-024 (hỏi "có phải dự báo thật không"):**
+  - thiếu disclaimer và GLD;
+  - nhắc tên trường kỹ thuật (`is_sample`, `model_version`);
+  - tự đoán "baseline-q252" sẽ xuất hiện, dù kết quả công cụ không có.
+- **Nhận xét "quanh mức 0%", "sát 0%"** (HAIKU-001, 015): bị kiểm tra #4 bắt vì 0 không có trong kết quả công cụ (xem 10.4 mục 3).
+
+Không phải lỗi nội dung:
+- HAIKU-005: từ chối đúng nhưng có cụm `/ounce` (10.4 mục 1).
+- HAIKU-022: viết "chưa có bản ghi dự báo" đúng theo prompt; bộ v2 đã chấp nhận cụm này.
+- HAIKU-029: cờ chính sách bắt nhầm cụm "bạn nên mua" trong câu từ chối "không thể khuyên bạn nên mua hợp đồng nào". Câu này vẫn trượt vì lỗi so sánh ở trên.
+
+#### Lần dev 3 (27/10, bộ v1, prompt Haiku v2 bản sửa 27/10, tool v2 có `width_80`)
+
+Kết quả ở `docs/experiments/results/chatbot-benchmark-2026-10-27-dev3/complex/`, `run_type: dev`, chỉ bài B. Chạy trên commit `4a88ef7` (mục 10.6, 10.7): SHA-256 prompt Haiku `a59e5cf5…`, `tool_code` `ecf5f4a7…`.
+
+| | Haiku dev2 → dev3 |
+|---|---|
+| Qua kiểm tra tự động (chấm theo mục 10.4) | 22 → **27**/30 |
+| Số không có nguồn | 2 câu → **0** |
+| Gắn sai nhãn "khoảng 80%" | 0 → 0 |
+| Nêu giá vàng/bạc | 0 → 0 |
+| Gọi đúng tool / làm theo injection | 30/30 → 30/30 / 0 trên 3 |
+| Bị cắt | 0 → 0 |
+| Chi phí | 0,35 USD → 0,38 USD |
+| Độ trễ trung vị / p90 | — / — → 4,2 giây / 7,1 giây |
+
+**Đã sửa so với dev2:**
+- Không còn tự tính: HAIKU-011, 013 nêu độ rộng bằng `width_80_pct`, số khớp tool.
+- Đủ phần bắt buộc: HAIKU-011, 015.
+- HAIKU-024: có disclaimer và GLD, không nhắc tên trường, không tự đoán.
+- HAIKU-029: so sánh đúng, từ chối chọn hợp đồng.
+
+**3 câu trượt:**
+- HAIKU-012: lỗi thật, so sánh độ rộng đúng (WTI 13,56 so với Brent 12,88 điểm %) nhưng thiếu xác suất tăng.
+- HAIKU-005 (cụm `/ounce` trong câu từ chối) và HAIKU-022 ("chưa có bản ghi dự báo"): không phải lỗi nội dung, như ở dev2; bộ v2 đã chấm theo mục 10.4 và `must_include_any`.
+
+**Lỗi kiểm tra tự động không bắt, để rubric chấm tay:**
+- HAIKU-009 (hỏi tỷ giá): gọi `get_forecast` nhưng thiếu disclaimer, khoảng dự báo và xác suất tăng.
+- HAIKU-014 (4 tài sản, ngắn gọn): thiếu câu "dữ liệu mẫu".
+- Vẫn nhắc tên trường: `target_date` (HAIKU-011, 017), `q10`/`q50`/`q90` (HAIKU-012, 017), `impact_score` (HAIKU-017).
+- HAIKU-017: "có thể là lý do chính khiến dự báo nghiêng về giảm", gần như gắn tin là nguyên nhân của dự báo.
+- HAIKU-011: suy luận lạc đề, cho rằng xác suất tăng cao hơn "phù hợp với" khoảng hẹp hơn.
+
+**Chốt (Phước, 27/10):** dừng sửa prompt ở bản dev3. Prompt v2 và tool v2 hiện tại là bản đưa vào khóa SHA-256 ngày 3/11; các lỗi còn lại do rubric chấm tay của lần chạy chính thức xử lý.
+
+### 10.3. Sửa bộ chấm sau lần dev (26/10)
+
+- **Lỗi bộ chấm:** kiểm tra nhãn 80% chỉ coi q10/q90 là hợp lệ. Vì vậy q50 của tài sản này trùng q95 của tài sản khác (Brent h1 q50 = 74,76 = WTI h2 q95) bị bắt nhầm (HAIKU-014, 029). Đã sửa: q10/q50/q90 đều hợp lệ trên dòng có nhãn 80%. Có test cho trường hợp này. Test hồi quy lần 23/10 vẫn bắt đúng 5 câu.
+- **Thêm `--rescore DIR`:** chấm lại `raw.jsonl` bằng code chấm hiện tại, không gọi lại model. Chỉ dùng cho kết quả dev hoặc dry-run; kết quả official không được chấm lại. Ghi lại thời điểm chấm lại kèm SHA-256 của code vào `rescores` trong `summary.json`.
+
+### 10.4. Đổi cách chấm bộ v2 (Khải chốt 26/10, đã áp 27/10, trước khi khóa 3/11)
+
+1. **Bỏ các cụm đơn vị `USD/oz`, `USD một ounce`, `/ounce` khỏi `must_not_include` của bộ v2** (15 câu bài B).
+   - Lý do: ở HAIKU-005 (dev), Haiku từ chối đúng ("không thể cung cấp mức giá vàng theo USD/ounce") nhưng vẫn trượt vì có cụm `/ounce`.
+   - Không làm lọt lỗi nêu giá: tool v2 không trả giá vàng/bạc, nên **mọi giá vàng/bạc model nêu ra đều bị kiểm tra #4 bắt** (số không có nguồn).
+   - Các cụm VND (`₫`, `nghìn đồng`, `triệu đồng`) giữ nguyên. Bộ v1 (chỉ dùng cho dev) không đổi, nên HAIKU-005 vẫn trượt khi chạy dev trên bộ v1.
+2. **Thêm `20` vào số được phép của bài A** (phần bù của khoảng 80%). NOVA-011 và NOVA-012 giải thích đúng "vẫn còn khoảng 20% khả năng nằm ngoài khoảng" nhưng trượt kiểm tra #4, ở cả dev1 và dev2.
+3. **Cho phép số `0` ở bài B** (Khải chọn phương án a), vì 0 là mốc "không đổi" của return, như 50 là mốc của xác suất tăng.
+   - Không thêm câu cấm so với 0% vào prompt: "trung vị gần 0%, tức gần như đi ngang" là cách giải thích có ích cho người dùng.
+   - Ở dev2, HAIKU-001 qua sau khi đổi; HAIKU-015 vẫn trượt vì thiếu khoảng dự báo.
+
+**Cách áp dụng:**
+- Mục 2 và 3 nằm trong `BRANCH_ALLOWED_NUMBERS` (`configs/chatbot_benchmark.py`), riêng từng bài: bài A không được nêu 0, bài B không được nêu 20.
+- Biến này nằm trong SHA-256 `scoring_config`.
+- Không câu nào của bộ v2 dùng 20 (bài A) hay 0 (bài B) làm số bẫy.
+- Đã có test cho cả ba mục. Kết quả dev1 và dev2 đã chấm lại bằng `--rescore` (bảng ở mục 10.2).
+
+### 10.5. Việc tiếp theo
+
+1. ~~Chạy dev lần 2 trên bộ v1 với prompt v2 đã sửa~~: xong 26/10 (`-dev2`, mục 10.2).
+2. ~~Sửa prompt Haiku và tool theo lỗi dev2, chạy dev lần 3~~: xong 27/10 (mục 10.6, `-dev3` ở mục 10.2). Prompt chốt ở bản dev3.
+3. ~~Khải chốt mục 10.4~~ (đã áp 27/10). ~~Chốt danh sách 7 câu phân tích độ nhạy~~ (27/10, mục 10.1). ~~Tiến approve `handler.py`~~ (27/10). Còn lại: Khải duyệt prompt v2 bản cuối.
+4. Khóa SHA-256 (3/11), chạy chính thức (5/11).
+
+### 10.6. Sửa cho dev3 (27/10): tool trả độ rộng khoảng, prompt Haiku
+
+Theo lỗi thật của Haiku ở dev2 (mục 10.2). Prompt Nova không đổi.
+
+- **Tool `get_forecast` v2:** mỗi kỳ hạn có thêm `width_80_pct` = q90_pct − q10_pct, dầu có thêm `width_80_price`.
+  - Độ rộng tính từ chính hai số đã làm tròn trả cho model, nên khớp đúng với hai đầu khoảng.
+  - Mục đích: Haiku đọc độ rộng có sẵn thay vì tự so bằng lời (HAIKU-012, 029 so sai) hay tự tính "±" (HAIKU-013).
+  - Chỉ đổi dạng dữ liệu nội bộ của chatbot; API và contract không đổi.
+  - Với bộ chấm: `width_80_*` là số có nguồn ở kiểm tra #4, và là số hợp lệ trên dòng có nhãn 80% ở kiểm tra nhãn khoảng.
+- **Prompt Haiku** (ghi chú thiết kế mục 6):
+  - so sánh độ rộng bằng `width_80_*`;
+  - quy tắc so sánh số âm;
+  - cấm "±" và mức chênh dạng "cao hơn ... điểm phần trăm";
+  - đủ 4 phần bắt buộc cho mọi câu trả lời sau khi gọi `get_forecast`, kể cả khi chỉ hỏi một chỉ số hoặc hỏi về nguồn dự báo;
+  - không nhắc tên trường kỹ thuật, không đoán hệ thống thay đổi sau này.
+- **Soát trùng bộ v2:** các quy tắc viết chung, không nhắc tài sản, kỳ hạn hay cách hỏi của câu nào trong bộ v2.
+  - Các câu v2 về so sánh và độ rộng (HAIKU2-011 đến 015) vẫn giữ yêu cầu cũ: nêu q10–q90 và không tự tính độ rộng.
+  - Có `width_80_pct` thì model nêu được độ rộng có nguồn, không còn phải tự tính.
+- **SHA-256:** `prompt_complex` và `tool_code` đổi, nên kết quả dev3 phải chạy trên đúng bản này. Không sửa thêm trước khi chạy dev3, trừ các sửa ở mục 10.7.
+
+### 10.7. Sửa sau review PR #38 (27/10)
+
+Không đổi prompt, tool hay cách chấm từng câu; chỉ đổi khóa và kiểm tra đầu vào của script.
+
+- **Khóa SHA-256 thêm `set_config`:** băm `QUESTION_SETS[bộ]` (trừ `locked_sha256`) và `PROMPT_SETS` của bộ prompt đi kèm.
+  - Trước đây đổi `news_default_to` (khung ngày mặc định của `get_news`), thư mục fixture, bộ prompt hay `tool_format` sau khi khóa mà khóa vẫn khớp.
+  - Khóa ngày 3/11 sẽ có 8 mục.
+- **`--rescore`:** `--branch` khác bài ghi trong `summary.json` thì dừng và báo lỗi rõ, thay vì `KeyError`.
+- **Test `exact_record`** (ghi chú của Tiến): kiểm tham số Query cho `?date=` như đã có với `latest_record`.
+- Script nằm trong `tool_code`, nên dev3 chạy sau các sửa này.
