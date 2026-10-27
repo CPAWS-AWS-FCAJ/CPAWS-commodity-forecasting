@@ -15,6 +15,7 @@ import pytest
 
 from src.chatbot import chat as C
 from src.chatbot import news as N
+from src.chatbot import quota as Q
 from src.chatbot import tools as T
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -111,6 +112,7 @@ def deps(responses, **kw):
     )
     if clock:
         d.clock = clock
+    d.sleep = lambda s: None
     return d
 
 
@@ -275,10 +277,17 @@ def test_truncated_and_guardrail_blocked():
 
 
 def test_model_unavailable_maps_to_503_and_other_errors_propagate():
-    d = deps([FakeClientError("ServiceUnavailableException")])
+    # lỗi tạm thời: thử lại đúng một lần rồi mới trả 503
+    d = deps([FakeClientError("ServiceUnavailableException")] * 2)
     with pytest.raises(C.ChatError) as exc:
         C.answer(C.parse_request({"question": "x"}), d)
     assert exc.value.status == 503 and exc.value.code == "model_unavailable"
+    assert len(d.client.calls) == 2
+    # ModelTimeout không thử lại
+    d = deps([FakeClientError("ModelTimeoutException")])
+    with pytest.raises(C.ChatError) as exc:
+        C.answer(C.parse_request({"question": "x"}), d)
+    assert exc.value.status == 503 and len(d.client.calls) == 1
     d = deps([FakeClientError("AccessDeniedException")])
     with pytest.raises(FakeClientError):
         C.answer(C.parse_request({"question": "x"}), d)
@@ -292,6 +301,40 @@ def test_deadline_returns_504():
     with pytest.raises(C.ChatError) as exc:
         C.answer(C.parse_request({"question": "x"}), d)
     assert exc.value.status == 504 and exc.value.code == "timeout"
+
+
+def test_throttled_once_then_succeeds():
+    d = deps([FakeClientError("ThrottlingException"), _text("Xin chào.")])
+    res = C.answer(C.parse_request({"question": "x"}), d)
+    assert res.answer == "Xin chào." and len(d.client.calls) == 2
+
+
+def test_bedrock_read_timeout_maps_to_504():
+    class ReadTimeoutError(Exception):  # cùng tên lớp với botocore
+        pass
+
+    d = deps([ReadTimeoutError("read timeout")])
+    with pytest.raises(C.ChatError) as exc:
+        C.answer(C.parse_request({"question": "x"}), d)
+    assert exc.value.status == 504 and exc.value.code == "timeout"
+
+
+def test_no_model_call_when_budget_cannot_fit_one_call():
+    d = deps([_text("x")])
+    with pytest.raises(C.ChatError) as exc:
+        C.answer(C.parse_request({"question": "x"}), d, budget_s=C.MIN_CALL_S - 0.1)
+    assert exc.value.status == 504 and d.client.calls == []
+
+
+def test_second_round_skipped_when_remaining_time_too_short():
+    # vòng 1 xong ở giây 9; ngân sách 25 giây thì còn 16 < MIN_CALL_S (17) nên không gọi vòng 2
+    times = iter([0.0, 0.0, 9.0])
+    d = deps(
+        [_tool_use(("get_forecast", {"asset": "gold"})), _text("x")], clock=lambda: next(times)
+    )
+    with pytest.raises(C.ChatError) as exc:
+        C.answer(C.parse_request({"question": "x"}), d, budget_s=25.0)
+    assert exc.value.status == 504 and len(d.client.calls) == 1
 
 
 # ---------- get_news ----------
@@ -415,7 +458,7 @@ def test_handler_hides_internal_errors(caplog):
 
 def test_handler_503_when_model_unavailable_and_log_has_no_question(caplog):
     caplog.set_level("INFO")
-    d = deps([FakeClientError("ServiceUnavailableException")])
+    d = deps([FakeClientError("ServiceUnavailableException")] * 2)
     resp = H.handle(event({"question": "câu hỏi bí mật"}), d)
     assert resp["statusCode"] == 503
     assert "câu hỏi bí mật" not in caplog.text
@@ -436,6 +479,151 @@ def test_handler_quota_429_sets_retry_after():
         "message": "Hết lượt.",
         "reset_at": "2026-10-27T17:00:00Z",
     }
+
+
+def test_time_budget_takes_earlier_of_gateway_and_lambda_deadlines():
+    class Ctx:
+        def __init__(self, ms):
+            self.ms = ms
+
+        def get_remaining_time_in_millis(self):
+            return self.ms
+
+    ev = {"requestContext": {"requestTimeEpoch": 1_000_000}}
+    # nhận request lúc 1000 s, giờ là 1003 s (authorizer + cold start 3 s): 29 - 4 - 3 = 22
+    assert H.time_budget(ev, None, now=lambda: 1003.0) == pytest.approx(22.0)
+    # Lambda chỉ còn 20 s: 20 - 3 = 17 nhỏ hơn
+    assert H.time_budget(ev, Ctx(20_000), now=lambda: 1003.0) == pytest.approx(17.0)
+    assert H.time_budget({}, None) == C.DEFAULT_BUDGET_S
+
+
+def test_handler_504_without_consuming_quota_when_request_is_already_late():
+    class Counting:
+        calls = 0
+
+        def consume(self, sub):
+            Counting.calls += 1
+
+    ev = event({"question": "x"})
+    ev["requestContext"]["requestTimeEpoch"] = 0  # nhận request từ rất lâu
+    resp = H.handle(ev, deps([_text("x")], quota=Counting()))
+    assert resp["statusCode"] == 504 and json.loads(resp["body"])["error"] == "timeout"
+    assert Counting.calls == 0
+
+
+def test_quota_from_env_requires_table_and_positive_limits(monkeypatch):
+    monkeypatch.delenv("CHAT_USAGE_TABLE_NAME", raising=False)
+    with pytest.raises(RuntimeError):
+        H.quota_from_env()
+    monkeypatch.setenv("CHAT_USAGE_TABLE_NAME", "cpaws-dev-chat-usage")
+    monkeypatch.setenv("CHAT_USER_DAILY_LIMIT", "0")
+    with pytest.raises(RuntimeError):
+        H.quota_from_env()
+
+
+# ---------- giới hạn lượt hỏi ----------
+
+
+class FakeCancel(Exception):
+    def __init__(self, codes):
+        super().__init__("TransactionCanceledException")
+        self.response = {
+            "Error": {"Code": "TransactionCanceledException"},
+            "CancellationReasons": [{"Code": c} for c in codes],
+        }
+
+
+class FakeDynamo:
+    """Client DynamoDB cấp thấp giả: đếm theo (pk, sk) và áp đúng điều kiện của giao dịch."""
+
+    def __init__(self, counts=None, conflicts=0):
+        self.counts = dict(counts or {})
+        self.conflicts = conflicts
+        self.transactions = []
+
+    def transact_write_items(self, TransactItems):
+        self.transactions.append(TransactItems)
+        ups = [t["Update"] for t in TransactItems]
+        keys = [(u["Key"]["pk"]["S"], u["Key"]["sk"]["S"]) for u in ups]
+        if self.conflicts:
+            self.conflicts -= 1
+            raise FakeCancel(["TransactionConflict", "None"])
+        limits = [int(u["ExpressionAttributeValues"][":limit"]["N"]) for u in ups]
+        reasons = [
+            "ConditionalCheckFailed" if self.counts.get(k, 0) >= lim else "None"
+            for k, lim in zip(keys, limits, strict=True)
+        ]
+        if "ConditionalCheckFailed" in reasons:
+            raise FakeCancel(reasons)
+        for k in keys:
+            self.counts[k] = self.counts.get(k, 0) + 1
+
+    def get_item(self, TableName, Key, ConsistentRead, ProjectionExpression):
+        assert ConsistentRead
+        n = self.counts.get((Key["pk"]["S"], Key["sk"]["S"]))
+        return {"Item": {"request_count": {"N": str(n)}}} if n else {}
+
+
+NOW = dt.datetime(2026, 10, 27, 10, 0, tzinfo=dt.UTC)  # 17:00 giờ Việt Nam ngày 27/10
+
+
+def gate(db, user_limit=20, global_limit=100, now=NOW):
+    return Q.DynamoQuotaGate(
+        db, "chat-usage", user_limit, global_limit, now=lambda: now, sleep=lambda s: None
+    )
+
+
+def test_quota_counts_user_and_global_rows_in_one_transaction():
+    db = FakeDynamo()
+    q = gate(db).consume("sub-1")
+    assert q.body() == {"limit": 20, "used": 1, "remaining": 19, "reset_at": "2026-10-27T17:00:00Z"}
+    gate(db).consume("sub-1")
+    assert db.counts == {("user#sub-1", "day#2026-10-27"): 2, ("global", "day#2026-10-27"): 2}
+    upd = db.transactions[0][0]["Update"]
+    assert upd["TableName"] == "chat-usage"
+    assert "request_count < :limit" in upd["ConditionExpression"]
+    # TTL: 00:00 giờ Việt Nam ngày 27/10 + 3 ngày
+    expected = dt.datetime(2026, 10, 30, tzinfo=Q.VN_TZ).timestamp()
+    assert int(upd["ExpressionAttributeValues"][":exp"]["N"]) == int(expected)
+
+
+def test_quota_user_limit_reached_returns_429_and_keeps_global_count():
+    db = FakeDynamo({("user#sub-1", "day#2026-10-27"): 20, ("global", "day#2026-10-27"): 5})
+    with pytest.raises(C.ChatError) as exc:
+        gate(db).consume("sub-1")
+    err = exc.value
+    assert err.status == 429 and err.code == "rate_limited" and "20 lượt" in err.message
+    assert err.extra["reset_at"] == "2026-10-27T17:00:00Z"
+    assert err.extra["retry_after"] == 7 * 3600
+    assert db.counts[("global", "day#2026-10-27")] == 5  # giao dịch bị hủy, không đếm
+
+
+def test_quota_global_limit_reached_does_not_use_up_user_quota():
+    db = FakeDynamo({("global", "day#2026-10-27"): 100})
+    with pytest.raises(C.ChatError) as exc:
+        gate(db).consume("sub-2")
+    assert exc.value.status == 429 and "hết lượt hỏi của hôm nay" in exc.value.message
+    assert ("user#sub-2", "day#2026-10-27") not in db.counts
+
+
+def test_quota_retries_on_transaction_conflict():
+    db = FakeDynamo(conflicts=1)
+    assert gate(db).consume("sub-1").used == 1 and len(db.transactions) == 2
+
+
+def test_quota_day_follows_vietnam_time():
+    # 17:30 UTC ngày 27/10 = 00:30 giờ Việt Nam ngày 28/10: đã sang ngày mới
+    late = dt.datetime(2026, 10, 27, 17, 30, tzinfo=dt.UTC)
+    db = FakeDynamo({("user#sub-1", "day#2026-10-27"): 20})
+    q = gate(db, now=late).consume("sub-1")
+    assert q.used == 1 and q.reset_at == "2026-10-28T17:00:00Z"
+    assert ("user#sub-1", "day#2026-10-28") in db.counts
+
+
+def test_handler_200_includes_quota_object():
+    d = deps([_text("Xin chào.")], quota=gate(FakeDynamo()))
+    body = json.loads(H.handle(event({"question": "Chào"}), d)["body"])
+    assert body["quota"]["limit"] == 20 and body["quota"]["remaining"] == 19
 
 
 def test_repo_prompts_load_for_both_branches():

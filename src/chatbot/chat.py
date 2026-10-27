@@ -1,9 +1,11 @@
 """Lõi xử lý `POST /chat` (hợp đồng: `docs/api/contract.md`, mục `POST /chat`, PR #41).
 
 Khung theo phương án A của hợp đồng (REST API, trả một lần): kiểm tra request, chọn nhánh, gọi
-Bedrock Converse với vòng gọi tool tối đa MAX_TOOL_ROUNDS, dựng response. Các phần còn chờ chốt
-trong PR #41 để ở dạng điểm gắn (hook), chưa cài:
-- giới hạn lượt hỏi (mục 3, 4): `QuotaGate`, mặc định không giới hạn và trả `quota = None`;
+Bedrock Converse với vòng gọi tool tối đa MAX_TOOL_ROUNDS, dựng response.
+- Hạn chót: Lambda truyền `budget_s` (giây còn lại, tính từ `requestTimeEpoch` của API Gateway);
+  chỉ bắt đầu một lần gọi model khi còn đủ MIN_CALL_S để lần gọi đó xong trước hạn.
+- Giới hạn lượt hỏi: `QuotaGate`; Lambda dùng `quota.DynamoQuotaGate`, test dùng `NoQuota`.
+Phần còn chờ chốt trong PR #41:
 - router (mục 9): `choose_branch`, mặc định mọi câu đi `complex`;
 - Guardrails: chỉ gắn `guardrailConfig` khi có cấu hình.
 
@@ -33,7 +35,13 @@ MAX_HISTORY_ITEMS = 6
 MAX_HISTORY_TEXT_CHARS = 2000
 MAX_BODY_BYTES = 64 * 1024
 MAX_TOOL_ROUNDS = 3
-DEADLINE_S = 25.0  # hạn chót nội bộ; Lambda timeout khoảng 28 giây, dưới integration 29 giây
+DEFAULT_BUDGET_S = 25.0  # khi không có requestTimeEpoch (test, gọi trực tiếp)
+# Mỗi lần gọi Bedrock kéo dài tối đa connect + read (client không tự thử lại); chỉ gọi khi còn đủ
+# MIN_CALL_S trước hạn chót, để Lambda tự trả 504 đúng dạng trước khi API Gateway cắt ở 29 giây.
+BEDROCK_CONNECT_TIMEOUT_S = 2.0
+BEDROCK_READ_TIMEOUT_S = 15.0
+MIN_CALL_S = BEDROCK_CONNECT_TIMEOUT_S + BEDROCK_READ_TIMEOUT_S
+RETRY_DELAY_S = 0.5
 TEMPERATURE = 0
 MAX_TOKENS = {"simple": 512, "complex": 1500}
 MODEL_IDS = {
@@ -55,6 +63,10 @@ UNAVAILABLE_CODES = frozenset(
         "InternalServerException",
     }
 )
+# Lỗi tạm thời đáng thử lại một lần (nếu còn thời gian); ModelTimeout thì không, vì chậm sẵn rồi
+RETRY_CODES = UNAVAILABLE_CODES - {"ModelTimeoutException"}
+# Tên lớp lỗi hết thời gian của botocore (không import botocore trong module này)
+TIMEOUT_ERRORS = frozenset({"ReadTimeoutError", "ConnectTimeoutError", "ConnectTimeout"})
 
 
 class ChatError(Exception):
@@ -190,6 +202,7 @@ class ChatDeps:
     quota: QuotaGate = field(default_factory=NoQuota)
     guardrail: Mapping[str, str] | None = None  # {"guardrailIdentifier", "guardrailVersion"}
     clock: Callable[[], float] = time.monotonic
+    sleep: Callable[[float], None] = time.sleep
 
 
 def _tool_config() -> dict[str, Any]:
@@ -224,17 +237,32 @@ def _client_error_code(exc: Exception) -> str | None:
     return None
 
 
-def _converse(deps: ChatDeps, kwargs: dict[str, Any]) -> dict[str, Any]:
-    try:
-        return deps.client.converse(**kwargs)
-    except Exception as exc:
-        code = _client_error_code(exc)
-        if code in UNAVAILABLE_CODES:
-            log.warning("bedrock unavailable: %s", code)
-            raise ChatError(
-                503, "model_unavailable", "Trợ lý đang bận, bạn thử lại sau ít phút."
-            ) from exc
-        raise
+def _timeout_error() -> ChatError:
+    return ChatError(504, "timeout", "Câu trả lời mất quá nhiều thời gian, bạn thử lại.")
+
+
+def _converse(deps: ChatDeps, kwargs: dict[str, Any], deadline: float) -> dict[str, Any]:
+    """Gọi Converse; chỉ gọi khi còn đủ MIN_CALL_S trước `deadline` (theo `deps.clock`). Lỗi tạm
+    thời được thử lại một lần nếu còn thời gian; hết thời gian thì 504, model không sẵn sàng thì 503."""
+    for attempt in range(2):
+        if deadline - deps.clock() < MIN_CALL_S:
+            raise _timeout_error()
+        try:
+            return deps.client.converse(**kwargs)
+        except Exception as exc:
+            if type(exc).__name__ in TIMEOUT_ERRORS:
+                log.warning("bedrock timeout: %s", type(exc).__name__)
+                raise _timeout_error() from exc
+            code = _client_error_code(exc)
+            if code not in UNAVAILABLE_CODES:
+                raise
+            log.warning("bedrock unavailable: %s (attempt %d)", code, attempt + 1)
+            if code not in RETRY_CODES or attempt == 1:
+                raise ChatError(
+                    503, "model_unavailable", "Trợ lý đang bận, bạn thử lại sau ít phút."
+                ) from exc
+            deps.sleep(RETRY_DELAY_S)
+    raise AssertionError("unreachable")  # pragma: no cover
 
 
 @dataclass
@@ -252,10 +280,16 @@ class ChatResult:
     tool_errors: list[str] = field(default_factory=list)  # "<tool>:<mã lỗi>", để ghi log
 
 
-def answer(req: ChatRequest, deps: ChatDeps, branch: str | None = None) -> ChatResult:
-    """Trả lời một câu hỏi. Báo ChatError 503 (model không sẵn sàng) hoặc 504 (quá hạn chót)."""
+def answer(
+    req: ChatRequest,
+    deps: ChatDeps,
+    branch: str | None = None,
+    budget_s: float | None = None,
+) -> ChatResult:
+    """Trả lời một câu hỏi trong `budget_s` giây (mặc định DEFAULT_BUDGET_S). Báo ChatError 503
+    (model không sẵn sàng) hoặc 504 (không còn đủ thời gian cho lần gọi model tiếp theo)."""
     branch = branch or choose_branch(req)
-    start = deps.clock()
+    deadline = deps.clock() + (DEFAULT_BUDGET_S if budget_s is None else budget_s)
     kwargs: dict[str, Any] = {
         "modelId": MODEL_IDS[branch],
         "system": [{"text": deps.prompts[branch]}],
@@ -274,9 +308,7 @@ def answer(req: ChatRequest, deps: ChatDeps, branch: str | None = None) -> ChatR
     tokens_in = tokens_out = 0
     rounds = 0
     while True:
-        if deps.clock() - start > DEADLINE_S:
-            raise ChatError(504, "timeout", "Câu trả lời mất quá nhiều thời gian, bạn thử lại.")
-        resp = _converse(deps, {**kwargs, "messages": messages})
+        resp = _converse(deps, {**kwargs, "messages": messages}, deadline)
         usage = resp.get("usage", {})
         tokens_in += usage.get("inputTokens", 0)
         tokens_out += usage.get("outputTokens", 0)

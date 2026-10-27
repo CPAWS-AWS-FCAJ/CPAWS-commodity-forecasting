@@ -3,11 +3,13 @@
 Đóng gói asset Lambda (đề xuất, chờ Tiến chốt ở PR #41 mục 2, 4):
     handler.py
     forecast_format.py           ← infra/lambda/forecast_api/forecast_format.py
-    chatbot/__init__.py, tools.py, news.py, chat.py   ← src/chatbot/
+    chatbot/__init__.py, tools.py, news.py, chat.py, quota.py   ← src/chatbot/
     prompts/chatbot-nova-v2.md, chatbot-haiku-v2.md   ← docs/prompts/ (bản đã khóa SHA-256)
 
 Biến môi trường:
 - FORECASTS_TABLE_NAME (bắt buộc), AWS_REGION;
+- CHAT_USAGE_TABLE_NAME (bắt buộc: bảng đếm lượt hỏi chat-usage), CHAT_USER_DAILY_LIMIT (mặc định
+  20), CHAT_GLOBAL_DAILY_LIMIT (mặc định 100); PR #41 mục 3, 4;
 - NEWS_TABLE_NAME (bảng NewsLabels, ADR-0003 mục 6), NEWS_SORT_KEY (tên thuộc tính SK, mặc định
   "sk"); hoặc NEWS_DIR (thư mục JSON `<asset>.json` cho demo); không đặt thì get_news rỗng;
 - PROMPT_DIR (mặc định thư mục `prompts` cạnh handler);
@@ -28,11 +30,13 @@ from pathlib import Path
 try:  # trong asset Lambda
     from chatbot import chat as chat_core
     from chatbot import news as news_tool
+    from chatbot import quota as quota_gate
     from chatbot import tools as forecast_tool
 except ImportError:  # trong repo (test)
     sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
     from src.chatbot import chat as chat_core
     from src.chatbot import news as news_tool
+    from src.chatbot import quota as quota_gate
     from src.chatbot import tools as forecast_tool
 
 logger = logging.getLogger()
@@ -41,6 +45,13 @@ logger.setLevel(logging.INFO)
 _HERE = Path(__file__).resolve().parent
 _REPO_PROMPTS = _HERE.parents[2] / "docs" / "prompts" if len(_HERE.parents) > 2 else _HERE
 PROMPT_FILES = {"simple": "chatbot-nova-v2.md", "complex": "chatbot-haiku-v2.md"}
+# Hạn chót (PR #41): tính từ lúc API Gateway nhận request, vì thời gian Cognito authorizer và
+# khởi động lúc cold start xảy ra trước handler nhưng vẫn tính vào 29 giây của API Gateway.
+API_GATEWAY_TIMEOUT_S = 29.0
+GATEWAY_MARGIN_S = 4.0
+LAMBDA_MARGIN_S = 3.0
+DEFAULT_USER_DAILY_LIMIT = 20
+DEFAULT_GLOBAL_DAILY_LIMIT = 100
 
 _deps_cache: chat_core.ChatDeps | None = None
 
@@ -80,6 +91,45 @@ def news_repository(region: str = "ap-southeast-1"):
     return news_tool.StaticNewsRepository()
 
 
+def time_budget(event: dict, context=None, now=time.time) -> float:
+    """Số giây còn lại cho việc trả lời: nhỏ hơn trong hai mốc
+    - `requestTimeEpoch` + 29 giây − GATEWAY_MARGIN_S (hạn của API Gateway);
+    - thời gian còn lại của Lambda − LAMBDA_MARGIN_S.
+    Không có mốc nào (test, gọi trực tiếp) thì dùng DEFAULT_BUDGET_S."""
+    budgets = []
+    epoch_ms = (event.get("requestContext") or {}).get("requestTimeEpoch")
+    if isinstance(epoch_ms, int | float) and not isinstance(epoch_ms, bool):
+        budgets.append(epoch_ms / 1000 + API_GATEWAY_TIMEOUT_S - GATEWAY_MARGIN_S - now())
+    remaining = getattr(context, "get_remaining_time_in_millis", None)
+    if callable(remaining):
+        budgets.append(remaining() / 1000 - LAMBDA_MARGIN_S)
+    return min(budgets) if budgets else chat_core.DEFAULT_BUDGET_S
+
+
+def _positive_int_env(name: str, default: int) -> int:
+    raw = os.environ.get(name)
+    if raw is None or raw == "":
+        return default
+    value = int(raw)
+    if value < 1:
+        raise RuntimeError(f"{name} must be a positive integer")
+    return value
+
+
+def quota_from_env(region: str = "ap-southeast-1") -> chat_core.QuotaGate:
+    """Bộ đếm lượt hỏi từ biến môi trường; thiếu bảng thì báo lỗi, không chạy khi không có giới
+    hạn (giới hạn lượt hỏi là chỗ kiểm soát chi phí Bedrock chính)."""
+    table_name = os.environ.get("CHAT_USAGE_TABLE_NAME")
+    if not table_name:
+        raise RuntimeError("CHAT_USAGE_TABLE_NAME environment variable is missing")
+    return quota_gate.DynamoQuotaGate.from_table_name(
+        table_name,
+        region,
+        user_limit=_positive_int_env("CHAT_USER_DAILY_LIMIT", DEFAULT_USER_DAILY_LIMIT),
+        global_limit=_positive_int_env("CHAT_GLOBAL_DAILY_LIMIT", DEFAULT_GLOBAL_DAILY_LIMIT),
+    )
+
+
 def _build_deps() -> chat_core.ChatDeps:
     """Tạo client và nguồn dữ liệu một lần cho mỗi môi trường chạy Lambda (tái dùng giữa các lần)."""
     import boto3
@@ -89,8 +139,13 @@ def _build_deps() -> chat_core.ChatDeps:
     client = boto3.client(
         "bedrock-runtime",
         region_name=region,
-        # thử lại ít, timeout ngắn: tổng thời gian phải nằm dưới hạn chót 25 giây
-        config=Config(retries={"max_attempts": 2, "mode": "standard"}, read_timeout=20),
+        # Không để botocore tự thử lại: chat.py tự thử lại một lần khi còn đủ thời gian, nên mỗi
+        # lần gọi dài tối đa connect + read = MIN_CALL_S
+        config=Config(
+            connect_timeout=chat_core.BEDROCK_CONNECT_TIMEOUT_S,
+            read_timeout=chat_core.BEDROCK_READ_TIMEOUT_S,
+            retries={"total_max_attempts": 1, "mode": "standard"},
+        ),
     )
     table_name = os.environ.get("FORECASTS_TABLE_NAME")
     if not table_name:
@@ -107,6 +162,7 @@ def _build_deps() -> chat_core.ChatDeps:
         forecasts=forecast_tool.DynamoForecastRepository.from_table_name(table_name, region),
         news=news_repository(region),
         prompts=prompts,
+        quota=quota_from_env(region),
         guardrail=guardrail,
     )
 
@@ -134,7 +190,7 @@ def _parse_body(event: dict):
         raise chat_core.ChatError(400, "invalid_body", "Thân request không phải JSON.") from exc
 
 
-def handle(event: dict, deps: chat_core.ChatDeps) -> dict:
+def handle(event: dict, deps: chat_core.ChatDeps, context=None) -> dict:
     """Xử lý một sự kiện API Gateway (REST, Lambda proxy). Tách khỏi `handler` để test truyền deps."""
     ctx = event.get("requestContext") or {}
     request_id = ctx.get("requestId", "")
@@ -151,8 +207,13 @@ def handle(event: dict, deps: chat_core.ChatDeps) -> dict:
     log = {"request_id": request_id, "sub": sub}
     try:
         req = chat_core.parse_request(_parse_body(event))
+        # không đủ thời gian cho một lần gọi model thì trả 504 trước khi tính lượt
+        if time_budget(event, context) < chat_core.MIN_CALL_S:
+            raise chat_core.ChatError(
+                504, "timeout", "Câu trả lời mất quá nhiều thời gian, bạn thử lại."
+            )
         quota = deps.quota.consume(sub)
-        result = chat_core.answer(req, deps)
+        result = chat_core.answer(req, deps, budget_s=time_budget(event, context))
         log.update(
             branch=result.branch,
             prompt_version=chat_core.PROMPT_VERSIONS[result.branch],
@@ -190,4 +251,4 @@ def handler(event, context):
     except Exception:
         logger.exception("chat: cannot initialise dependencies")
         return _response(500, {"error": "internal_error", "message": "Đã có lỗi, bạn thử lại sau."})
-    return handle(event, deps)
+    return handle(event, deps, context)
