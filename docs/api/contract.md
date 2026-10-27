@@ -381,7 +381,8 @@ Tra tài liệu AWS ngày 25/10/2026:
   - Lỗi tạm thời của Bedrock (throttling, service unavailable) được Lambda thử lại một lần nếu còn đủ thời gian; `ModelTimeoutException` không thử lại. Hết thời gian chờ Bedrock thì trả `504 timeout`.
   - Câu trả lời rất dài (gần `max_tokens` 1500) có thể vượt 15 giây và thành `504`; câu trả lời 150–250 từ theo prompt thì nằm trong giới hạn này.
   - Hạn chót tính từ lúc API Gateway nhận request: `requestContext.requestTimeEpoch` + 29 giây − 4 giây dự phòng. Đồng thời dừng khi `context.get_remaining_time_in_millis()` còn dưới 3 giây.
-  - Không dùng mốc cố định "25 giây kể từ khi handler chạy" như bản trước. Theo review của Tiến (27/10), mốc đó bỏ sót thời gian khởi động lúc cold start và thời gian Cognito authorizer: cả hai xảy ra trước khi handler chạy nhưng vẫn tính vào 29 giây của API Gateway. Mốc tính từ `requestTimeEpoch` gồm cả hai. Chỉ dùng `get_remaining_time_in_millis()` thì vẫn bỏ sót, vì nó đo theo timeout của Lambda.
+  - Đây là ước lượng an toàn. Mốc 29 giây của API Gateway đếm từ lúc gửi request sang Lambda, tức sau Cognito authorizer, nên tính từ `requestTimeEpoch` sớm hơn hạn thật đúng bằng thời gian authorizer chạy. Lambda vì vậy dừng hơi sớm chứ không trễ.
+  - Không dùng mốc cố định "25 giây kể từ khi handler chạy" như bản trước. Theo review của Tiến (27/10), mốc đó bỏ sót thời gian khởi động lúc cold start: thời gian này xảy ra trước khi handler chạy nhưng vẫn tính vào 29 giây của API Gateway. Mốc tính từ `requestTimeEpoch` gồm cả thời gian đó. Chỉ dùng `get_remaining_time_in_millis()` thì vẫn bỏ sót, vì nó đo theo timeout của Lambda.
   - Timeout của Lambda đặt 28 giây.
 - Bên trong Lambda gọi Converse, không gọi ConverseStream, vì đằng nào cũng trả một lần (ADR-0004 mục 3 cho phép chọn theo luồng xử lý). Nhờ vậy role chỉ cần `bedrock:InvokeModel` (mục "Tài nguyên và quyền IAM" bên dưới).
 
