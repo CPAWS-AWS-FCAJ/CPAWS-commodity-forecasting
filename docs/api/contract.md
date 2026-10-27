@@ -3,7 +3,7 @@
 - Ngày: 2026-10-16 (cập nhật theo review của Long trên PR #6)
 - Trạng thái: Đề xuất (chốt cùng ADR-0008 sau buổi họp 16/10)
 - Cập nhật 2026-10-25: thêm bản đề xuất `POST /chat` (Phước), chờ Tiến, Tuấn, Khải chốt các mục ở cuối phần đó
-- Cập nhật 2026-10-27: nguồn tin cho `get_news` (bảng `NewsLabels`, ADR-0003); `POST /chat` theo prompt và tool v2 (PR #38), tool đọc thẳng bảng `Forecasts` (Khải chốt 26/10), số liệu chi phí và thời gian theo lần chạy dev 26/10
+- Cập nhật 2026-10-27: nguồn tin cho `get_news` (bảng `NewsLabels`, ADR-0003); `POST /chat` theo prompt và tool v2 (PR #38), tool đọc thẳng bảng `Forecasts` (Khải chốt 26/10), số liệu chi phí và thời gian theo lần chạy dev 26/10; sửa theo review của Tiến và Tuấn trên PR #41 (quyền IAM Bedrock cho global inference profile, hạn chót tính từ `requestTimeEpoch`, vị trí tài nguyên, hai loại `429`)
 - Người viết: Khải; góp ý: Long (bản "Chốt target, phân vị và đánh giá mô hình" và "Đánh giá các metric trong metrics.py", 15/10; review PR #6)
 - Người dùng: Tuấn (API, Cognito), Tiến (web, Lambda `predict`), Long (DLinear), Phước (tool `get_forecast` của chatbot)
 
@@ -268,12 +268,17 @@ Lỗi `rate_limited` có thêm trường `reset_at` và header `Retry-After` (s�
 {"error": "rate_limited", "message": "Bạn đã dùng hết 20 lượt hỏi hôm nay.", "reset_at": "2026-10-25T17:00:00Z"}
 ```
 
-Một số lỗi do API Gateway tự sinh, không qua Lambda, nên thân lỗi theo mặc định của API Gateway (`{"message": ...}`), không theo dạng chung: `401` (token sai hoặc hết hạn, Cognito authorizer từ chối), `429` khi vượt throttling của stage (hiện 10 request/giây, burst 20), `504` khi quá integration timeout. Web xử lý theo mã HTTP: mọi `429` hiện "Bạn đã hỏi quá nhiều, thử lại sau." (ghi chú trong `web/src/components/ChatPanel.tsx`). Muốn đồng nhất thân lỗi thì sửa `GatewayResponse` trong `CpawsApiStack` (cần Tuấn/Tiến quyết).
+Một số lỗi do API Gateway tự sinh, không qua Lambda, nên thân lỗi theo mặc định của API Gateway (`{"message": ...}`), không theo dạng chung: `401` (token sai hoặc hết hạn, Cognito authorizer từ chối), `429` khi vượt throttling của stage (hiện 10 request/giây, burst 20), `504` khi quá integration timeout. Cho demo giữ thân lỗi mặc định này (Tiến, Tuấn đồng ý 27/10); `GatewayResponse` 4xx/5xx đã có header CORS nên trình duyệt vẫn đọc được mã lỗi.
+
+Web phân biệt hai loại `429` theo thân lỗi:
+
+- Thân có `"error": "rate_limited"` (hết lượt trong ngày, do Lambda trả): hiện `message` kèm giờ reset quy đổi từ `reset_at` sang giờ Việt Nam.
+- Còn lại (throttling của stage, thân mặc định của API Gateway): hiện "Bạn đã hỏi quá nhiều, thử lại sau." như ghi chú trong `web/src/components/ChatPanel.tsx`.
 
 **Giới hạn lượt hỏi theo người dùng (đề xuất)**
 
 - **Mặc định 20 lượt mỗi người mỗi ngày**, đặt bằng biến môi trường của Lambda để đổi không cần sửa code. Căn cứ: lần chạy dev 26/10 (prompt và tool v2) tốn 0,35 USD cho 30 câu Haiku, tức khoảng 0,012 USD mỗi câu `complex` (dữ liệu giả lập, chưa có Guardrails, theo đơn giá tham chiếu ở ADR-0004; lần 23/10 với prompt v1 là 0,297 USD). 20 câu đều là `complex` thì khoảng 0,24 USD/người/ngày.
-- **Giới hạn chung toàn hệ thống (đề xuất thêm): 100 lượt mỗi ngày.** User pool tắt tự đăng ký (`self_sign_up_enabled=False`) nên số người dùng có giới hạn, nhưng tổng chi phí vẫn tăng theo số tài khoản. 100 câu `complex` khoảng 1,2 USD/ngày, trường hợp xấu nhất khoảng 36 USD/tháng, vẫn dưới Budgets 50 USD/tháng của cả dự án nhưng chiếm phần lớn; bản 25/10 đề xuất 150 lượt (khoảng 54 USD/tháng nếu dùng hết mỗi ngày, vượt Budgets). Vượt giới hạn chung cũng trả `429 rate_limited`, `message` khác.
+- **Giới hạn chung toàn hệ thống (đề xuất thêm): 100 lượt mỗi ngày.** User pool tắt tự đăng ký (`self_sign_up_enabled=False`) nên số người dùng có giới hạn, nhưng tổng chi phí vẫn tăng theo số tài khoản. 100 câu `complex` khoảng 1,2 USD/ngày, trường hợp xấu nhất khoảng 36 USD/tháng, vẫn dưới Budgets 50 USD/tháng của cả dự án nhưng chiếm phần lớn; bản 25/10 đề xuất 150 lượt (khoảng 54 USD/tháng nếu dùng hết mỗi ngày, vượt Budgets). Vượt giới hạn chung cũng trả `429 rate_limited`, `message` khác. Giới hạn này cũng đặt bằng biến môi trường của Lambda, riêng với giới hạn theo người dùng.
 - **Ngày tính theo giờ Việt Nam (UTC+7)**, reset lúc 00:00.
 - **Lượt được tính** khi request đã qua kiểm tra hợp lệ và sắp gọi model, cả nhánh `simple` lẫn `complex`. Lỗi 400 và 429 không tính. Lỗi 5xx sau khi đã tính lượt thì không hoàn lại, để tránh retry liên tục làm tốn tiền Bedrock.
 - **Người dùng** xác định bằng claim `sub` của Cognito ID token (`requestContext.authorizer.claims.sub`), không dùng email.
@@ -313,8 +318,11 @@ Tra tài liệu AWS ngày 25/10/2026:
   - B cần đổi runtime hoặc thêm Lambda Web Adapter đúng lúc sát demo;
   - C bỏ mất Cognito authorizer.
 - Đánh đổi chấp nhận: không có hiệu ứng chữ chạy. Web hiện trạng thái "Đang trả lời…" trong lúc chờ.
-- Hạn chót: Lambda dừng vòng gọi tool và trả `504 timeout` theo dạng chung khi đã chạy 25 giây. Timeout của Lambda đặt khoảng 28 giây, dưới integration timeout 29 giây, để Lambda tự trả lỗi đúng dạng trước khi API Gateway cắt.
-- Bên trong Lambda có thể gọi Converse thay cho ConverseStream vì đằng nào cũng trả một lần. ADR-0004 mục 3 cho phép chọn theo luồng xử lý.
+- Hạn chót: trước mỗi lần gọi model hoặc tool, Lambda kiểm tra thời gian còn lại; không đủ thì dừng và trả `504 timeout` theo dạng chung, để tự trả lỗi đúng dạng trước khi API Gateway cắt ở 29 giây.
+  - Hạn chót tính từ lúc API Gateway nhận request: `requestContext.requestTimeEpoch` + 29 giây − 4 giây dự phòng. Đồng thời dừng khi `context.get_remaining_time_in_millis()` còn dưới 3 giây.
+  - Không dùng mốc cố định "25 giây kể từ khi handler chạy" như bản trước. Theo review của Tiến (27/10), mốc đó bỏ sót thời gian khởi động lúc cold start và thời gian Cognito authorizer: cả hai xảy ra trước khi handler chạy nhưng vẫn tính vào 29 giây của API Gateway. Mốc tính từ `requestTimeEpoch` gồm cả hai. Chỉ dùng `get_remaining_time_in_millis()` thì vẫn bỏ sót, vì nó đo theo timeout của Lambda.
+  - Timeout của Lambda đặt 28 giây.
+- Bên trong Lambda gọi Converse, không gọi ConverseStream, vì đằng nào cũng trả một lần (ADR-0004 mục 3 cho phép chọn theo luồng xử lý). Nhờ vậy role chỉ cần `bedrock:InvokeModel` (mục "Tài nguyên và quyền IAM" bên dưới).
 
 Nếu sau demo chuyển sang B, giữ nguyên endpoint và JSON ở trên, chỉ thêm chế độ stream khi client gửi `Accept: text/event-stream`:
 
@@ -333,6 +341,43 @@ Nguồn (tra 25/10/2026):
 - [7] [Quotas for configuring and running a REST API in API Gateway](https://docs.aws.amazon.com/apigateway/latest/developerguide/api-gateway-execution-service-limits-table.html)
 - [8] [Amazon API Gateway pricing](https://aws.amazon.com/api-gateway/pricing/) (trang giá không ghi đơn giá Singapore; tra bằng AWS Pricing Calculator khi ước tính)
 
+**Tài nguyên và quyền IAM của Lambda chat (theo review của Tiến, Tuấn 27/10)**
+
+- **Lambda `cpaws-<env>-chat-api`** đặt trong `CpawsApiStack`, dùng chung RestApi, Cognito authorizer và throttling với API dự báo; Python 3.12, timeout 28 giây. Lambda dự báo giữ timeout 10 giây, chỉ có quyền đọc và không có quyền Bedrock.
+- **Đóng gói:** `infra/lambda/forecast_api/forecast_format.py` và `src/chatbot/tools.py` được chép vào thư mục asset lúc `cdk synth` bằng bundling cục bộ của CDK (không cần Docker). Không chép tay, để mỗi file chỉ có một bản nguồn. Chi tiết chốt ở PR code.
+- **Bảng:**
+  - `cpaws-<env>-chat-usage` đặt trong `CpawsServing`, cạnh bảng `Forecasts`: on-demand, TTL trên `expires_at`.
+  - `NewsLabels` do pipeline tin tạo. Role của Lambda chat dựng ARN từ tên bảng (giống Lambda `predict`), không export chéo stack, để không phụ thuộc thứ tự deploy.
+- **Quyền:** mỗi quyền chỉ cấp trên đúng ARN cần dùng, không dùng `*`.
+
+| Quyền | Tài nguyên | Dùng cho |
+|---|---|---|
+| `dynamodb:UpdateItem` | Bảng `chat-usage` | Bộ đếm lượt hỏi |
+| `dynamodb:Query` | Bảng `Forecasts` | Tool `get_forecast` |
+| `dynamodb:Query` | Bảng `NewsLabels` | Tool `get_news` |
+| `bedrock:InvokeModel` | 3 ARN cho mỗi model, xem bên dưới | Converse chỉ cần quyền này ([9]). Không cấp `bedrock:InvokeModelWithResponseStream`; chỉ thêm khi chuyển sang phương án B |
+| `bedrock:ApplyGuardrail` | ARN của đúng guardrail đã publish | Chỉ thêm khi Guardrail được publish ([10]) |
+
+Cả hai model đều gọi qua **global** cross-Region inference profile, giống benchmark (`configs/chatbot_benchmark.py`):
+
+| Nhánh | Inference profile ID | `<model>` trong ARN |
+|---|---|---|
+| `simple` | `global.amazon.nova-2-lite-v1:0` | `amazon.nova-2-lite-v1:0` |
+| `complex` | `global.anthropic.claude-haiku-4-5-20251001-v1:0` | `anthropic.claude-haiku-4-5-20251001-v1:0` |
+
+Theo [11], với mỗi model, `bedrock:InvokeModel` phải có đủ 3 statement; thiếu một statement là bị `AccessDenied`:
+
+1. `arn:aws:bedrock:ap-southeast-1:<account>:inference-profile/global.<model>`, điều kiện `aws:RequestedRegion = ap-southeast-1`.
+2. `arn:aws:bedrock:ap-southeast-1::foundation-model/<model>`, điều kiện `aws:RequestedRegion = ap-southeast-1` và `bedrock:InferenceProfileArn` = ARN ở dòng 1.
+3. `arn:aws:bedrock:::foundation-model/<model>` (ARN không có Region và Account, đúng như tài liệu yêu cầu), điều kiện `aws:RequestedRegion = unspecified` và `bedrock:InferenceProfileArn` = ARN ở dòng 1.
+
+`<account>` lấy từ `Stack.of(self).account` trong CDK, không ghi số Account ID vào repo. Nếu sau này đổi Nova sang gọi bằng model ID trong Region hoặc profile APAC thì phải sửa lại bảng quyền này.
+
+Nguồn bổ sung (tra 27/10/2026):
+- [9] [Converse - Amazon Bedrock API Reference](https://docs.aws.amazon.com/bedrock/latest/APIReference/API_runtime_Converse.html) ("This operation requires permission for the `bedrock:InvokeModel` action")
+- [10] [Set up permissions to use Amazon Bedrock Guardrails](https://docs.aws.amazon.com/bedrock/latest/userguide/guardrails-permissions.html)
+- [11] [Global cross-Region inference](https://docs.aws.amazon.com/bedrock/latest/userguide/global-cross-region-inference.html), mục "IAM policy requirements for global cross-Region inference"
+
 **Bảo mật**
 
 - **Nội dung tin là dữ liệu không tin cậy.** Tiêu đề và tóm tắt từ `get_news` chỉ được đưa vào model dưới dạng kết quả tool, không ghép vào system prompt. Prompt `chatbot-haiku-v2` có quy tắc bỏ qua chỉ dẫn trong tin, kể cả lặp lại link lạ (benchmark: 0 trên 3 câu injection làm theo); khi Guardrail được publish, bật bộ lọc prompt attack. Câu hỏi và `history` của người dùng cũng là dữ liệu không tin cậy theo cùng quy tắc.
@@ -341,20 +386,20 @@ Nguồn (tra 25/10/2026):
 - **Web hiển thị dạng văn bản thuần:**
   - `answer` render như text (React tự escape, giữ xuống dòng bằng CSS), không dùng `dangerouslySetInnerHTML`, không chuyển Markdown sang HTML, không tự biến URL trong `answer` thành link.
   - Link chỉ lấy từ `citations`, chỉ nhận `http`/`https`, mở tab mới với `rel="noopener noreferrer"`. Khớp ghi chú trong `web/src/components/ChatPanel.tsx`.
-- **CORS:** `CpawsApiStack` hiện chỉ cho `GET,OPTIONS`; thêm `POST` cho resource `/chat` và cho header CORS của `GatewayResponse`.
+- **CORS:** `CpawsApiStack` hiện chỉ cho `GET,OPTIONS`; thêm `POST` vào `default_cors_preflight_options.allow_methods` và vào `Access-Control-Allow-Methods` của `GatewayResponse`. Lambda chat tự trả header CORS trong response, như `handler.py` hiện tại.
 
 **Cần chốt trước khi viết code**
 
 | # | Quyết định | Đề xuất trong bản này | Người chốt |
 |---|---|---|---|
 | 1 | Trả một lần hay streaming | A: REST API hiện có, trả một lần; B để sau demo | Tiến, Tuấn |
-| 2 | Lambda riêng cho chat hay gộp vào `cpaws-<env>-forecasts-api` | Lambda riêng (timeout khoảng 28 giây, hạn chót nội bộ 25 giây; Lambda dự báo giữ 10 giây) | Tiến |
+| 2 | Lambda riêng cho chat hay gộp vào `cpaws-<env>-forecasts-api` | Lambda riêng `cpaws-<env>-chat-api` trong `CpawsApiStack`, timeout 28 giây, hạn chót tính từ `requestTimeEpoch`; Lambda dự báo giữ 10 giây | Tiến |
 | 3 | Giới hạn lượt hỏi | 20 lượt/người/ngày theo giờ Việt Nam; giới hạn chung 100 lượt/ngày; lỗi 5xx không hoàn lượt | Tuấn (chi phí), Khải |
-| 4 | Bảng `cpaws-<env>-chat-usage`, TTL; quyền IAM của Lambda chat | `dynamodb:UpdateItem` trên bảng chat-usage, `dynamodb:Query` trên `Forecasts` và `NewsLabels`, `bedrock:InvokeModel`/`InvokeModelWithResponseStream` cho đúng hai model và inference profile; đóng gói kèm `forecast_format.py` | Tuấn (IAM), Tiến (CDK) |
+| 4 | Bảng `cpaws-<env>-chat-usage`, TTL; quyền IAM của Lambda chat | Bảng chat-usage trong `CpawsServing`. Quyền: `dynamodb:UpdateItem` trên bảng chat-usage; `dynamodb:Query` trên `Forecasts` và `NewsLabels`; `bedrock:InvokeModel` theo đủ 3 statement global profile cho mỗi model (không cấp `InvokeModelWithResponseStream`); `bedrock:ApplyGuardrail` khi publish. Đóng gói bằng bundling cục bộ của CDK | Tuấn (IAM), Tiến (CDK) |
 | 5 | Giới hạn đầu vào và lịch sử hội thoại | `question` 500 ký tự; `history` tối đa 6 phần tử, mỗi phần tử 2000 ký tự, do client gửi | Khải (ảnh hưởng prompt và benchmark), Tiến (web) |
 | 6 | Các trường response | `branch`, `prompt_version`, `forecasts_used`, `citations` (chỉ từ `get_news` và có link trong `answer`), `truncated`, `blocked`, `quota` | Khải, Tiến |
 | 7 | Chính sách log | Không ghi nguyên văn câu hỏi/câu trả lời ở `prod` | Tuấn |
-| 8 | Thân lỗi do API Gateway tự sinh (401, 429 throttling, 504) | Giữ mặc định, web xử lý theo mã HTTP; hoặc sửa `GatewayResponse` cho đúng dạng chung | Tuấn, Tiến |
+| 8 | Thân lỗi do API Gateway tự sinh (401, 429 throttling, 504) | Giữ mặc định cho demo; web phân biệt `429 rate_limited` với `429` do throttling theo thân lỗi; thêm `POST` vào CORS | Tuấn, Tiến |
 | 9 | Router cho demo 8/11 | Router theo luật nếu kịp; nếu không, mọi câu đi `complex` (đắt hơn, chậm hơn với câu chào hỏi nhưng đúng chính sách) | Khải, Phước |
 | 10 | Nguồn tin cho `get_news` | Bảng `NewsLabels`: tên thuộc tính SK, đủ các trường ở mục "Nguồn dữ liệu của tool `get_news`", lịch có dữ liệu Fed/EIA; nếu chưa kịp thì demo bằng file JSON gắn nhãn tay | Tuấn |
 
