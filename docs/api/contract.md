@@ -153,9 +153,9 @@ Lỗi: `400 invalid_asset` (mã tài sản sai), `400 invalid_date`, `404 not_fo
 
 Mọi chỉ số dùng cùng một quy tắc lọc dữ liệu hợp lệ (ADR-0008 mục 5). Không dùng RMSE, không tính sai số trên mức giá, không gọi tỷ lệ MAE là "MASE". Mốc 252 phiên chỉ dùng các return đã hoàn tất trước thời điểm dự báo.
 
-#### `POST /chat` (đề xuất, tuần 4, Phước)
+#### `POST /chat` (tuần 4, Phước)
 
-Trạng thái: **đề xuất, chưa chốt**. Các con số và lựa chọn đánh dấu "đề xuất" chờ người phụ trách chốt (danh sách ở cuối phần này). Chưa có code; chỉ sửa code sau khi PR này được duyệt.
+Trạng thái: **đã duyệt 27/10** (Tiến, Tuấn, Khải). Còn mở: ngày có dữ liệu Fed/EIA (mục 10 ở cuối phần này). Code ở nhánh `feat/chat-api`, mở PR sau khi contract được duyệt.
 
 Hỏi đáp tiếng Việt về dự báo vàng, bạc, Brent, WTI. Lambda nhận câu hỏi, router theo luật chọn nhánh (ADR-0004), gọi Bedrock, trả câu trả lời kèm trích nguồn. Cần header `Authorization` như các endpoint khác; mỗi người dùng có giới hạn lượt hỏi mỗi ngày.
 
@@ -192,7 +192,7 @@ Theo ADR-0003, MVP không cần Knowledge Base. Lambda chat đọc tin từ bả
 | `title` | S / string | Tiêu đề gốc của bài, tối đa 300 ký tự |
 | `summary` | S / string | Tóm tắt 1–3 câu do nhóm hoặc bước gắn nhãn viết, tối đa 600 ký tự. Không chép toàn văn hay đoạn dài của bài (quy tắc tin tức: chỉ lưu tiêu đề, tóm tắt, link, thời gian, nguồn) |
 | `link` | S / string | URL bắt đầu bằng `https://` hoặc `http://`. Tin sai điều kiện này bị bỏ, vì chatbot phải trích nguồn có link |
-| `source` | S / string | Tên nguồn để hiển thị, ví dụ `The Guardian`, `EIA` |
+| `source` | S / string | Tên nguồn để hiển thị, ví dụ `Federal Reserve`, `EIA` |
 | `published_at` | S / string | ISO 8601 UTC đúng dạng `YYYY-MM-DDTHH:MM:SSZ`: hậu tố `Z`, không có phần lẻ giây, không ghi `+00:00`. Phải trùng phần trước `#` của `sk`. Thời điểm gốc theo múi giờ nguồn (ADR-0003 mục 5) lưu ở thuộc tính khác nếu cần |
 | `impact_score` | N / integer | Số nguyên 0–3, theo `docs/prompts/news-labeling-schema.json`. Phải lưu kiểu Number: lưu kiểu String thì tool lỗi khi so sánh với `min_impact` |
 | `direction` | S / string | `bullish`, `bearish`, `mixed` hoặc `uncertain` |
@@ -252,6 +252,10 @@ Theo ADR-0003, MVP không cần Knowledge Base. Lambda chat đọc tin từ bả
 
 - Server không lưu hội thoại. Web giữ lịch sử trong bộ nhớ của trang và tự gửi tối đa 6 phần tử gần nhất; quá giới hạn thì server báo lỗi, không tự cắt, để hành vi của web và benchmark giống nhau.
 - `history` là dữ liệu do client gửi, có thể bị sửa. Lượt `assistant` trong `history` không phải nguồn số liệu: muốn nêu con số, model vẫn phải gọi `get_forecast` trong lượt hiện tại.
+- Cách đưa vào model (Converse `messages`, như code ở `feat/chat-api`):
+  - mỗi phần tử `history` thành một lượt `user` hoặc `assistant` theo đúng thứ tự gửi lên;
+  - lượt hiện tại là một lượt `user` gồm khối `question`, và khi có `context.asset` thì thêm một khối riêng `[Ngữ cảnh] Người dùng đang xem trang dự báo của: <asset>`. Ngữ cảnh không ghép vào câu hỏi; `context.page` không đưa vào model.
+  - Benchmark (Khải) chỉ có câu hỏi một lượt, nên kết quả benchmark chỉ áp dụng cho trường hợp không có `history`.
 - Thân request lớn hơn 64 KB bị từ chối.
 
 **Response 200**
@@ -355,7 +359,7 @@ Bộ đếm nằm trong bảng DynamoDB mới `cpaws-<env>-chat-usage` (on-deman
   - `CHAT_GLOBAL_DAILY_LIMIT`: mặc định 100.
 - Thời gian không đủ cho một lần gọi model ngay từ đầu thì trả `504 timeout` trước khi tính lượt.
 
-**Trả lời một lần hay streaming (đề xuất, chờ Tiến/Tuấn chốt)**
+**Trả lời một lần hay streaming (Tiến, Tuấn chốt A ngày 27/10)**
 
 Tra tài liệu AWS ngày 25/10/2026:
 
@@ -368,7 +372,7 @@ Tra tài liệu AWS ngày 25/10/2026:
 | Chi phí | Mỗi câu hỏi 1 request API Gateway + thời gian chạy Lambda + token Bedrock | Như A: streaming tính mỗi 10 MB là 1 request, không phí thêm ([8]); câu trả lời chat luôn dưới 10 MB | Không có phí API Gateway; Lambda và Bedrock như A |
 | Rủi ro khác | Người dùng chờ cả câu (benchmark 23/10: Haiku median 6,4 giây, p90 7,8 giây; dev 26/10 với prompt và tool v2: median 5,4 giây, p90 7,7 giây; đều gồm các vòng tool) | Lỗi xảy ra sau khi đã gửi byte đầu không đổi được mã HTTP, phải báo lỗi trong luồng; không dùng được cache, nén, VTL ([1]); Lambda streaming "chưa có ở mọi Region" ([3]), cần kiểm tra `ap-southeast-1` | Mất throttling, log truy cập của API Gateway; thêm một URL và cấu hình CORS riêng |
 
-**Đề xuất: phương án A cho demo 8/11, chờ Tiến/Tuấn chốt.**
+**Chọn phương án A cho demo 8/11** (Tiến, Tuấn đồng ý 27/10).
 
 - Lý do:
   - giữ nguyên Cognito authorizer, throttling và cách viết Lambda Python đang chạy cho `GET /forecasts`;
@@ -450,7 +454,7 @@ Nguồn bổ sung (tra 27/10/2026):
   - Link chỉ lấy từ `citations`, chỉ nhận `http`/`https`, mở tab mới với `rel="noopener noreferrer"`. Khớp ghi chú trong `web/src/components/ChatPanel.tsx`.
 - **CORS:** `CpawsApiStack` hiện chỉ cho `GET,OPTIONS`; thêm `POST` vào `default_cors_preflight_options.allow_methods` và vào `Access-Control-Allow-Methods` của `GatewayResponse`. Lambda chat tự trả header CORS trong response, như `handler.py` hiện tại.
 
-**Cần chốt trước khi viết code**
+**Các quyết định** (đã chốt 27/10, trừ phần còn mở ở mục 10)
 
 | # | Quyết định | Đề xuất trong bản này | Người chốt |
 |---|---|---|---|
@@ -462,7 +466,7 @@ Nguồn bổ sung (tra 27/10/2026):
 | 6 | Các trường response | `branch`, `prompt_version`, `forecasts_used`, `citations` (chỉ từ `get_news` và có link trong `answer`), `truncated`, `blocked`, `quota` | Khải, Tiến |
 | 7 | Chính sách log | Không ghi nguyên văn câu hỏi/câu trả lời ở `prod` | Tuấn |
 | 8 | Thân lỗi do API Gateway tự sinh (401, 429 throttling, 504) | Giữ mặc định cho demo; web phân biệt `429 rate_limited` với `429` do throttling theo thân lỗi; thêm `POST` vào CORS | Tuấn, Tiến |
-| 9 | Router cho demo 8/11 | Router theo luật nếu kịp; nếu không, mọi câu đi `complex` (đắt hơn, chậm hơn với câu chào hỏi nhưng đúng chính sách) | Khải, Phước |
+| 9 | Router cho demo 8/11 | Router theo luật nếu kịp; nếu không, mọi câu đi `complex` (đắt hơn, chậm hơn với câu chào hỏi nhưng đúng chính sách). Khải đồng ý phương án dự phòng này (27/10) | Khải, Phước |
 | 10 | Nguồn tin cho `get_news` | Đã chốt (27/10): khóa `asset`/`sk`, 7 trường và cách chọn nguồn bằng `NEWS_TABLE_NAME`/`NEWS_DIR` ở mục "Nguồn dữ liệu của tool `get_news`". Còn mở: ngày có dữ liệu Fed/EIA; nếu chưa kịp thì demo bằng file JSON gắn nhãn tay | Tuấn |
 
 ## Dữ liệu mẫu
