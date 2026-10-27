@@ -176,8 +176,8 @@ def test_predict_role_is_least_privilege(templates):
 
 
 def test_predict_table_name_matches_serving_stack(templates):
-    (table,) = _resources(templates["serving"], "AWS::DynamoDB::Table")
-    assert table["Properties"]["TableName"] == "cpaws-dev-forecasts"
+    # CpawsServing có nhiều bảng (Forecasts, NewsLabels): tìm theo tên predict ghi vào
+    _table(templates["serving"], "cpaws-dev-forecasts")
 
 
 def test_repo_only_mode_creates_repo_without_predict_lambda():
@@ -328,3 +328,94 @@ def test_predict_role_has_no_ssm_permissions():
         if isinstance(actions, str):
             actions = [actions]
         assert not any(action.startswith("ssm:") for action in actions)
+
+
+# ---------- bảng NewsLabels (contract POST /chat, ADR-0003 mục 6) ----------
+
+
+def _table(template: dict, table_name: str) -> dict:
+    (table,) = [
+        r
+        for r in _resources(template, "AWS::DynamoDB::Table")
+        if r["Properties"]["TableName"] == table_name
+    ]
+    return table
+
+
+def test_news_labels_table_matches_contract(templates):
+    sys.path.insert(0, str(INFRA_DIR))
+    try:
+        from stacks.shared import news_labels_table_name
+    finally:
+        sys.path.remove(str(INFRA_DIR))
+    assert news_labels_table_name("dev") == "cpaws-dev-news-labels"
+    table = _table(templates["serving"], "cpaws-dev-news-labels")
+    props = table["Properties"]
+    assert props["KeySchema"] == [
+        {"AttributeName": "asset", "KeyType": "HASH"},
+        {"AttributeName": "sk", "KeyType": "RANGE"},
+    ]
+    assert sorted(props["AttributeDefinitions"], key=lambda a: a["AttributeName"]) == [
+        {"AttributeName": "asset", "AttributeType": "S"},
+        {"AttributeName": "sk", "AttributeType": "S"},
+    ]
+    assert props["BillingMode"] == "PAY_PER_REQUEST"
+    # không index, không stream: chỉ Query theo khóa chính
+    assert "GlobalSecondaryIndexes" not in props and "LocalSecondaryIndexes" not in props
+    assert "StreamSpecification" not in props
+    assert table["DeletionPolicy"] == "Retain" and table["UpdateReplacePolicy"] == "Retain"
+
+
+def test_forecasts_table_is_unchanged_by_news_labels(templates):
+    tables = _items(templates["serving"], "AWS::DynamoDB::Table")
+    assert len(tables) == 2
+    forecasts = _table(templates["serving"], "cpaws-dev-forecasts")
+    assert [k for k, r in tables.items() if r is forecasts][0].startswith("ForecastsTable")
+    assert forecasts["Properties"]["KeySchema"] == [
+        {"AttributeName": "asset", "KeyType": "HASH"},
+        {"AttributeName": "base_date", "KeyType": "RANGE"},
+    ]
+
+
+def _news_policy(statement_fn) -> list[dict]:
+    """Gắn statement vào một role thử trong stack riêng, trả về statement đã render."""
+    sys.path.insert(0, str(INFRA_DIR))
+    try:
+        import aws_cdk as cdk
+        from aws_cdk import aws_iam as iam
+        from aws_cdk.assertions import Template
+        from stacks import shared
+
+        app = cdk.App()
+        stack = cdk.Stack(app, "Probe")
+        role = iam.Role(stack, "R", assumed_by=iam.ServicePrincipal("lambda.amazonaws.com"))
+        role.add_to_policy(getattr(shared, statement_fn)(stack, "dev"))
+        t = Template.from_stack(stack).to_json()
+        return [
+            st
+            for p in _resources(t, "AWS::IAM::Policy")
+            for st in p["Properties"]["PolicyDocument"]["Statement"]
+        ]
+    finally:
+        sys.path.remove(str(INFRA_DIR))
+
+
+@pytest.mark.parametrize(
+    "statement_fn,action",
+    [
+        ("news_labels_read_statement", "dynamodb:Query"),
+        ("news_labels_write_statement", "dynamodb:PutItem"),
+    ],
+)
+def test_news_labels_statements_are_least_privilege(statement_fn, action):
+    (st,) = _news_policy(statement_fn)
+    assert st["Effect"] == "Allow" and st["Action"] == action  # đúng một action
+    resource = _render(st["Resource"])
+    assert resource.endswith(":table/cpaws-dev-news-labels")  # đúng bảng, không index, không *
+    assert "*" not in resource
+
+
+def test_existing_lambdas_have_no_news_labels_access(templates):
+    for name in ("data", "ops", "serving"):
+        for p in _resources(templates[name], "AWS::IAM::Policy"):
+            assert "news-labels" not in str(p["Properties"]["PolicyDocument"])
