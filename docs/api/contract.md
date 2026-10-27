@@ -344,7 +344,16 @@ Bộ đếm nằm trong bảng DynamoDB mới `cpaws-<env>-chat-usage` (on-deman
 
 - Mỗi request gọi một `TransactWriteItems` gồm hai `Update` có điều kiện: `ADD request_count :1` trên dòng của người dùng và dòng `global`, kèm điều kiện `attribute_not_exists(request_count) OR request_count < :limit`. Một điều kiện sai thì cả giao dịch bị hủy, nên vượt giới hạn chung không làm mất lượt của người dùng; Lambda trả `429`.
 - TTL chỉ để dọn dữ liệu cũ. DynamoDB xóa item hết hạn "trong vòng vài ngày" và item hết hạn chưa xóa vẫn đọc được ([DynamoDB TTL](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/TTL.html)), nên việc reset theo ngày dựa vào ngày nằm trong `sk`, không dựa vào TTL. Xóa bằng TTL không tốn write capacity.
-- Lambda chỉ cần quyền `dynamodb:UpdateItem` trên bảng này (thao tác `Update` trong `TransactWriteItems` dùng quyền của `UpdateItem`, theo [Using IAM with DynamoDB transactions](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/transaction-apis-iam.html)). Bảng không lưu câu hỏi hay câu trả lời.
+- Giao dịch thành công không trả về giá trị mới, nên sau đó Lambda đọc lại `request_count` của dòng người dùng bằng `GetItem` với `ConsistentRead = true` để điền `quota.used`.
+- Quyền Lambda cần trên bảng này:
+  - `dynamodb:UpdateItem`: thao tác `Update` trong `TransactWriteItems` dùng quyền của `UpdateItem`, theo [Using IAM with DynamoDB transactions](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/transaction-apis-iam.html);
+  - `dynamodb:GetItem`: đọc lại số lượt đã dùng.
+- Bảng không lưu câu hỏi hay câu trả lời.
+- Biến môi trường của Lambda chat:
+  - `CHAT_USAGE_TABLE_NAME`: bắt buộc; thiếu thì Lambda không khởi động, để không bao giờ chạy mà không có giới hạn;
+  - `CHAT_USER_DAILY_LIMIT`: mặc định 20;
+  - `CHAT_GLOBAL_DAILY_LIMIT`: mặc định 100.
+- Thời gian không đủ cho một lần gọi model ngay từ đầu thì trả `504 timeout` trước khi tính lượt.
 
 **Trả lời một lần hay streaming (đề xuất, chờ Tiến/Tuấn chốt)**
 
@@ -367,7 +376,10 @@ Tra tài liệu AWS ngày 25/10/2026:
   - B cần đổi runtime hoặc thêm Lambda Web Adapter đúng lúc sát demo;
   - C bỏ mất Cognito authorizer.
 - Đánh đổi chấp nhận: không có hiệu ứng chữ chạy. Web hiện trạng thái "Đang trả lời…" trong lúc chờ.
-- Hạn chót: trước mỗi lần gọi model hoặc tool, Lambda kiểm tra thời gian còn lại; không đủ thì dừng và trả `504 timeout` theo dạng chung, để tự trả lỗi đúng dạng trước khi API Gateway cắt ở 29 giây.
+- Hạn chót: trước mỗi lần gọi model, Lambda kiểm tra thời gian còn lại; không đủ thì dừng và trả `504 timeout` theo dạng chung, để tự trả lỗi đúng dạng trước khi API Gateway cắt ở 29 giây.
+  - Client Bedrock đặt `connect_timeout` 2 giây, `read_timeout` 15 giây và không tự thử lại (`total_max_attempts = 1`). Mỗi lần gọi vì vậy kéo dài tối đa 17 giây, và Lambda chỉ bắt đầu một lần gọi khi còn ít nhất 17 giây.
+  - Lỗi tạm thời của Bedrock (throttling, service unavailable) được Lambda thử lại một lần nếu còn đủ thời gian; `ModelTimeoutException` không thử lại. Hết thời gian chờ Bedrock thì trả `504 timeout`.
+  - Câu trả lời rất dài (gần `max_tokens` 1500) có thể vượt 15 giây và thành `504`; câu trả lời 150–250 từ theo prompt thì nằm trong giới hạn này.
   - Hạn chót tính từ lúc API Gateway nhận request: `requestContext.requestTimeEpoch` + 29 giây − 4 giây dự phòng. Đồng thời dừng khi `context.get_remaining_time_in_millis()` còn dưới 3 giây.
   - Không dùng mốc cố định "25 giây kể từ khi handler chạy" như bản trước. Theo review của Tiến (27/10), mốc đó bỏ sót thời gian khởi động lúc cold start và thời gian Cognito authorizer: cả hai xảy ra trước khi handler chạy nhưng vẫn tính vào 29 giây của API Gateway. Mốc tính từ `requestTimeEpoch` gồm cả hai. Chỉ dùng `get_remaining_time_in_millis()` thì vẫn bỏ sót, vì nó đo theo timeout của Lambda.
   - Timeout của Lambda đặt 28 giây.
@@ -401,7 +413,7 @@ Nguồn (tra 25/10/2026):
 
 | Quyền | Tài nguyên | Dùng cho |
 |---|---|---|
-| `dynamodb:UpdateItem` | Bảng `chat-usage` | Bộ đếm lượt hỏi |
+| `dynamodb:UpdateItem`, `dynamodb:GetItem` | Bảng `chat-usage` | Bộ đếm lượt hỏi (giao dịch tăng lượt, rồi đọc lại số lượt đã dùng) |
 | `dynamodb:Query` | Bảng `Forecasts` | Tool `get_forecast` |
 | `dynamodb:Query` | Bảng `NewsLabels` | Tool `get_news` |
 | `bedrock:InvokeModel` | 3 ARN cho mỗi model, xem bên dưới | Converse chỉ cần quyền này ([9]). Không cấp `bedrock:InvokeModelWithResponseStream`; chỉ thêm khi chuyển sang phương án B |
@@ -444,7 +456,7 @@ Nguồn bổ sung (tra 27/10/2026):
 | 1 | Trả một lần hay streaming | A: REST API hiện có, trả một lần; B để sau demo | Tiến, Tuấn |
 | 2 | Lambda riêng cho chat hay gộp vào `cpaws-<env>-forecasts-api` | Lambda riêng `cpaws-<env>-chat-api` trong `CpawsApiStack`, timeout 28 giây, hạn chót tính từ `requestTimeEpoch`; Lambda dự báo giữ 10 giây | Tiến |
 | 3 | Giới hạn lượt hỏi | 20 lượt/người/ngày theo giờ Việt Nam; giới hạn chung 100 lượt/ngày; lỗi 5xx không hoàn lượt | Tuấn (chi phí), Khải |
-| 4 | Bảng `cpaws-<env>-chat-usage`, TTL; quyền IAM của Lambda chat | Bảng chat-usage trong `CpawsServing`. Quyền: `dynamodb:UpdateItem` trên bảng chat-usage; `dynamodb:Query` trên `Forecasts` và `NewsLabels`; `bedrock:InvokeModel` theo đủ 3 statement global profile cho mỗi model (không cấp `InvokeModelWithResponseStream`); `bedrock:ApplyGuardrail` khi publish. Đóng gói bằng bundling cục bộ của CDK | Tuấn (IAM), Tiến (CDK) |
+| 4 | Bảng `cpaws-<env>-chat-usage`, TTL; quyền IAM của Lambda chat | Bảng chat-usage trong `CpawsServing`. Quyền: `dynamodb:UpdateItem` và `dynamodb:GetItem` trên bảng chat-usage; `dynamodb:Query` trên `Forecasts` và `NewsLabels`; `bedrock:InvokeModel` theo đủ 3 statement global profile cho mỗi model (không cấp `InvokeModelWithResponseStream`); `bedrock:ApplyGuardrail` khi publish. Đóng gói bằng bundling cục bộ của CDK | Tuấn (IAM), Tiến (CDK) |
 | 5 | Giới hạn đầu vào và lịch sử hội thoại | `question` 500 ký tự; `history` tối đa 6 phần tử, mỗi phần tử 2000 ký tự, do client gửi | Khải (ảnh hưởng prompt và benchmark), Tiến (web) |
 | 6 | Các trường response | `branch`, `prompt_version`, `forecasts_used`, `citations` (chỉ từ `get_news` và có link trong `answer`), `truncated`, `blocked`, `quota` | Khải, Tiến |
 | 7 | Chính sách log | Không ghi nguyên văn câu hỏi/câu trả lời ở `prod` | Tuấn |
