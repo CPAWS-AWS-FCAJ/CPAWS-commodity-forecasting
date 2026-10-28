@@ -11,7 +11,9 @@ Destination chỉ gọi khi ingest được gọi bất đồng bộ (Scheduler 
 --invocation-type Event). Gọi đồng bộ (RequestResponse) thì predict không chạy.
 Biến môi trường: LAKE_BUCKET (bắt buộc trên AWS), LAKE_PREFIX (tùy chọn), FORECASTS_TABLE (bắt buộc
 trừ dry_run), MODEL_VERSION (bắt buộc; artifact ở models/<asset>/<MODEL_VERSION>/ trong lake),
-CPAWS_ENV.
+CPAWS_ENV, SHADOW_MODELS (tùy chọn: rỗng/không đặt = tắt; chỉ nhận "s1a-l094", cần
+MODEL_VERSION=baseline-q252; sai → log ERROR PREDICT_SHADOW_CONFIG_INVALID, tắt shadow cho lần chạy,
+champion vẫn chạy bình thường).
 
 event:
   {}                         dự báo 4 tài sản từ snapshot clean mới nhất, ghi DynamoDB
@@ -27,6 +29,10 @@ các tài sản tốt, raise PredictFailed để Lambda tính là lỗi (metric 
 Lambda ingest. Lambda không có cờ cho phép artifact thử nghiệm (chỉ CLI có --allow-experimental).
 Chạy lại cho (asset, base_date) đã có dự báo phát hành (is_sample = false): không ghi đè, log
 PREDICT_ALREADY_PUBLISHED, tài sản tính là xong (không raise); PREDICT_DONE đếm already_published.
+Shadow S1a (docs/experiments/s1a-shadow-plan.md) ghi eval/shadow/s1a-l094/dt=<ngày chạy UTC>/ trên
+lake, không ghi đè; dry_run chỉ tính. Lỗi shadow không bao giờ làm Lambda raise; PREDICT_DONE có
+shadow = {model_version, written, already_published, skipped, failed}, None khi tắt, hoặc
+{disabled_reason} khi SHADOW_MODELS sai.
 """
 
 from __future__ import annotations
@@ -58,6 +64,7 @@ def _env(name: str) -> str:
 def handler(event: dict | None, context=None) -> dict:
     event = event or {}
     model_version = _env("MODEL_VERSION")
+    shadow_models = os.getenv("SHADOW_MODELS")  # run_predict kiểm; sai thì chỉ tắt shadow
     dry_run = bool(event.get("dry_run"))
     try:
         # Không có khóa "assets" → cả 4 tài sản; [] hoặc null là event sai, không ngầm chạy hết
@@ -66,12 +73,15 @@ def handler(event: dict | None, context=None) -> dict:
         raise PredictConfigError(str(e)) from e
     st = predict.make_storage("s3")
     sink = None if dry_run else predict.DynamoSink(_env("FORECASTS_TABLE"))
+    shadow_sink = None if dry_run else predict.ShadowSink(st)
     run = predict.run_predict(
         st,
         sink,
         load_model=predict.make_model_loader(model_version, st=st),
         model_version=model_version,
         assets=assets,
+        shadow_models=shadow_models,
+        shadow_sink=shadow_sink,
     )
     summary = run.summary()
     log.info("PREDICT_DONE %s", summary)
