@@ -256,7 +256,7 @@ def test_builder_locks_and_refuses_overwrite(tmp_path, monkeypatch):
 
 def test_builder_writes_nothing_on_errors(tmp_path, monkeypatch):
     labels = tmp_path / "labels.csv"
-    _write_labels(labels, _sample_labels())  # chỉ 2 dòng thật, cấu hình cần 50
+    _write_labels(labels, _sample_labels())  # chỉ 2 dòng thật, cấu hình cần 49
     monkeypatch.setattr(C, "LABELS_PATH", str(labels))
     out = tmp_path / "cases.json"
     assert B.main(["--out", str(out)]) == 1 and not out.exists()

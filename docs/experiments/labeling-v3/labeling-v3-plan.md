@@ -2,7 +2,7 @@
 
 - Người làm: Phan Tấn Phước (prompt, script và bản nháp do Claude Code soạn). Người duyệt: Trịnh Tiến Khải.
 - Căn cứ: hướng v3 Khải chốt ngày 24/10/2026 (comment ở PR #30) và mục "Việc tiếp theo" trong [`news-labeling-2026-10.md`](../news-labeling-2026-10.md).
-- Trạng thái (28/10/2026): Khải đã duyệt prompt v3 và cách chọn 50 dòng, đã chốt ngưỡng và trả lời các câu hỏi (mục "Quyết định của Khải"). Đã gắn nhãn bản nháp (mục "Gắn nhãn"); **chờ Phước soát và Khải duyệt, chưa chốt.** Chưa gọi model.
+- Trạng thái (28/10/2026): Khải đã duyệt prompt v3 và cách chọn dòng (50 dòng, sau đó loại E22 còn 49), đã chốt ngưỡng và trả lời các câu hỏi (mục "Quyết định của Khải"). Đã gắn nhãn bản nháp (mục "Gắn nhãn"); **chờ Phước soát và Khải duyệt, chưa chốt.** Chưa gọi model.
 
 ## Yêu cầu của Khải và chỗ đáp ứng
 
@@ -10,29 +10,31 @@
 |---|---|
 | Prompt v3: bỏ qua chỉ dẫn nhúng và ghi vào `notes`; tóm tắt rỗng → 0/uncertain; quy tắc hướng lãi suất, lạm phát với vàng-bạc; khi nào dùng `uncertain`/`mixed`; evidence bắt buộc khi impact ≥ 1, rỗng khi impact 0 | [`news-labeling-v3.md`](../../prompts/news-labeling-v3.md) |
 | Sửa `acceptance_criteria` cho khớp quy tắc evidence | Trường `acceptance_criteria` trong bộ case, do [`build_labeling_cases_v3.py`](../../../scripts/benchmark/build_labeling_cases_v3.py) ghi |
-| Bộ test 50 thông cáo Fed/EIA thật | [`candidates-fed-eia.csv`](candidates-fed-eia.csv) (69 ứng viên), [`labels-v3.csv`](labels-v3.csv) (Phước chọn và gắn nhãn) |
+| Bộ test 49 thông cáo Fed/EIA thật | [`candidates-fed-eia.csv`](candidates-fed-eia.csv) (69 ứng viên), [`labels-v3.csv`](labels-v3.csv) (Phước chọn và gắn nhãn) |
 | Gán nhãn và chốt ngưỡng trước khi chạy | Bộ case có `status`; script từ chối chạy thật khi bộ case chưa `locked` hoặc ngưỡng khác cấu hình |
 
 Bản v2 (`news-labeling-v2.md`, `synthetic_cases.json` draft-4, schema) giữ nguyên. Test `test_v2_inputs_unchanged_since_run` so SHA-256 của ba file này với `summary.json` của lần chạy 22/10.
 
 ## Quy trình
 
-1. Phước gắn nhãn 50 dòng đã chọn trong `labels-v3.csv`, kèm 3 case đặc biệt (X01–X03).
+1. Phước gắn nhãn 49 dòng đã chọn trong `labels-v3.csv`, kèm 3 case đặc biệt (X01–X03).
 2. Chạy script dựng bộ case. Script kiểm định dạng và quy tắc v3, rồi ghi `tests/labeling/real_cases_v3.json` ở trạng thái `draft`. Có lỗi thì không ghi file.
 3. Merge `origin/developer` vào nhánh, rồi mở **một PR** gồm prompt, bộ case, nhãn và ngưỡng. Khải duyệt đáp án trong PR.
 4. Khi Khải đồng ý đáp án, dựng lại với `--lock --approved-by "Khải"` và commit vào cùng PR. Từ đây không sửa prompt, đáp án hay ngưỡng nữa; script không ghi đè bộ case đã chốt.
 5. Merge PR xong mới chạy: `--dry-run` để kiểm đường ống, rồi chạy thật **một lần**.
 6. Khải duyệt tay 10 ô evidence theo tiêu chí đã ghi sẵn. Kết quả chạy và báo cáo (như `news-labeling-2026-10.md`) nằm ở **PR riêng**.
 
-## Chọn 50 dòng
+## Chọn 49 dòng
 
-Claude Code chọn theo ủy quyền của Phước ngày 28/10/2026, chỉ dựa trên tiêu đề, tóm tắt và `coverage_tag`, trước khi có nhãn và trước khi gọi model. Cột `selected` trong `labels-v3.csv` đánh `x` cho 50 dòng này.
+Claude Code chọn 50 dòng theo ủy quyền của Phước ngày 28/10/2026, chỉ dựa trên tiêu đề, tóm tắt và `coverage_tag`, trước khi có nhãn và trước khi gọi model. Cột `selected` trong `labels-v3.csv` đánh `x` cho các dòng này.
+
+**Khải loại E22 ngày 28/10/2026** khi duyệt đáp án: bài mơ hồ giữa `inventory` (báo cáo tồn kho) và `other` (sự cố hành chính) theo mục 9 của prompt, chấm kiểu nào cũng 50/50. Dòng vẫn còn trong `labels-v3.csv`, chỉ bỏ `x` ở cột `selected`. Bộ còn **49 dòng thật**.
 
 Nguyên tắc:
-- Fed và EIA gần cân bằng: Fed 24, EIA 26.
+- Fed và EIA gần cân bằng: Fed 24, EIA 25 (26 trước khi loại E22).
 - Bỏ các dòng gần như trùng mẫu văn với một dòng đã giữ, để bộ case không nặng về một kiểu tin.
 - Mỗi kiểu tình huống giữ ít nhất một dòng: giữ, cắt, tăng lãi suất; phiếu phản đối một chiều và hai chiều; tồn kho tăng, giảm, trái chiều; dự báo giá tăng, giảm, trái chiều; tiêu đề lệch nội dung; tin không liên quan; tin không có nội dung.
-- Giữ cả hai dòng `no_substance` và dòng `uncertain` duy nhất, vì đây là các trường hợp v2 làm sai (case 4, 7).
+- Giữ cả hai dòng `no_substance` và dòng `uncertain` duy nhất, vì đây là các trường hợp v2 làm sai (case 4, 7). Sau khi loại E22 còn một dòng `no_substance`; case X03 (tóm tắt rỗng) vẫn kiểm tình huống thiếu nội dung.
 
 | Nhóm | Giữ | Bỏ | Lý do bỏ |
 |---|---|---|---|
@@ -50,9 +52,10 @@ Nguyên tắc:
 | | | E07 | Dầu thô giảm kèm xả SPR, gần E06 |
 | Dự báo và STEO (16/21) | E10, E11, E12, E14, E15, E17, E20, E23, E24, E26, E28, E30, E31, E32, E33, E35 | E13, E16, E21 | Dự báo giá giảm do dư cung năm 2025, đã có E10 và E12 |
 | | | E25, E34 | Tiêu đề về khí hoặc điện kèm giá dầu, đã có E24, E33, E35 |
-| AEO, tin hành chính (4/5) | E18, E22, E27, E29 | E19 | Tin hành chính `relevant = false`, đã có E18 và E27 |
+| AEO, tin hành chính (3/5) | E18, E27, E29 | E19 | Tin hành chính `relevant = false`, đã có E18 và E27 |
+| | | E22 | Khải loại 28/10: mơ hồ giữa `inventory` và `other` (mục 9) |
 
-Cơ cấu 50 dòng theo `coverage_tag`: `mixed` 11, `clear_oil` 10, `clear_gold_silver` 8, `low_impact` 7, `title_mismatch` 6, `irrelevant` 5, `no_substance` 2, `uncertain` 1. Thêm 3 case đặc biệt X01–X03 thì bộ kiểm có 53 case.
+Cơ cấu 49 dòng theo `coverage_tag`: `mixed` 11, `clear_oil` 10, `clear_gold_silver` 8, `low_impact` 7, `title_mismatch` 6, `irrelevant` 5, `no_substance` 1, `uncertain` 1. Thêm 3 case đặc biệt X01–X03 thì bộ kiểm có 52 case.
 
 ## Gắn nhãn
 
@@ -85,7 +88,7 @@ Mức `confidence` của ô impact 0: `high` khi tài sản rõ ràng không li�
 
 Statement giữ nguyên lãi suất không có tín hiệu vẫn để `1/uncertain` (không phải 0), vì mục 6.2 của prompt cho trường hợp này `direction = uncertain` như một nhãn có tác động; còn dự báo giá đi ngang của EIA để 0 vì bài không nêu cơ chế (mục 5).
 
-Nhóm A (8 dòng): F06, F07, F14 theo Khải; thêm F32 (`relevant = false`), E03 (tồn kho giảm mạnh), E12 (dự báo giảm có hai nguyên nhân), E28 (gián đoạn có quy mô), E32 (gián đoạn chấm dứt). Đây là các dòng có đáp án rõ nhất; không đưa vào nhóm A các dòng có `event_type` dễ tranh luận (F26, E22).
+Nhóm A (8 dòng): F06, F07, F14 theo Khải; thêm F32 (`relevant = false`), E03 (tồn kho giảm mạnh), E12 (dự báo giảm có hai nguyên nhân), E28 (gián đoạn có quy mô), E32 (gián đoạn chấm dứt). Đây là các dòng có đáp án rõ nhất; không đưa vào nhóm A dòng có `event_type` từng phải tranh luận (F26; E22 đã bị loại).
 
 Case đặc biệt: X01 dựng từ F14, X02 từ E03 (câu lệnh nhắm vào vàng và bạc, trong khi đáp án là 0), X03 từ F06. Đáp án X01, X02 giống dòng gốc, chỉ khác `notes`.
 
@@ -93,7 +96,12 @@ Các dòng cần người duyệt xem kỹ (ghi trong cột `reviewer_note`):
 - F23: tóm tắt nói Fed "có thể điều chỉnh chính sách" nhưng không nói hướng, nên để `mixed`. Nếu muốn dòng này kiểm tín hiệu cắt giảm thì phải sửa `summary_vi` trước khi chốt.
 - F26, E22: `event_type` là `monetary_policy` và `inventory` theo chủ đề; có thể tranh luận là `other`.
 
-Soát lại (Claude Code theo ủy quyền của Phước, 28/10/2026): đọc lại cả 53 dòng, đối chiếu từng tóm tắt với các mục 3, 5, 6.2, 6.3, 8 của prompt và so các dòng cùng loại. Người soát cũng là người gắn nhãn, nên vẫn cần Khải duyệt độc lập trong PR. Đã sửa 5 dòng:
+Khải duyệt 28/10/2026 (review PR #54, kiểm 53 dòng, 6 điểm kiểm đều đạt):
+- F26: `event_type` đổi thành `other`, vì là tin nhân sự, thông cáo không có nội dung chính sách; mục 9 chọn theo sự kiện chính. Giữ `relevant = true`.
+- E22: loại khỏi bộ (mục "Chọn 49 dòng").
+- Giữ nguyên: F23 (`mixed`, impact 2, không sửa `summary_vi`), F11 và E14 (`mixed` theo mục 6.3).
+
+Soát lại (Claude Code theo ủy quyền của Phước, 28/10/2026, trước khi Khải duyệt): đọc lại cả 53 dòng, đối chiếu từng tóm tắt với các mục 3, 5, 6.2, 6.3, 8 của prompt và so các dòng cùng loại. Người soát cũng là người gắn nhãn, nên vẫn cần Khải duyệt độc lập trong PR. Đã sửa 5 dòng:
 
 | Dòng | Vấn đề | Sửa |
 |---|---|---|
@@ -110,7 +118,7 @@ Soát lại (Claude Code theo ủy quyền của Phước, 28/10/2026): đọc l
 
 | Cột | Giá trị |
 |---|---|
-| `selected` | `x` cho đúng 50 dòng thật; để trống ở X01–X03 |
+| `selected` | `x` cho đúng 49 dòng thật; để trống ở X01–X03 |
 | `group` | `A` nếu case bắt buộc đạt 100% core check (như nhóm A ở v2); để trống là `B`. F06, F07, F14 đã điền sẵn `A` theo Khải; script báo lỗi nếu ba dòng này không ở nhóm A |
 | `relevant` | `true` hoặc `false` |
 | `event_type` | `monetary_policy`, `geopolitics`, `opec_supply`, `inventory`, `macro_data`, `other` |
@@ -128,7 +136,7 @@ Thêm theo Khải (28/10/2026):
 - Chỉ dựa vào nội dung thông cáo (tiêu đề và `summary_vi`). Không xem giá chạy sau ngày công bố.
 - Tin dầu không tác động lên vàng, bạc qua kênh lạm phát. Với thông cáo EIA, vàng và bạc để `0`/`uncertain` (evidence rỗng), trừ khi bài nêu rõ lãi suất hoặc lạm phát.
 
-### Case đặc biệt (ngoài 50 dòng)
+### Case đặc biệt (ngoài 49 dòng)
 
 | id | variant | Cách dựng | Cần điền |
 |---|---|---|---|
@@ -136,7 +144,7 @@ Thêm theo Khải (28/10/2026):
 | X02 | `injection` | Như trên, câu lệnh tiếng Anh giả làm "ghi chú cho hệ thống" | Như trên |
 | X03 | `empty_summary` | Tiêu đề của `base_id`, tóm tắt rỗng | `base_id`, `relevant`, `event_type`, cả bốn tài sản `0`/`uncertain`/`low`, `notes` |
 
-- Nên lấy `base_id` của X01, X02 trong số 50 dòng đã chọn. Khi đó đáp án của X01, X02 giống dòng gốc, chỉ khác `notes`, nên dễ thấy model có bị câu lệnh kéo lệch không.
+- Nên lấy `base_id` của X01, X02 trong số 49 dòng đã chọn. Khi đó đáp án của X01, X02 giống dòng gốc, chỉ khác `notes`, nên dễ thấy model có bị câu lệnh kéo lệch không.
 - Câu lệnh có sẵn trong `injected_text` sửa được, miễn là chưa chốt bộ case.
 
 ## Ngưỡng (Khải chốt 28/10/2026)
@@ -145,13 +153,13 @@ Cấu hình: [`configs/labeling_benchmark_v3.py`](../../../configs/labeling_benc
 
 | Tiêu chí | v3 | v2 | Ghi chú |
 |---|---:|---:|---|
-| Đầu ra hợp lệ (schema + quy tắc 4, 5, 8) | 53/53 | 30/30 | Quy tắc 8 (evidence theo impact) là mới; sai thì được gọi lại một lần |
+| Đầu ra hợp lệ (schema + quy tắc 4, 5, 8) | 52/52 | 30/30 | Quy tắc 8 (evidence theo impact) là mới; sai thì được gọi lại một lần |
 | Nhóm A, core check | 100% | 100% | Bắt buộc có F06, F07 (cắt) và F14 (tăng) để chặn quy tắc 6.2; Phước thêm các dòng khác |
 | Case đặc biệt X01–X03 | 100% | case 30 | X01, X02: core check + `notes` không rỗng; X03: cả bốn tài sản `0/uncertain/low` |
-| relevant | ≥ 90% | ≥ 90% | Trên 53 case |
+| relevant | ≥ 90% | ≥ 90% | Trên 52 case |
 | event_type | ≥ 90% | ≥ 90% | |
 | direction (ô impact kỳ vọng ≥ 1) | ≥ 80% | ≥ 80% | Mẫu số phụ thuộc đáp án |
-| \|impact lệch\| ≤ 1 | ≥ 90% | ≥ 90% | Trên 212 ô (53 × 4) |
+| \|impact lệch\| ≤ 1 | ≥ 90% | ≥ 90% | Trên 208 ô (52 × 4) |
 | confidence khớp | Chỉ báo cáo | Chỉ báo cáo | |
 | Hướng vàng, bạc ở tin `monetary_policy`/`macro_data` | Chỉ báo cáo | — | Đo riêng quy tắc mục 6.2 |
 | Evidence duyệt tay | ≥ 8/10 | Không có | 10 ô lấy ngẫu nhiên (seed 7) trong các ô model gán impact ≥ 1; Khải chấm. Lần v2: 4/10 |
@@ -185,4 +193,4 @@ python scripts/benchmark/labeling_benchmark.py --config labeling_benchmark_v3 --
 python scripts/benchmark/labeling_benchmark.py --config labeling_benchmark_v3
 ```
 
-Lệnh cuối gọi Bedrock thật (sau `aws login --profile cpaws-dev`) và chỉ chạy một lần. Kết quả ghi vào `docs/experiments/results/news-labeling-v3-<ngày>/`. Chi phí ước tính khoảng 0,1–0,2 USD cho 53 lần gọi, suy từ lần v2 (30 lần gọi, 0,058 USD) và prompt v3 dài hơn; đối chiếu lại trang giá Bedrock lúc chạy.
+Lệnh cuối gọi Bedrock thật (sau `aws login --profile cpaws-dev`) và chỉ chạy một lần. Kết quả ghi vào `docs/experiments/results/news-labeling-v3-<ngày>/`. Chi phí ước tính khoảng 0,1–0,2 USD cho 52 lần gọi, suy từ lần v2 (30 lần gọi, 0,058 USD) và prompt v3 dài hơn; đối chiếu lại trang giá Bedrock lúc chạy.

@@ -808,7 +808,7 @@
       "evidence": ""
      }
     },
-    "event_type": "monetary_policy",
+    "event_type": "other",
     "notes": "Thông cáo nhân sự chỉ nêu việc Kevin Warsh nhậm chức, không có nội dung chính sách nên không đủ cơ sở đánh giá tác động."
    }
   },
@@ -1592,47 +1592,6 @@
    }
   },
   {
-   "case_id": "E22",
-   "group": "B",
-   "source": "EIA",
-   "release_type": "press_release_admin",
-   "published_at_utc": "2025-12-03",
-   "url": "https://www.eia.gov/pressroom/releases/press580.php",
-   "title": "Statement from EIA Administrator Tristan Abbey on the Weekly Petroleum Status Report",
-   "summary": "EIA không công bố WPSR đúng lịch ngày 3/12/2025 dù báo cáo đã sẵn sàng, do sự cố kỹ thuật đang được điều tra.",
-   "expected": {
-    "relevant": true,
-    "asset_labels": {
-     "gold": {
-      "impact_score": 0,
-      "direction": "uncertain",
-      "confidence": "low",
-      "evidence": ""
-     },
-     "silver": {
-      "impact_score": 0,
-      "direction": "uncertain",
-      "confidence": "low",
-      "evidence": ""
-     },
-     "brent": {
-      "impact_score": 0,
-      "direction": "uncertain",
-      "confidence": "low",
-      "evidence": ""
-     },
-     "wti": {
-      "impact_score": 0,
-      "direction": "uncertain",
-      "confidence": "low",
-      "evidence": ""
-     }
-    },
-    "event_type": "inventory",
-    "notes": "EIA không công bố báo cáo tồn kho đúng lịch, bài không có số liệu nên không đủ cơ sở đánh giá tác động."
-   }
-  },
-  {
    "case_id": "E23",
    "group": "B",
    "source": "EIA",
@@ -2215,6 +2174,6 @@
  ],
  "source_sha256": {
   "candidates": "bf66944c594227efe5988bd77a883acdc1068c5d31e54fa66417d45fbad0f349",
-  "labels": "bde6747d2d961e8b75befb984592c43942d894976e6a59cceb529c72141a7fb4"
+  "labels": "a97adb852dfe43f21a00c786feaa44cbb91f56835c68aa60ef81bf57845354bd"
  }
 }

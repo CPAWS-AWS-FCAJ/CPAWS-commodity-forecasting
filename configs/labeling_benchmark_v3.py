@@ -1,4 +1,4 @@
-"""Cấu hình benchmark labeling-v3: 50 thông cáo Fed/EIA thật và vài case đặc biệt.
+"""Cấu hình benchmark labeling-v3: 49 thông cáo Fed/EIA thật và vài case đặc biệt.
 
 Chạy: python scripts/benchmark/labeling_benchmark.py --config labeling_benchmark_v3
 Dựng bộ case: python scripts/benchmark/build_labeling_cases_v3.py
@@ -10,8 +10,8 @@ Kế hoạch, cách gắn nhãn và ngưỡng đề xuất: docs/experiments/lab
 # Nguồn để dựng bộ case
 CANDIDATES_PATH = "docs/experiments/labeling-v3/candidates-fed-eia.csv"
 LABELS_PATH = "docs/experiments/labeling-v3/labels-v3.csv"  # Phước điền nhãn
-N_REAL_CASES = 50  # số thông cáo thật được chọn (cột selected)
-SPECIAL_CASES = {"injection": 2, "empty_summary": 1}  # ngoài 50 dòng thật, id X01, X02…
+N_REAL_CASES = 49  # số thông cáo thật được chọn (cột selected); Khải loại E22 ngày 28/10
+SPECIAL_CASES = {"injection": 2, "empty_summary": 1}  # ngoài 49 dòng thật, id X01, X02…
 # Khải 28/10/2026: statement cắt hoặc tăng lãi suất phải ở nhóm A (chốt chặn cho mục 6.2)
 REQUIRED_GROUP_A = ("F06", "F07", "F14")
 
