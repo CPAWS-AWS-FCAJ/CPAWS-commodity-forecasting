@@ -55,6 +55,22 @@ def sessions(name: str, start=None, end=None) -> pd.DatetimeIndex:
     return s
 
 
+def last_session_on_or_before(name: str, day) -> pd.Timestamp:
+    """Phiên cuối của lịch `name` có ngày <= `day`. Nhận tham số thường (tên lịch, ngày)."""
+    return pd.Timestamp(sessions(name, end=day)[-1])
+
+
+def expected_latest_session(name: str, run_dt) -> pd.Timestamp:
+    """Phiên mới nhất mà snapshot clean ngày `run_dt` (ngày UTC của lần ingest) phải có.
+
+    Là phiên cuối <= run_dt − 1 ngày: thanh của chính ngày run_dt chưa chốt nên clean loại
+    (incomplete_bar, theo ngày New York; lịch chạy 12:15 UTC thì ngày New York trùng run_dt).
+    Dùng chung cho ingest (kiểm tra phiên cuối trễ, INGEST_STALE) và predict
+    (expected_base_date, lý do latest_session_missing) để hai bên luôn cùng một mốc.
+    """
+    return last_session_on_or_before(name, pd.Timestamp(run_dt) - pd.Timedelta(1, "D"))
+
+
 def is_session(name: str, dates) -> pd.Series:
     d = _naive(dates)
     return pd.Series(d.isin(_sessions(name)), index=d)

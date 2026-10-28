@@ -13,6 +13,10 @@ Xử lý lỗi nguồn (theo từng tài sản):
   ERROR có mã INGEST_SOURCE_FAILED (cho CloudWatch metric filter) và thoát mã 1.
   Lần chạy thành công sau tải lại từ phiên thứ REFETCH_SESSIONS tính từ cuối của tài sản cũ nhất,
   nên khoảng trống được bù và flag stale_source tự mất (dòng bị ghi đè theo khóa).
+- Nguồn trả về bình thường nhưng thiếu phiên mới nhất (Yahoo trễ, ví dụ GLD/SLV thiếu phiên
+  21/10/2026): quality.json có stale_latest_session[asset] = {latest, expected, missing_sessions},
+  log WARNING INGEST_STALE asset=… latest=… expected=… missing_sessions=…; không raise, không đổi
+  bảng clean. Predict sẽ bỏ qua tài sản đó (latest_session_missing) và bật alarm của predict.
 - Nguồn tham chiếu (EIA, GC=F, SI=F, NBP) lỗi: log WARNING INGEST_REFERENCE_FAILED, giữ bản tham
   chiếu cũ, thoát mã 0.
 - quality.json có xcheck_skipped: các phiên chưa được đối chiếu với EIA, lý do source_unavailable
@@ -220,6 +224,16 @@ def run(
     report = quality.build_report(prices, rejected, refs, factors, nbp, fx)
     report["status"] = "partial" if failed else "ok"
     report["stale_sources"] = stale
+    # Phiên cuối trễ hơn lịch giao dịch: chỉ ghi báo cáo + log để runbook grep, không raise
+    report["stale_latest_session"] = quality.stale_latest_sessions(prices, run_dt)
+    for a, x in report["stale_latest_session"].items():
+        log_.warning(
+            "INGEST_STALE asset=%s latest=%s expected=%s missing_sessions=%d",
+            a,
+            x["latest"],
+            x["expected"],
+            x["missing_sessions"],
+        )
     ref_status = {
         x["asset"]: {"status": x["status"], "error": x.get("error", "")}
         for x in log
