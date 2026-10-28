@@ -11,10 +11,11 @@ from stacks.cpaws_ops_stack import CpawsOpsStack
 from stacks.cpaws_serving_stack import CpawsServingStack
 from stacks.shared import ingest_function_name, predict_function_name
 
-# Tag image của Lambda ingest trong ECR = SHA ngắn của commit merge PR #9 trên developer
-# (Dockerfile đã ghim digest base). Không dùng 286846a: build trước khi ghim digest.
+# Tag image của Lambda ingest trong ECR = SHA ngắn của commit merge PR #43 trên developer
+# (gồm #36: đọc EIA key từ SSM, và #43: cờ INGEST_STALE). Không dùng 6956620/3d391dd:
+# thiếu code SSM hoặc cờ INGEST_STALE.
 # Đổi khi đẩy image mới: cdk deploy CpawsData -c ingest_image_tag=<commit>
-DEFAULT_INGEST_IMAGE_TAG = "6956620"
+DEFAULT_INGEST_IMAGE_TAG = "5cfde32"
 
 # Tag image của Lambda predict = SHA ngắn của commit trên developer dùng để build (merge #27,
 # gồm #25 + #28). Đổi khi đẩy image mới: cdk deploy CpawsData -c predict_image_tag=<commit>
