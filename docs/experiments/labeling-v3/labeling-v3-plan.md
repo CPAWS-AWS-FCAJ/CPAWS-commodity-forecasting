@@ -2,7 +2,7 @@
 
 - Người làm: Phan Tấn Phước (prompt, script và bản nháp do Claude Code soạn). Người duyệt: Trịnh Tiến Khải.
 - Căn cứ: hướng v3 Khải chốt ngày 24/10/2026 (comment ở PR #30) và mục "Việc tiếp theo" trong [`news-labeling-2026-10.md`](../news-labeling-2026-10.md).
-- Trạng thái (28/10/2026): Khải đã duyệt prompt v3 và cách chọn 50 dòng, đã chốt ngưỡng và trả lời các câu hỏi (mục "Quyết định của Khải"). **Chưa gắn nhãn.** Chưa gọi model.
+- Trạng thái (28/10/2026): Khải đã duyệt prompt v3 và cách chọn 50 dòng, đã chốt ngưỡng và trả lời các câu hỏi (mục "Quyết định của Khải"). Đã gắn nhãn bản nháp (mục "Gắn nhãn"); **chờ Phước soát và Khải duyệt, chưa chốt.** Chưa gọi model.
 
 ## Yêu cầu của Khải và chỗ đáp ứng
 
@@ -53,6 +53,54 @@ Nguyên tắc:
 | AEO, tin hành chính (4/5) | E18, E22, E27, E29 | E19 | Tin hành chính `relevant = false`, đã có E18 và E27 |
 
 Cơ cấu 50 dòng theo `coverage_tag`: `mixed` 11, `clear_oil` 10, `clear_gold_silver` 8, `low_impact` 7, `title_mismatch` 6, `irrelevant` 5, `no_substance` 2, `uncertain` 1. Thêm 3 case đặc biệt X01–X03 thì bộ kiểm có 53 case.
+
+## Gắn nhãn
+
+Claude Code gắn nhãn bản nháp theo ủy quyền của Phước ngày 28/10/2026, theo mục "Cách điền" bên dưới. Nhãn chỉ dựa vào tiêu đề và `summary_vi`, không dùng giá sau ngày công bố. Phước soát lại từng dòng; Khải duyệt đáp án trong PR trước khi chốt.
+
+Quy ước dùng để chấm cho thống nhất (ngoài quy tắc của prompt):
+
+| Tình huống | Nhãn vàng, bạc |
+|---|---|
+| FOMC cắt hoặc tăng lãi suất | `2`, `bullish` hoặc `bearish`, `high` |
+| Giữ nguyên, không có tín hiệu về lộ trình | `1`, `uncertain` |
+| Giữ nguyên, có phiếu phản đối hoặc tín hiệu một chiều | `1` (`2` nếu ba phiếu muốn tăng), theo chiều tín hiệu |
+| Giữ nguyên, phiếu phản đối hai chiều mà bài không nói chiều nào chiếm ưu thế | `1`, `mixed` |
+| Biên bản, bài phát biểu của một quan chức | `1` (`2` nếu đa số báo hiệu tăng thêm), theo chiều tín hiệu |
+| Thay đổi bảng cân đối, nhận định lạm phát không kèm tín hiệu lãi suất | Không tính là tín hiệu lãi suất (mục 6.2) |
+| Thông cáo EIA | `0`/`uncertain`, evidence rỗng (Khải 28/10) |
+
+| Tình huống | Nhãn Brent, WTI |
+|---|---|
+| Thông cáo Fed, kể cả khi nhắc giá năng lượng là nguyên nhân lạm phát | `0`/`uncertain` (bài không nêu yếu tố cung cầu dầu) |
+| WPSR: tồn kho cùng chiều | `1` (`2` khi dầu thô thay đổi trên 10 triệu thùng); WTI có `confidence` cao hơn Brent |
+| WPSR: dầu thô và sản phẩm trái chiều | `1`, `mixed` |
+| Dự báo giá của EIA có nêu nguyên nhân cung cầu toàn cầu | Brent và WTI cùng mức |
+| Sự kiện ở Trung Đông | WTI thấp hơn Brent một bậc |
+| Nguồn cung Mỹ (sản lượng kỷ lục) | WTI cao hơn Brent một bậc |
+| Gián đoạn không nêu quy mô | Tối đa `1`, `low` (mục 5) |
+| Dự báo giá không nêu nguyên nhân | `1`, `low`, theo chiều dự báo; dự báo đi ngang hoặc không có so sánh thì `0` (mục 5) |
+
+Mức `confidence` của ô impact 0: `high` khi tài sản rõ ràng không liên quan (dầu ở tin Fed, vàng và bạc ở tin EIA, tin không liên quan), `medium` khi bài liên quan nhưng không xác lập được tác động (F22, E23, E24, E29), `low` khi thiếu nội dung (mục 3).
+
+Statement giữ nguyên lãi suất không có tín hiệu vẫn để `1/uncertain` (không phải 0), vì mục 6.2 của prompt cho trường hợp này `direction = uncertain` như một nhãn có tác động; còn dự báo giá đi ngang của EIA để 0 vì bài không nêu cơ chế (mục 5).
+
+Nhóm A (8 dòng): F06, F07, F14 theo Khải; thêm F32 (`relevant = false`), E03 (tồn kho giảm mạnh), E12 (dự báo giảm có hai nguyên nhân), E28 (gián đoạn có quy mô), E32 (gián đoạn chấm dứt). Đây là các dòng có đáp án rõ nhất; không đưa vào nhóm A các dòng có `event_type` dễ tranh luận (F26, E22).
+
+Case đặc biệt: X01 dựng từ F14, X02 từ E03 (câu lệnh nhắm vào vàng và bạc, trong khi đáp án là 0), X03 từ F06. Đáp án X01, X02 giống dòng gốc, chỉ khác `notes`.
+
+Các dòng cần người duyệt xem kỹ (ghi trong cột `reviewer_note`):
+- F23: tóm tắt nói Fed "có thể điều chỉnh chính sách" nhưng không nói hướng, nên để `mixed`. Nếu muốn dòng này kiểm tín hiệu cắt giảm thì phải sửa `summary_vi` trước khi chốt.
+- F26, E22: `event_type` là `monetary_policy` và `inventory` theo chủ đề; có thể tranh luận là `other`.
+
+Soát lại (Claude Code theo ủy quyền của Phước, 28/10/2026): đọc lại cả 53 dòng, đối chiếu từng tóm tắt với các mục 3, 5, 6.2, 6.3, 8 của prompt và so các dòng cùng loại. Người soát cũng là người gắn nhãn, nên vẫn cần Khải duyệt độc lập trong PR. Đã sửa 5 dòng:
+
+| Dòng | Vấn đề | Sửa |
+|---|---|---|
+| F07 | Evidence dùng việc dừng thu hẹp bảng cân đối làm lý do, trái quy ước bảng cân đối không phải tín hiệu lãi suất | Bỏ ý đó khỏi evidence; nhãn giữ nguyên |
+| E14 | Evidence viết "sản lượng Mỹ thấp hơn dự kiến", tóm tắt chỉ nói hạ dự báo giếng khoan | Viết lại evidence bám tóm tắt |
+| E23, E24 | Dự báo giá đi ngang hoặc không có so sánh, bài không nêu cơ chế (mục 5) | Brent, WTI từ `1/uncertain` thành `0` |
+| F17 | Tóm tắt nói "chia rẽ", không nói phía nào là đa số | Giữ `bearish`, hạ `confidence` xuống `low` |
 
 ## Cách điền `labels-v3.csv`
 
