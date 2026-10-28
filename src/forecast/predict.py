@@ -1,7 +1,7 @@
 """Dự báo hằng ngày cho vàng, bạc, Brent, WTI → bảng `Forecasts` (docs/api/contract.md, ADR-0008).
 
-Chạy sau Lambda ingest (kích hoạt bởi Lambda destination OnSuccess của Lambda ingest; hạ tầng do
-Tiến cấu hình). Với mỗi tài sản:
+Chạy sau Lambda ingest (kích hoạt bởi Lambda destination OnSuccess và OnFailure của Lambda ingest,
+xem src/forecast/lambda_predict.py; hạ tầng do Tiến cấu hình). Với mỗi tài sản:
   1. Đọc snapshot clean mới nhất: clean/prices/dt=D/ (có quality.json, file ingest ghi cuối) và
      clean/display_factors/dt=D/ cùng ngày.
   2. build_feature_frame(prices, asset, invalid_dates=<ngày bị loại>) → latest_base_date →
@@ -172,14 +172,11 @@ def cut_snapshot(snap: Snapshot, base_date) -> Snapshot:
 
 def expected_base_date(asset: str, snap: Snapshot) -> pd.Timestamp:
     """Phiên cuối của lịch tài sản đứng trước ngày dt của snapshot; với snapshot đã cắt tại D thì
-    phiên cuối <= D."""
-    end = (
-        snap.base_date
-        if snap.base_date is not None
-        else pd.Timestamp(snap.dt) - pd.Timedelta(1, "D")
-    )
-    sess = calendars.sessions(ASSETS[asset].calendar, end=end)
-    return pd.Timestamp(sess[-1])
+    phiên cuối <= D. Logic nằm ở src/data/calendars.py, dùng chung với kiểm tra INGEST_STALE."""
+    cal = ASSETS[asset].calendar
+    if snap.base_date is not None:
+        return calendars.last_session_on_or_before(cal, snap.base_date)
+    return calendars.expected_latest_session(cal, snap.dt)
 
 
 # ---------- các trường của bản ghi ----------

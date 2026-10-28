@@ -59,6 +59,7 @@ def test_handler_writes_lake_layout_to_s3(s3, monkeypatch, prefix):
     _fake(monkeypatch)
     out = lambda_ingest.handler({"start": "2020-03-02"}, None)
     assert out["status"] == "ok" and out["stale_sources"] == {}
+    assert out["stale_latest_session"] == []
     p = f"{prefix}/" if prefix else ""
     keys = _keys(s3)
     for k in (
