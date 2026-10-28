@@ -603,16 +603,19 @@ def interval_label_errors(answer: str, tool_calls: list[dict]) -> list[str]:
     wrong = _quantile_values(tool_calls, (0, 2, 4, 6))
     # q50 cũng hợp lệ trên dòng có nhãn 80% (trung vị thường đứng cạnh khoảng); thiếu q50 thì
     # q50 của tài sản này trùng q95 của tài sản khác bị bắt nhầm (dev 26/10, HAIKU-014, 029)
-    right = _quantile_values(tool_calls, (1, 3, 5)) | _widths(tool_calls)
+    right = _quantile_values(tool_calls, (1, 3, 5))
+    # width_80_* chỉ hợp lệ trên đoạn nói về độ rộng (INTERVAL_WIDTH_WORDS, Khải review PR #38)
+    widths = _widths(tool_calls)
     if not wrong:
         return []
     bad = []
     for seg in _SEGMENT.split(_norm(answer)):
         if not any(trig in seg for trig in C.INTERVAL_LABEL_TRIGGERS):
             continue
+        seg_right = right | widths if any(w in seg for w in C.INTERVAL_WIDTH_WORDS) else right
         for tok in extract_numbers(seg):
             values = {round(v, 2) for v, _ in _candidates(tok)}
-            if values & wrong and not values & right:
+            if values & wrong and not values & seg_right:
                 bad.append(tok)
     return bad
 
@@ -1080,7 +1083,8 @@ def scoring_config_sha256() -> str:
     ngưỡng, số được phép, nhãn khoảng 80% hay cấu hình model sau khi khóa thì lệch khóa."""
     names = sorted(
         (
-            "THRESHOLDS", "INTERVAL_LABEL_TRIGGERS", "GENERIC_ALLOWED_NUMBERS",
+            "THRESHOLDS", "INTERVAL_LABEL_TRIGGERS", "INTERVAL_WIDTH_WORDS",
+            "GENERIC_ALLOWED_NUMBERS",
             "BRANCH_ALLOWED_NUMBERS", "SENSITIVITY_EXCLUDE", "MODEL_IDS",
             "MAX_TOKENS", "TEMPERATURE", "MAX_TOOL_ROUNDS", "DISCLAIMER", "METAL_PRICE_REL_TOL",
             "VIETNAMESE_MIN_WORD_RATIO", "POLICY_CATEGORIES", "INJECTION_CATEGORY",
