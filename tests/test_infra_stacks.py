@@ -17,7 +17,11 @@ INFRA_DIR = Path(__file__).resolve().parents[1] / "infra"
 PREDICT_TAG = "def5678"
 
 
-def _synth(*, predict_repo_only: bool = False) -> dict:
+def _synth(
+    *,
+    predict_repo_only: bool = False,
+    eia_parameter_name: str | None = None,
+) -> dict:
     """Synth CpawsData, CpawsOps và CpawsServing cho env dev, trả về template dạng dict."""
     sys.path.insert(0, str(INFRA_DIR))
     try:
@@ -37,6 +41,7 @@ def _synth(*, predict_repo_only: bool = False) -> dict:
             predict_image_tag=PREDICT_TAG,
             predict_model_version="baseline-q252",
             predict_repo_only=predict_repo_only,
+            eia_parameter_name=eia_parameter_name,
         )
         ops = CpawsOpsStack(
             app,
@@ -150,7 +155,12 @@ def test_predict_role_is_least_privilege(templates):
     fn = t["Resources"][_function_id(t, "cpaws-dev-predict")]["Properties"]
     role_id = fn["Role"]["Fn::GetAtt"][0]
     by_sid = {st["Sid"]: st for st in _role_statements(t, role_id)}
-    assert set(by_sid) == {"LakeReadCleanModels", "LakeListCleanModels", "ForecastsPutItem"}
+    assert set(by_sid) == {
+        "LakeReadCleanModels",
+        "LakeListCleanModels",
+        "ForecastsPutItem",
+        "WriteShadowEvaluationObjects",
+    }
 
     read = by_sid["LakeReadCleanModels"]
     assert read["Action"] == "s3:GetObject"
@@ -164,6 +174,10 @@ def test_predict_role_is_least_privilege(templates):
     assert put["Action"] == "dynamodb:PutItem"
     assert _render(put["Resource"]).endswith(":table/cpaws-dev-forecasts")
 
+    shadow = by_sid["WriteShadowEvaluationObjects"]
+    assert shadow["Action"] == "s3:PutObject"
+    assert _render(shadow["Resource"]).endswith("/eval/shadow/*")
+
     # Không có action hay resource "*" trong policy riêng của role
     for st in by_sid.values():
         assert "*" not in str(st["Action"])
@@ -171,8 +185,8 @@ def test_predict_role_is_least_privilege(templates):
 
 
 def test_predict_table_name_matches_serving_stack(templates):
-    (table,) = _resources(templates["serving"], "AWS::DynamoDB::Table")
-    assert table["Properties"]["TableName"] == "cpaws-dev-forecasts"
+    # CpawsServing có nhiều bảng (Forecasts, NewsLabels): tìm theo tên predict ghi vào
+    _table(templates["serving"], "cpaws-dev-forecasts")
 
 
 def test_repo_only_mode_creates_repo_without_predict_lambda():
@@ -279,3 +293,138 @@ def test_scheduler_trust_policy_is_scoped_to_account_and_schedule_group(template
 def test_schedule_belongs_to_the_group_allowed_by_the_trust_policy(templates):
     (schedule,) = _resources(templates["data"], "AWS::Scheduler::Schedule")
     assert schedule["Properties"]["GroupName"] == EXPECTED_SCHEDULE_GROUP
+
+
+def test_ingest_role_can_read_only_configured_eia_parameter():
+    t = _synth(eia_parameter_name="/cpaws/dev/eia-api-key")["data"]
+    fn = t["Resources"][_function_id(t, "cpaws-dev-ingest")]["Properties"]
+    env = fn["Environment"]["Variables"]
+
+    assert env["EIA_SECRET_ID"] == "/cpaws/dev/eia-api-key"
+
+    role_id = fn["Role"]["Fn::GetAtt"][0]
+    statements = _role_statements(t, role_id)
+    eia_statements = [st for st in statements if "ssm:GetParameter" in st.get("Action", [])]
+
+    assert len(eia_statements) == 1
+    resource = eia_statements[0]["Resource"]
+    assert isinstance(resource, dict)
+    assert resource["Fn::Join"][1][-1] == ":parameter/cpaws/dev/eia-api-key"
+
+
+@pytest.mark.parametrize("parameter_name", ["", " ", "\t"])
+def test_empty_eia_parameter_name_is_rejected(parameter_name):
+    with pytest.raises(ValueError, match="must not be empty"):
+        _synth(eia_parameter_name=parameter_name)
+
+
+def test_eia_parameter_arn_is_rejected():
+    with pytest.raises(ValueError, match="not an ARN"):
+        _synth(
+            eia_parameter_name=(
+                "arn:aws:ssm:ap-southeast-1:123456789012:parameter/cpaws/dev/eia-api-key"
+            )
+        )
+
+
+def test_predict_role_has_no_ssm_permissions():
+    t = _synth(eia_parameter_name="/cpaws/dev/eia-api-key")["data"]
+    fn = t["Resources"][_function_id(t, "cpaws-dev-predict")]["Properties"]
+    role_id = fn["Role"]["Fn::GetAtt"][0]
+
+    for statement in _role_statements(t, role_id):
+        actions = statement.get("Action", [])
+        if isinstance(actions, str):
+            actions = [actions]
+        assert not any(action.startswith("ssm:") for action in actions)
+
+
+# ---------- bảng NewsLabels (contract POST /chat, ADR-0003 mục 6) ----------
+
+
+def _table(template: dict, table_name: str) -> dict:
+    (table,) = [
+        r
+        for r in _resources(template, "AWS::DynamoDB::Table")
+        if r["Properties"]["TableName"] == table_name
+    ]
+    return table
+
+
+def test_news_labels_table_matches_contract(templates):
+    sys.path.insert(0, str(INFRA_DIR))
+    try:
+        from stacks.shared import news_labels_table_name
+    finally:
+        sys.path.remove(str(INFRA_DIR))
+    assert news_labels_table_name("dev") == "cpaws-dev-news-labels"
+    table = _table(templates["serving"], "cpaws-dev-news-labels")
+    props = table["Properties"]
+    assert props["KeySchema"] == [
+        {"AttributeName": "asset", "KeyType": "HASH"},
+        {"AttributeName": "sk", "KeyType": "RANGE"},
+    ]
+    assert sorted(props["AttributeDefinitions"], key=lambda a: a["AttributeName"]) == [
+        {"AttributeName": "asset", "AttributeType": "S"},
+        {"AttributeName": "sk", "AttributeType": "S"},
+    ]
+    assert props["BillingMode"] == "PAY_PER_REQUEST"
+    # không index, không stream: chỉ Query theo khóa chính
+    assert "GlobalSecondaryIndexes" not in props and "LocalSecondaryIndexes" not in props
+    assert "StreamSpecification" not in props
+    assert table["DeletionPolicy"] == "Retain" and table["UpdateReplacePolicy"] == "Retain"
+
+
+def test_forecasts_table_is_unchanged_by_news_labels(templates):
+    tables = _items(templates["serving"], "AWS::DynamoDB::Table")
+    assert len(tables) == 2
+    forecasts = _table(templates["serving"], "cpaws-dev-forecasts")
+    assert next(k for k, r in tables.items() if r is forecasts).startswith("ForecastsTable")
+    assert forecasts["Properties"]["KeySchema"] == [
+        {"AttributeName": "asset", "KeyType": "HASH"},
+        {"AttributeName": "base_date", "KeyType": "RANGE"},
+    ]
+
+
+def _news_policy(statement_fn) -> list[dict]:
+    """Gắn statement vào một role thử trong stack riêng, trả về statement đã render."""
+    sys.path.insert(0, str(INFRA_DIR))
+    try:
+        import aws_cdk as cdk
+        from aws_cdk import aws_iam as iam
+        from aws_cdk.assertions import Template
+        from stacks import shared
+
+        app = cdk.App()
+        stack = cdk.Stack(app, "Probe")
+        role = iam.Role(stack, "R", assumed_by=iam.ServicePrincipal("lambda.amazonaws.com"))
+        role.add_to_policy(getattr(shared, statement_fn)(stack, "dev"))
+        t = Template.from_stack(stack).to_json()
+        return [
+            st
+            for p in _resources(t, "AWS::IAM::Policy")
+            for st in p["Properties"]["PolicyDocument"]["Statement"]
+        ]
+    finally:
+        sys.path.remove(str(INFRA_DIR))
+
+
+@pytest.mark.parametrize(
+    "statement_fn,action",
+    [
+        ("news_labels_read_statement", "dynamodb:Query"),
+        ("news_labels_write_statement", "dynamodb:PutItem"),
+    ],
+)
+def test_news_labels_statements_are_least_privilege(statement_fn, action):
+    (st,) = _news_policy(statement_fn)
+    assert st["Effect"] == "Allow" and st["Action"] == action  # đúng một action
+    resource = _render(st["Resource"])
+    assert resource.endswith(":table/cpaws-dev-news-labels")  # đúng bảng, không index, không *
+    assert "*" not in resource
+
+
+def test_existing_lambdas_have_no_news_labels_access(templates):
+    for name in ("data", "ops", "serving"):
+        for p in _resources(templates[name], "AWS::IAM::Policy"):
+            assert "news-labels" not in str(p["Properties"]["PolicyDocument"])

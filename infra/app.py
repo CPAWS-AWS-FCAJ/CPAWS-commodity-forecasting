@@ -11,10 +11,11 @@ from stacks.cpaws_ops_stack import CpawsOpsStack
 from stacks.cpaws_serving_stack import CpawsServingStack
 from stacks.shared import ingest_function_name, predict_function_name
 
-# Tag image của Lambda ingest trong ECR = SHA ngắn của commit merge PR #9 trên developer
-# (Dockerfile đã ghim digest base). Không dùng 286846a: build trước khi ghim digest.
+# Tag image của Lambda ingest trong ECR = SHA ngắn của commit merge PR #43 trên developer
+# (gồm #36: đọc EIA key từ SSM, và #43: cờ INGEST_STALE). Không dùng 6956620/3d391dd:
+# thiếu code SSM hoặc cờ INGEST_STALE.
 # Đổi khi đẩy image mới: cdk deploy CpawsData -c ingest_image_tag=<commit>
-DEFAULT_INGEST_IMAGE_TAG = "6956620"
+DEFAULT_INGEST_IMAGE_TAG = "5cfde32"
 
 # Tag image của Lambda predict = SHA ngắn của commit trên developer dùng để build (merge #27,
 # gồm #25 + #28). Đổi khi đẩy image mới: cdk deploy CpawsData -c predict_image_tag=<commit>
@@ -25,6 +26,12 @@ DEFAULT_PREDICT_MODEL_VERSION = "baseline-q252"
 app = cdk.App()
 env_name = app.node.try_get_context("env") or "dev"
 ingest_image_tag = app.node.try_get_context("ingest_image_tag") or DEFAULT_INGEST_IMAGE_TAG
+
+# SSM SecureString parameter name for the EIA API key.
+# Pass only the parameter name, never the API key value.
+eia_parameter_name = (
+    app.node.try_get_context("eia_parameter_name") or f"/cpaws/{env_name}/eia-api-key"
+)
 predict_image_tag = app.node.try_get_context("predict_image_tag") or DEFAULT_PREDICT_IMAGE_TAG
 predict_model_version = (
     app.node.try_get_context("predict_model_version") or DEFAULT_PREDICT_MODEL_VERSION
@@ -48,6 +55,7 @@ CpawsDataStack(
     "CpawsData",
     env_name=env_name,
     ingest_image_tag=ingest_image_tag,
+    eia_parameter_name=eia_parameter_name,
     predict_image_tag=predict_image_tag,
     predict_model_version=predict_model_version,
     predict_repo_only=predict_repo_only,

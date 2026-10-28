@@ -36,6 +36,7 @@ class CpawsDataStack(Stack):
         ingest_image_tag: str,
         predict_image_tag: str,
         predict_model_version: str,
+        eia_parameter_name: str | None = None,
         predict_repo_only: bool = False,
         **kwargs: Any,
     ) -> None:
@@ -139,7 +140,29 @@ class CpawsDataStack(Stack):
             )
         )
 
-        # Log giữ 30 ngày (aws-cost-guard: retention 14-30 ngày)
+        # Chỉ đọc parameter SSM chứa EIA API key bằng quyền tối thiểu.
+        parameter_name = None
+        if eia_parameter_name is not None:
+            parameter_name = eia_parameter_name.strip()
+            if not parameter_name:
+                raise ValueError("eia_parameter_name must not be empty")
+            if parameter_name.startswith("arn:"):
+                raise ValueError("eia_parameter_name must be an SSM parameter name, not an ARN")
+
+            ingest_role.add_to_policy(
+                iam.PolicyStatement(
+                    sid="ReadEiaParameter",
+                    actions=["ssm:GetParameter"],
+                    resources=[
+                        self.format_arn(
+                            service="ssm",
+                            resource="parameter",
+                            resource_name=parameter_name.lstrip("/"),
+                        )
+                    ],
+                )
+            )
+        # Log giữ 30 ngày (aws-cost-guard: retention 14-30 ngày).
         ingest_log_group = logs.LogGroup(
             self,
             "IngestLogGroup",
@@ -149,6 +172,14 @@ class CpawsDataStack(Stack):
         )
 
         # Lambda từ image trong ECR: x86_64, 1.024 MB, timeout 300 s, ngoài VPC.
+        # Pass only the parameter name, never the secret value.
+        ingest_environment = {
+            "LAKE_BUCKET": self.lake.bucket_name,
+            "CPAWS_ENV": env_name,
+        }
+        if parameter_name is not None:
+            ingest_environment["EIA_SECRET_ID"] = parameter_name
+
         self.ingest_fn = lambda_.DockerImageFunction(
             self,
             "IngestFunction",
@@ -167,10 +198,7 @@ class CpawsDataStack(Stack):
             # ingest được gọi BẤT ĐỒNG BỘ (Scheduler, hoặc aws lambda invoke --invocation-type Event).
             on_success=predict_destination,
             on_failure=predict_destination,
-            environment={
-                "LAKE_BUCKET": self.lake.bucket_name,
-                "CPAWS_ENV": env_name,
-            },
+            environment=ingest_environment,
         )
 
         # Lịch chạy hằng ngày: 12:15 UTC, thứ Ba-thứ Bảy (19:15 giờ VN). Phải KHỚP
@@ -260,6 +288,7 @@ class CpawsDataStack(Stack):
                 ],
             )
         )
+
         # Code dùng ListObjectsV2 để tìm dt= mới nhất và tải thư mục artifact
         role.add_to_policy(
             iam.PolicyStatement(
@@ -269,6 +298,16 @@ class CpawsDataStack(Stack):
                 conditions={"StringLike": {"s3:prefix": ["clean/*", "models/*"]}},
             )
         )
+
+        # Chỉ cho phép ghi kết quả shadow evaluation.
+        role.add_to_policy(
+            iam.PolicyStatement(
+                sid="WriteShadowEvaluationObjects",
+                actions=["s3:PutObject"],
+                resources=[self.lake.arn_for_objects("eval/shadow/*")],
+            )
+        )
+
         # DynamoSink chỉ dùng put_item (ghi đè theo asset + base_date); không Query/Delete.
         table_name = forecasts_table_name(env_name)
         role.add_to_policy(
