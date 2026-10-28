@@ -315,7 +315,8 @@ def score(cases: list[dict], results: list[dict]) -> dict:
             if p is not None:
                 imp_hit += abs(p["impact_score"] - e["impact_score"]) <= 1
                 conf_hit += p["confidence"] == e["confidence"]
-                if p["evidence"].strip():
+                # v3 lấy mẫu duyệt tay trong ô model gán impact ≥ 1 (ô impact 0 có evidence rỗng)
+                if (p["impact_score"] >= 1) if _v3_evidence() else p["evidence"].strip():
                     cells.append((case["case_id"], a))
         if case.get("variant"):
             special[case["case_id"]] = special_check(case, pred)
@@ -358,6 +359,7 @@ def score(cases: list[dict], results: list[dict]) -> dict:
         "manual_review_sample": [{"case_id": c, "asset": a} for c, a in sorted(sample)],
         "manual_review_note": "Duyệt tay: evidence bám nội dung (mẫu trên); notes của case "
         "chỉ dẫn nhúng (case 30 ở v2, case variant=injection ở v3).",
+        "manual_review": getattr(C, "MANUAL_REVIEW", None),  # ngưỡng, tiêu chí, người chấm (v3)
         "status_counts": {
             s: sum(r["status"] == s for r in results) for s in ("valid", "invalid", "api_error")
         },
@@ -411,6 +413,8 @@ def run(client, out_dir: Path, *, dry_run: bool, force: bool = False) -> dict:
             raise ValueError("bộ case chưa chốt (status khác locked); chốt đáp án và ngưỡng trước")
         if data.get("thresholds") != C.THRESHOLDS:
             raise ValueError("ngưỡng trong bộ case khác cấu hình; ngưỡng phải chốt cùng bộ case")
+        if data.get("manual_review") != getattr(C, "MANUAL_REVIEW", None):
+            raise ValueError("tiêu chí duyệt tay trong bộ case khác cấu hình")
     if (out_dir / "raw.jsonl").exists() and not force:
         raise FileExistsError(f"{out_dir} đã có kết quả; chỉ chạy một lần (dùng --force nếu cần)")
     system_prompt = load_system_prompt(prompt_path)

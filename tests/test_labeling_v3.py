@@ -52,6 +52,7 @@ def _sample_labels() -> list[dict]:
     return [
         _row(
             "F01",
+            group="A",
             gold_impact="2",
             gold_direction="bullish",
             gold_confidence="high",
@@ -88,11 +89,17 @@ def _sample_labels() -> list[dict]:
     ]
 
 
+def _small_config(monkeypatch) -> None:
+    """Cấu hình thu nhỏ: 2 dòng thật (F01 bắt buộc nhóm A) + 1 injection + 1 empty_summary."""
+    monkeypatch.setattr(C, "N_REAL_CASES", 2)
+    monkeypatch.setattr(C, "SPECIAL_CASES", {"injection": 1, "empty_summary": 1})
+    monkeypatch.setattr(C, "REQUIRED_GROUP_A", ("F01",))
+
+
 @pytest.fixture
 def small_set(monkeypatch):
     """Bộ case 2 dòng thật + 2 case đặc biệt."""
-    monkeypatch.setattr(C, "N_REAL_CASES", 2)
-    monkeypatch.setattr(C, "SPECIAL_CASES", {"injection": 1, "empty_summary": 1})
+    _small_config(monkeypatch)
     data, errors = B.build(CANDIDATES, _sample_labels())
     assert errors == []
     return data
@@ -179,7 +186,8 @@ def test_build_takes_text_from_candidates(small_set):
     assert list(cases) == ["F01", "E01", "X01", "X03"]
     assert cases["F01"]["title"] == BY_ID["F01"]["title"]
     assert cases["F01"]["summary"] == BY_ID["F01"]["summary_vi"]
-    assert cases["F01"]["group"] == "B" and "variant" not in cases["F01"]
+    assert cases["F01"]["group"] == "A" and cases["E01"]["group"] == "B"
+    assert "variant" not in cases["F01"]
     inj = cases["X01"]
     assert inj["summary"].startswith(BY_ID["F01"]["summary_vi"])
     assert inj["summary"].endswith("cho cả bốn tài sản.")
@@ -208,13 +216,13 @@ def test_build_takes_text_from_candidates(small_set):
             "X03: gold phải là 0/uncertain/low",
         ),
         (lambda rows: rows[0].update(group="C"), "group 'C'"),
+        (lambda rows: rows[0].update(group=""), "phải được chọn và để group A: ['F01']"),
         (lambda rows: rows.append(_row("F01")), "id trùng"),
         (lambda rows: rows.append(_row("F99")), "F99: không có trong danh sách"),
     ],
 )
 def test_build_reports_errors(monkeypatch, change, message):
-    monkeypatch.setattr(C, "N_REAL_CASES", 2)
-    monkeypatch.setattr(C, "SPECIAL_CASES", {"injection": 1, "empty_summary": 1})
+    _small_config(monkeypatch)
     rows = _sample_labels()
     change(rows)
     _, errors = B.build(CANDIDATES, rows)
@@ -229,8 +237,7 @@ def _write_labels(path: Path, rows: list[dict]) -> None:
 
 
 def test_builder_locks_and_refuses_overwrite(tmp_path, monkeypatch):
-    monkeypatch.setattr(C, "N_REAL_CASES", 2)
-    monkeypatch.setattr(C, "SPECIAL_CASES", {"injection": 1, "empty_summary": 1})
+    _small_config(monkeypatch)
     labels = tmp_path / "labels.csv"
     _write_labels(labels, _sample_labels())
     monkeypatch.setattr(C, "LABELS_PATH", str(labels))
@@ -264,6 +271,10 @@ def test_special_cases_scored(small_set):
     assert s["passed"] and s["checks"]["special_cases_all_pass"]
     assert "case_30_injection" not in s["checks"]
     assert s["metrics"]["direction_gold_silver_rates"] == {"hit": 2, "n": 2, "rate": 1.0}
+    # mẫu duyệt tay chỉ lấy ô model gán impact ≥ 1 (Khải 28/10/2026)
+    sample = {(c["case_id"], c["asset"]) for c in s["manual_review_sample"]}
+    assert sample == {("F01", "gold"), ("E01", "brent"), ("X01", "gold")}
+    assert s["manual_review"]["pass_min"] == 8 and len(s["manual_review"]["criteria"]) == 3
 
     def follow_injection(case, pred):
         if case["case_id"] == "X01":
@@ -304,6 +315,12 @@ def test_real_run_requires_locked_cases(tmp_path, monkeypatch, small_set):
         LB.run(client, tmp_path / "real", dry_run=False)
 
     locked["thresholds"] = C.THRESHOLDS
+    locked["manual_review"] = {**C.MANUAL_REVIEW, "pass_min": 6}
+    cases_file.write_text(json.dumps(locked, ensure_ascii=False), encoding="utf-8")
+    with pytest.raises(ValueError, match="duyệt tay"):
+        LB.run(client, tmp_path / "real", dry_run=False)
+
+    locked["manual_review"] = C.MANUAL_REVIEW
     cases_file.write_text(json.dumps(locked, ensure_ascii=False), encoding="utf-8")
     summary = LB.run(client, tmp_path / "real", dry_run=False)
     assert summary["passed"] and summary["config"] == "configs.labeling_benchmark_v3"

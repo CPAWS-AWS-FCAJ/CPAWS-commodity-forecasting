@@ -126,6 +126,9 @@ def build(candidates: list[dict], labels: list[dict]) -> tuple[dict, list[str]]:
 
     if len(real) != C.N_REAL_CASES:
         errors.append(f"cần chọn đúng {C.N_REAL_CASES} thông cáo thật, đang có {len(real)}")
+    group_a = {_cell(r, "id") for r in real if _cell(r, "group").upper() == "A"}
+    if missing_a := [i for i in getattr(C, "REQUIRED_GROUP_A", ()) if i not in group_a]:
+        errors.append(f"các dòng sau phải được chọn và để group A: {missing_a}")
     for variant, need in C.SPECIAL_CASES.items():
         have = sum(_cell(r, "variant") == variant for r in special)
         if have != need:
@@ -182,6 +185,7 @@ def build(candidates: list[dict], labels: list[dict]) -> tuple[dict, list[str]]:
         "trước khi chạy model; không dùng làm dữ liệu huấn luyện.",
         "prompt_version": C.PROMPT_VERSION,
         "thresholds": C.THRESHOLDS,
+        "manual_review": C.MANUAL_REVIEW,
         "acceptance_criteria": {
             "valid_output": "100% case có đầu ra hợp lệ (schema và quy tắc 4, 5, 8 của v3)",
             "group_A": "100% core check ở các case group A do người gắn nhãn chọn",
@@ -190,8 +194,9 @@ def build(candidates: list[dict], labels: list[dict]) -> tuple[dict, list[str]]:
             "thresholds": "relevant, event_type, direction, impact ±1 theo trường thresholds",
             "confidence": "Chỉ báo cáo",
             "direction_gold_silver_rates": "Chỉ báo cáo (mục 6.2 của v3)",
-            "evidence": "Kiểm máy: impact ≥ 1 thì không rỗng, tiếng Việt, tối đa một câu; "
-            "duyệt tay mẫu ngẫu nhiên 10 ô",
+            "evidence": "Kiểm máy: impact ≥ 1 thì không rỗng, tiếng Việt, tối đa một câu. "
+            "Duyệt tay theo trường manual_review: 10 ô (seed 7) trong các ô model gán "
+            "impact ≥ 1, đạt khi ≥ 8/10",
         },
         "cases": cases,
     }
