@@ -104,6 +104,36 @@ def test_display_fx_holds_previous_rate_while_jump_is_undecided(tmp_path):
     assert res.report["display_fx"]["flag"] == "pending_confirm"
 
 
+def test_lagging_latest_session_is_reported_without_failing(tmp_path, caplog):
+    """Yahoo trễ phiên (nguồn vẫn trả dữ liệu): chỉ báo cáo + log INGEST_STALE, không raise,
+    không đổi bảng clean (ADR-0005)."""
+    normal = ingest_prices.run(storage.LocalStorage(tmp_path / "a"), _sources(), "2020-03-02", NOW)
+    assert normal.report["stale_latest_session"] == {}
+    st = storage.LocalStorage(tmp_path / "b")
+    src = {"yfinance": YFinanceSource(FakeYF(ends={"GLD": "2020-05-27"})), "eia": FakeEIA()}
+    with caplog.at_level("WARNING", logger="cpaws.ingest"):
+        res = ingest_prices.run(st, src, start="2020-03-02", now=NOW)
+    # không phải lỗi nguồn: lần chạy vẫn ok, stale_sources rỗng
+    assert res.ok and res.report["status"] == "ok" and res.report["stale_sources"] == {}
+    stale = {"gold": {"latest": "2020-05-27", "expected": "2020-05-28", "missing_sessions": 1}}
+    assert res.report["stale_latest_session"] == stale
+    q = json.loads(st.read_bytes("clean/prices/dt=2020-05-29/quality.json"))
+    assert q["stale_latest_session"] == stale
+    warns = [r.getMessage() for r in caplog.records if "INGEST_STALE" in r.getMessage()]
+    assert warns == [
+        "INGEST_STALE asset=gold latest=2020-05-27 expected=2020-05-28 missing_sessions=1"
+    ]
+    # bảng clean giữ nguyên cột, kiểu và cờ; chỉ thiếu dòng phiên 28/5 của vàng
+    assert list(res.prices.columns) == list(normal.prices.columns)
+    assert list(res.prices.dtypes) == list(normal.prices.dtypes)
+    gold_28 = (normal.prices["asset"] == "gold") & (normal.prices["date"] == "2020-05-28")
+    expected = normal.prices.loc[~gold_28].reset_index(drop=True)
+    pd.testing.assert_frame_equal(
+        res.prices.reset_index(drop=True).drop(columns=["ingested_at"], errors="ignore"),
+        expected.drop(columns=["ingested_at"], errors="ignore"),
+    )
+
+
 NEXT = pd.Timestamp("2020-06-05 20:00", tz="UTC")
 
 

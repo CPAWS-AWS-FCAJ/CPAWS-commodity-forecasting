@@ -42,6 +42,26 @@ def test_cme_keeps_black_friday_and_mourning_day_with_trading():
     assert s.all()
 
 
+@pytest.mark.parametrize(
+    "cal,run_dt,expected",
+    [
+        ("NYSE", "2026-10-27", "2026-10-26"),  # chạy thứ Ba → phiên thứ Hai
+        ("NYSE", "2026-10-24", "2026-10-23"),  # chạy thứ Bảy → phiên thứ Sáu
+        ("NYSE", "2023-11-24", "2023-11-22"),  # Thanksgiving 23/11 nghỉ
+        ("NYSE", "2025-04-21", "2025-04-17"),  # Good Friday 18/4 nghỉ
+        ("CME", "2025-04-21", "2025-04-17"),
+        ("FX", "2025-04-21", "2025-04-18"),  # FX chỉ theo thứ Hai – thứ Sáu
+    ],
+)
+def test_expected_latest_session_is_last_session_before_run_day(cal, run_dt, expected):
+    assert calendars.expected_latest_session(cal, run_dt) == pd.Timestamp(expected)
+
+
+def test_last_session_on_or_before_includes_the_day_itself():
+    assert calendars.last_session_on_or_before("NYSE", "2026-10-26") == pd.Timestamp("2026-10-26")
+    assert calendars.last_session_on_or_before("NYSE", "2026-10-25") == pd.Timestamp("2026-10-23")
+
+
 def test_roll_days_match_known_expiries():
     days = calendars.sessions("CME", "2020-04-01", "2020-04-30")
     rolls = calendars.roll_days("CL", days)

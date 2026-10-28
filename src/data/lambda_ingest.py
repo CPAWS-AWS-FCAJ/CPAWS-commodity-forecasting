@@ -11,6 +11,8 @@ event:
                          trả về số dòng và lỗi từng mã (kiểm tra Yahoo có chặn IP AWS không)
 Khi có nguồn chính lỗi: dữ liệu các tài sản khác vẫn được ghi, log INGEST_SOURCE_FAILED, rồi raise
 IngestSourceFailed để Lambda tính là lỗi (metric Errors của CloudWatch). Không dùng sys.exit.
+Nguồn chạy được nhưng thiếu phiên mới nhất: chỉ log WARNING INGEST_STALE và trả trong
+stale_latest_session, không raise (một sự cố chỉ một alarm: alarm của predict).
 """
 
 from __future__ import annotations
@@ -53,6 +55,8 @@ def handler(event: dict | None, context=None) -> dict:
         "run_dt": res.run_dt,
         "status": res.report.get("status"),
         "stale_sources": res.report.get("stale_sources", {}),
+        # tài sản thiếu phiên mới nhất (không phải lỗi nguồn): chỉ báo, không raise
+        "stale_latest_session": sorted(res.report.get("stale_latest_session", {})),
         "written": len(res.written),
     }
     log.info("INGEST_DONE %s", summary)

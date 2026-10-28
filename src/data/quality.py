@@ -231,6 +231,31 @@ def mark_stale_sources(
     return out, info
 
 
+def stale_latest_sessions(prices: pd.DataFrame, run_dt: str) -> dict[str, dict]:
+    """Tài sản có phiên cuối trong snapshot sớm hơn phiên mong đợi của lịch giao dịch.
+
+    Phiên mong đợi = calendars.expected_latest_session(lịch tài sản, run_dt), cùng mốc predict
+    dùng cho lý do latest_session_missing. Chỉ báo cáo, không sửa bảng clean (schema giữ nguyên,
+    ADR-0005). Tài sản chưa có dòng nào bị bỏ qua (đã nằm trong stale_sources).
+    Trả về {asset: {latest, expected, missing_sessions}}; rỗng nếu mọi tài sản đủ phiên.
+    """
+    out: dict[str, dict] = {}
+    for asset, spec in ASSETS.items():
+        d = prices.loc[prices["asset"] == asset, "date"]
+        if d.empty:
+            continue
+        latest = pd.Timestamp(d.max()).normalize()
+        expected = calendars.expected_latest_session(spec.calendar, run_dt)
+        if latest < expected:
+            missing = calendars.sessions(spec.calendar, latest + pd.Timedelta(1, "D"), expected)
+            out[asset] = {
+                "latest": str(latest.date()),
+                "expected": str(expected.date()),
+                "missing_sessions": len(missing),
+            }
+    return out
+
+
 def display_factors(prices: pd.DataFrame, refs: pd.DataFrame) -> pd.DataFrame:
     """Hệ số quy đổi ETF → USD/oz, chỉ để hiển thị (không đưa vào train):
     factor[t] = trung vị DISPLAY_FACTOR_WINDOW phiên gần nhất (chỉ lùi) của (future / ETF)."""
