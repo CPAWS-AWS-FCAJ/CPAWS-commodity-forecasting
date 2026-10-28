@@ -287,6 +287,118 @@ def test_local_json_sink_writes_floats(tmp_path):
     assert rec["is_sample"] is False and len(rec["horizons"]) == 7
 
 
+# ---------- không ghi đè dự báo đã phát hành ----------
+
+
+def test_first_write_counts_written_not_already_published(aws, monkeypatch):
+    s3, table = aws
+    _write_lake(storage.S3Storage(BUCKET, client=s3), _prices())
+    _fake_loader(monkeypatch)
+    out = lambda_predict.handler({}, None)
+    assert out["ok"] and out["written"] == 4 and out["already_published"] == 0
+    assert not any("already_published" in a for a in out["assets"].values())
+    assert table.scan()["Count"] == 4
+
+
+def test_second_run_same_key_keeps_published_record(aws, monkeypatch, caplog):
+    s3, table = aws
+    _write_lake(storage.S3Storage(BUCKET, client=s3), _prices())
+    _fake_loader(monkeypatch)
+    lambda_predict.handler({}, None)
+    first = {a: _items(table, a) for a in predict.PREDICT_ASSETS}
+    caplog.set_level(logging.INFO, logger="cpaws.predict")
+
+    out = lambda_predict.handler({}, None)  # không raise PredictFailed
+
+    assert out["ok"] and out["written"] == 0 and out["already_published"] == 4
+    for asset in predict.PREDICT_ASSETS:
+        a = out["assets"][asset]
+        assert a["status"] == "ok" and a["already_published"] is True and "written_to" not in a
+        assert _items(table, asset) == first[asset]  # bản đã phát hành giữ nguyên
+        assert f"PREDICT_ALREADY_PUBLISHED asset={asset} base_date={BASE}" in caplog.text
+    assert all(
+        r.levelno == logging.WARNING
+        for r in caplog.records
+        if r.getMessage().startswith("PREDICT_ALREADY_PUBLISHED")
+    )
+
+
+def test_sample_record_is_replaced(aws, monkeypatch):
+    s3, table = aws
+    _write_lake(storage.S3Storage(BUCKET, client=s3), _prices())
+    sample = {"asset": "gold", "base_date": BASE, "model_version": "sample", "is_sample": True}
+    table.put_item(Item=sample)
+    _fake_loader(monkeypatch)
+    out = lambda_predict.handler({"assets": ["gold"]}, None)
+    assert out["ok"] and out["written"] == 1 and out["already_published"] == 0
+    items = _items(table, "gold")
+    assert len(items) == 1
+    _assert_contract(items[0], "gold")
+
+
+class _FailingTable:
+    def __init__(self, code: str):
+        self.code = code
+        self.calls: list[dict] = []
+
+    def put_item(self, **kw):
+        from botocore.exceptions import ClientError
+
+        self.calls.append(kw)
+        raise ClientError({"Error": {"Code": self.code, "Message": "x"}}, "PutItem")
+
+
+class _FakeResource:
+    def __init__(self, table):
+        self.table = table
+
+    def Table(self, name):  # tên theo boto3
+        return self.table
+
+
+def test_put_uses_condition_on_asset_and_is_sample():
+    table = _FailingTable("ConditionalCheckFailedException")
+    sink = predict.DynamoSink(TABLE, resource=_FakeResource(table))
+    assert sink.put({"asset": "gold", "base_date": BASE}) is None
+    kw = table.calls[0]
+    assert kw["ConditionExpression"] == "attribute_not_exists(#a) OR #s = :t"
+    assert kw["ExpressionAttributeNames"] == {"#a": "asset", "#s": "is_sample"}
+    assert kw["ExpressionAttributeValues"] == {":t": True}
+
+
+def test_other_client_error_still_fails(tmp_path, caplog):
+    from botocore.exceptions import ClientError
+
+    table = _FailingTable("ProvisionedThroughputExceededException")
+    sink = predict.DynamoSink(TABLE, resource=_FakeResource(table))
+    with pytest.raises(ClientError):
+        sink.put({"asset": "gold", "base_date": BASE})
+
+    st = _local(tmp_path)
+    _write_lake(st, _prices())
+    caplog.set_level(logging.INFO, logger="cpaws.predict")
+    run = _run(st, sink, assets=["gold", "wti"])
+    assert not run.ok
+    for r in run.results:
+        assert r.status == predict.STATUS_ERROR and r.reason == predict.REASON_EXCEPTION
+        assert not r.already_published and "ProvisionedThroughputExceeded" in r.detail
+    assert run.summary()["already_published"] == 0
+    assert "PREDICT_ALREADY_PUBLISHED" not in caplog.text
+
+
+def test_handler_raises_on_other_client_error(aws, monkeypatch):
+    s3, _ = aws
+    _write_lake(storage.S3Storage(BUCKET, client=s3), _prices())
+    _fake_loader(monkeypatch)
+    table = _FailingTable("ValidationException")
+    real = predict.DynamoSink
+    monkeypatch.setattr(
+        predict, "DynamoSink", lambda name: real(name, resource=_FakeResource(table))
+    )
+    with pytest.raises(lambda_predict.PredictFailed):
+        lambda_predict.handler({"assets": ["gold"]}, None)
+
+
 # ---------- cửa sổ không hợp lệ, thiếu phiên cuối ----------
 
 

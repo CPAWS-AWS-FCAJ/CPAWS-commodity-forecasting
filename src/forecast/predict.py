@@ -14,7 +14,9 @@ xem src/forecast/lambda_predict.py; hạ tầng do Tiến cấu hình). Với m�
      - display_factor_missing / display_factor_stale (vàng, bạc), fx_missing.
   4. model.predict → normalize_quantiles() đúng một lần ngay sau mô hình; log
      PREDICT_QUANTILE_CROSSING với số hàng h phải sắp xếp.
-  5. last_price, tỷ giá, stale_sources, roll_in_horizon → to_forecast_record → ghi.
+  5. last_price, tỷ giá, stale_sources, roll_in_horizon → to_forecast_record → ghi. DynamoDB không
+     ghi đè dự báo đã phát hành cùng (asset, base_date), chỉ thay bản mẫu (is_sample = true);
+     log PREDICT_ALREADY_PUBLISHED, tài sản vẫn tính là xong.
 
 Phiên mong đợi: chạy thường = phiên cuối của lịch tài sản đứng trước ngày dt của snapshot (ingest
 chạy 12:15 UTC nên phiên của ngày dt chưa chốt); với --base-date D = phiên cuối <= D.
@@ -275,6 +277,7 @@ class AssetResult:
     n_crossed: int | None = None
     record: dict | None = None
     written_to: str | None = None
+    already_published: bool = False  # khóa đã có dự báo phát hành, bản cũ giữ nguyên
     detail: str = ""
 
 
@@ -474,7 +477,11 @@ def make_model_loader(
 
 
 class DynamoSink:
-    """Ghi bản ghi vào bảng DynamoDB `Forecasts` (put_item ghi đè theo khóa asset + base_date)."""
+    """Ghi bản ghi vào bảng DynamoDB `Forecasts` theo khóa asset + base_date.
+
+    Không ghi đè dự báo đã phát hành: put_item có điều kiện chỉ ghi khi khóa chưa có hoặc bản cũ
+    là bản mẫu (is_sample = true). Điều kiện không đạt → WARNING PREDICT_ALREADY_PUBLISHED, trả
+    None (bản cũ giữ nguyên, tài sản vẫn tính là xong). ClientError khác raise như cũ."""
 
     def __init__(self, table_name: str, resource=None):
         if not table_name:
@@ -486,8 +493,27 @@ class DynamoSink:
         self.table_name = table_name
         self.table = resource.Table(table_name)
 
-    def put(self, record: dict) -> str:
-        self.table.put_item(Item=record)
+    def put(self, record: dict) -> str | None:
+        try:
+            self.table.put_item(
+                Item=record,
+                ConditionExpression="attribute_not_exists(#a) OR #s = :t",
+                ExpressionAttributeNames={"#a": "asset", "#s": "is_sample"},
+                ExpressionAttributeValues={":t": True},
+            )
+        except Exception as e:
+            # Nhận ClientError qua mã lỗi thay vì import botocore.exceptions: requirements-predict.txt
+            # chỉ khai báo boto3 (như src/data/secret_store.py); lỗi khác raise nguyên vẹn
+            response = getattr(e, "response", None)
+            code = response.get("Error", {}).get("Code") if isinstance(response, dict) else None
+            if code != "ConditionalCheckFailedException":
+                raise
+            log.warning(
+                "PREDICT_ALREADY_PUBLISHED asset=%s base_date=%s",
+                record["asset"],
+                record["base_date"],
+            )
+            return None
         return f"dynamodb://{self.table_name}/{record['asset']}/{record['base_date']}"
 
 
@@ -541,6 +567,8 @@ class PredictRun:
                 a["prob_up"] = [float(h["prob_up"]) for h in r.record["horizons"]]
             if r.written_to:
                 a["written_to"] = r.written_to
+            if r.already_published:
+                a["already_published"] = True
             if r.detail:
                 a["detail"] = r.detail
             assets[r.asset] = a
@@ -551,6 +579,7 @@ class PredictRun:
             "dry_run": self.dry_run,
             "ok": self.ok,
             "written": sum(1 for r in self.results if r.written_to),
+            "already_published": sum(1 for r in self.results if r.already_published),
             "assets": assets,
         }
 
@@ -602,7 +631,9 @@ def run_predict(
                 snap, asset, loaded, model_version=model_version, created_at=created_at
             )
             if res.status == STATUS_OK and sink is not None:
+                # None: dự báo đã phát hành cho khóa này (DynamoSink), vẫn tính là xong
                 res.written_to = sink.put(res.record)
+                res.already_published = res.written_to is None
         except ModelArtifactError as e:
             log.error(
                 "PREDICT_MODEL_MISSING asset=%s model_version=%s error=%s", asset, model_version, e
