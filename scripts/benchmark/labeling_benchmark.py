@@ -1,8 +1,12 @@
-"""Benchmark gắn nhãn tin bằng Nova 2 Lite trên bộ case giả lập (prompt labeling-v2).
+"""Benchmark gắn nhãn tin bằng Nova 2 Lite (labeling-v2 trên case giả lập, labeling-v3 trên tin thật).
 
 Chạy:
     python scripts/benchmark/labeling_benchmark.py --dry-run     # model giả, không cần AWS
     python scripts/benchmark/labeling_benchmark.py               # gọi Bedrock thật, sau `aws login`
+    python scripts/benchmark/labeling_benchmark.py --config labeling_benchmark_v3 [--dry-run]
+
+Mặc định dùng configs/labeling_benchmark.py (v2). Với v3, chạy thật chỉ được khi bộ case đã
+chốt (status "locked") và ngưỡng trong bộ case khớp cấu hình.
 
 Mỗi case gọi model một lần qua Converse, ép gọi tool bằng toolChoice. Đầu ra không hợp lệ thì
 gọi lại đúng một lần kèm lỗi validation; bị cắt do max_tokens thì tính invalid, không gọi lại.
@@ -18,6 +22,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import hashlib
+import importlib
 import json
 import random
 import re
@@ -30,10 +35,24 @@ from botocore.exceptions import BotoCoreError, ClientError
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-from configs import labeling_benchmark as C
+# Mặc định v2; đổi bằng use_config / --config. Nạp qua importlib (không phải câu import) để
+# ruff 0.8 của pre-commit không báo E402 và ruff 0.16 của CI không báo noqa thừa.
+C = importlib.import_module("configs.labeling_benchmark")
 
 ASSETS = ("gold", "silver", "brent", "wti")
+EMPTY_LABEL = (0, "uncertain", "low")  # impact, direction, confidence khi tóm tắt rỗng (v3)
+RATE_EVENTS = ("monetary_policy", "macro_data")  # event_type tính chỉ số hướng lãi suất (v3)
 VI_CHARS = set("àáảãạăằắẳẵặâầấẩẫậđèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵ")
+
+
+def use_config(name: str) -> None:
+    """Chọn module cấu hình trong configs/, ví dụ labeling_benchmark_v3."""
+    global C
+    C = importlib.import_module(f"configs.{name}")
+
+
+def _v3_evidence() -> bool:
+    return getattr(C, "EVIDENCE_RULE", "v2") == "v3"
 
 
 # ---------- đầu vào cho model ----------
@@ -65,7 +84,7 @@ def tool_config(schema: dict) -> dict:
                 "toolSpec": {
                     "name": C.TOOL_NAME,
                     "description": "Ghi nhãn mức độ ảnh hưởng của bài viết đến gold, silver, "
-                    "brent, wti theo prompt labeling-v2.",
+                    f"brent, wti theo prompt {C.PROMPT_VERSION}.",
                     "inputSchema": {"json": schema},
                 }
             }
@@ -78,7 +97,7 @@ def tool_config(schema: dict) -> dict:
 
 
 def validate_output(obj, validator: jsonschema.protocols.Validator) -> list[str]:
-    """JSON Schema (khóa, kiểu, enum) + quy tắc liên trường 4 và 5 của prompt labeling-v2."""
+    """JSON Schema (khóa, kiểu, enum) + quy tắc liên trường 4, 5 (và 8 ở v3) của prompt."""
     errors = [
         f"{'/'.join(map(str, e.absolute_path)) or '<root>'}: {e.message}"
         for e in validator.iter_errors(obj)
@@ -98,6 +117,11 @@ def validate_output(obj, validator: jsonschema.protocols.Validator) -> list[str]
                 f"asset_labels/{a}: relevant = false thì impact_score = 0, "
                 'direction = uncertain và evidence = ""'
             )
+        elif obj["relevant"] and _v3_evidence():
+            if lab["impact_score"] == 0 and lab["evidence"] != "":
+                errors.append(f'asset_labels/{a}: impact_score = 0 thì evidence phải là ""')
+            if lab["impact_score"] >= 1 and not lab["evidence"].strip():
+                errors.append(f"asset_labels/{a}: impact_score ≥ 1 thì evidence không được rỗng")
     return errors
 
 
@@ -225,13 +249,37 @@ def injection_check(pred: dict | None) -> list[str]:
     return fails
 
 
+def special_check(case: dict, pred: dict | None) -> list[str]:
+    """Case đặc biệt của v3 (trường variant): phải đạt core check nhóm A và quy tắc riêng.
+
+    injection: notes phải nêu chỉ dẫn nhúng (nội dung duyệt tay).
+    empty_summary: cả bốn tài sản 0/uncertain/low và notes không rỗng.
+    """
+    fails = group_a_check(case["expected"], pred)
+    if pred is None:
+        return fails
+    if not pred["notes"].strip():
+        fails.append("notes rỗng")
+    if case["variant"] == "empty_summary":
+        for a in ASSETS:
+            lab = pred["asset_labels"][a]
+            if (lab["impact_score"], lab["direction"], lab["confidence"]) != EMPTY_LABEL:
+                fails.append(f"{a}: tóm tắt rỗng phải là 0/uncertain/low")
+    return fails
+
+
 def evidence_issues(pred: dict) -> list[str]:
-    """Kiểm tra máy cho evidence: rỗng khi relevant=false; không rỗng, tiếng Việt, ≤ 1 câu."""
+    """Kiểm tra máy cho evidence: rỗng khi relevant=false; không rỗng, tiếng Việt, ≤ 1 câu.
+
+    Với v3, ô impact 0 phải rỗng (validate_output đã bắt), nên chỉ kiểm ô impact ≥ 1.
+    """
     issues = []
     for a in ASSETS:
         ev = pred["asset_labels"][a]["evidence"]
         if not pred["relevant"]:
             continue  # validate_output đã bắt evidence khác rỗng
+        if _v3_evidence() and pred["asset_labels"][a]["impact_score"] == 0:
+            continue
         if not ev.strip():
             issues.append(f"{a}: evidence rỗng")
             continue
@@ -245,8 +293,8 @@ def evidence_issues(pred: dict) -> list[str]:
 def score(cases: list[dict], results: list[dict]) -> dict:
     """Ô không có đầu ra hợp lệ (invalid, api_error) tính là sai ở mọi chỉ số."""
     by_id = {r["case_id"]: r for r in results}
-    rel = evt = dir_hit = dir_n = imp_hit = conf_hit = 0
-    group_a, ev_issues, cells = {}, {}, []
+    rel = evt = dir_hit = dir_n = imp_hit = conf_hit = rate_hit = rate_n = 0
+    group_a, special, ev_issues, cells = {}, {}, {}, []
     for case in cases:
         exp = case["expected"]
         pred = by_id[case["case_id"]].get("output")
@@ -261,16 +309,21 @@ def score(cases: list[dict], results: list[dict]) -> dict:
             if e["impact_score"] >= 1:
                 dir_n += 1
                 dir_hit += p is not None and p["direction"] == e["direction"]
+                if a in ("gold", "silver") and exp["event_type"] in RATE_EVENTS:
+                    rate_n += 1  # quy tắc lãi suất, lạm phát (mục 6.2 của v3); chỉ báo cáo
+                    rate_hit += p is not None and p["direction"] == e["direction"]
             if p is not None:
                 imp_hit += abs(p["impact_score"] - e["impact_score"]) <= 1
                 conf_hit += p["confidence"] == e["confidence"]
                 if p["evidence"].strip():
                     cells.append((case["case_id"], a))
-        if case["group"] == "A":
+        if case.get("variant"):
+            special[case["case_id"]] = special_check(case, pred)
+        elif case["group"] == "A":
             group_a[case["case_id"]] = group_a_check(exp, pred)
 
     n = len(cases)
-    case30 = next((c for c in cases if c["case_id"] == 30), None)
+    case30 = next((c for c in cases if c["case_id"] == 30), None)  # bộ giả lập v2
     metrics = {
         "valid_output": _ratio(sum(r["status"] == "valid" for r in results), n),
         "relevant_accuracy": _ratio(rel, n),
@@ -279,11 +332,15 @@ def score(cases: list[dict], results: list[dict]) -> dict:
         "impact_abs_err_le1": _ratio(imp_hit, n * len(ASSETS)),
         "confidence_match": _ratio(conf_hit, n * len(ASSETS)),
     }
+    if rate_n:
+        metrics["direction_gold_silver_rates"] = _ratio(rate_hit, rate_n)
     checks = {
         "valid_output_all": metrics["valid_output"]["hit"] == n,
         **{k: (metrics[k]["rate"] or 0) >= t for k, t in C.THRESHOLDS.items()},
         "group_a_all_pass": all(not f for f in group_a.values()),
     }
+    if special:
+        checks["special_cases_all_pass"] = all(not f for f in special.values())
     inj = injection_check(by_id[30].get("output")) if case30 else []
     if case30:
         checks["case_30_injection"] = not inj
@@ -296,9 +353,11 @@ def score(cases: list[dict], results: list[dict]) -> dict:
         "passed": all(checks.values()),
         "group_a_failures": {k: v for k, v in group_a.items() if v},
         "case_30_failures": inj,
+        "special_case_failures": {k: v for k, v in special.items() if v},
         "evidence_issues": ev_issues,
         "manual_review_sample": [{"case_id": c, "asset": a} for c, a in sorted(sample)],
-        "manual_review_note": "Duyệt tay: evidence bám nội dung (mẫu trên), notes case 30.",
+        "manual_review_note": "Duyệt tay: evidence bám nội dung (mẫu trên); notes của case "
+        "chỉ dẫn nhúng (case 30 ở v2, case variant=injection ở v3).",
         "status_counts": {
             s: sum(r["status"] == s for r in results) for s in ("valid", "invalid", "api_error")
         },
@@ -347,6 +406,11 @@ def run(client, out_dir: Path, *, dry_run: bool, force: bool = False) -> dict:
     data = json.loads(cases_path.read_text(encoding="utf-8"))
     if data["prompt_version"] != C.PROMPT_VERSION:
         raise ValueError(f"bộ case dùng {data['prompt_version']}, cấu hình là {C.PROMPT_VERSION}")
+    if getattr(C, "REQUIRE_LOCKED_CASES", False) and not dry_run:
+        if data.get("status") != "locked":
+            raise ValueError("bộ case chưa chốt (status khác locked); chốt đáp án và ngưỡng trước")
+        if data.get("thresholds") != C.THRESHOLDS:
+            raise ValueError("ngưỡng trong bộ case khác cấu hình; ngưỡng phải chốt cùng bộ case")
     if (out_dir / "raw.jsonl").exists() and not force:
         raise FileExistsError(f"{out_dir} đã có kết quả; chỉ chạy một lần (dùng --force nếu cần)")
     system_prompt = load_system_prompt(prompt_path)
@@ -371,7 +435,9 @@ def run(client, out_dir: Path, *, dry_run: bool, force: bool = False) -> dict:
     )
     summary = {
         "benchmark": data["benchmark_name"],
+        "config": C.__name__,
         "cases_version": data["version"],
+        "cases_status": data.get("status"),
         "prompt_version": C.PROMPT_VERSION,
         "model_id": C.MODEL_ID,
         "region": C.REGION,
@@ -414,19 +480,24 @@ def bedrock_client(profile: str, region: str):
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--dry-run", action="store_true", help="model giả trả đúng nhãn kỳ vọng")
-    ap.add_argument("--profile", default=C.PROFILE)
+    ap.add_argument(
+        "--config", default="labeling_benchmark", help="module trong configs/ (mặc định v2)"
+    )
+    ap.add_argument("--profile", default=None, help="AWS profile (mặc định theo cấu hình)")
     ap.add_argument("--out-dir", type=Path, default=None)
     ap.add_argument("--force", action="store_true", help="cho phép ghi đè kết quả đã có")
     args = ap.parse_args(argv)
+    use_config(args.config)
 
     today = dt.datetime.now(dt.UTC).astimezone().date().isoformat()  # ngày theo giờ máy chạy
-    name = f"news-labeling-{today}" + ("-dryrun" if args.dry_run else "")
+    prefix = getattr(C, "RESULTS_PREFIX", "news-labeling")
+    name = f"{prefix}-{today}" + ("-dryrun" if args.dry_run else "")
     out_dir = args.out_dir or ROOT / C.RESULTS_DIR / name
     if args.dry_run:
         cases = json.loads((ROOT / C.CASES_PATH).read_text(encoding="utf-8"))["cases"]
         client = OracleClient(cases)
     else:
-        client = bedrock_client(args.profile, C.REGION)
+        client = bedrock_client(args.profile or C.PROFILE, C.REGION)
     summary = run(client, out_dir, dry_run=args.dry_run, force=args.force or args.dry_run)
 
     print(json.dumps({k: summary[k] for k in ("checks", "passed", "status_counts")}, indent=2))

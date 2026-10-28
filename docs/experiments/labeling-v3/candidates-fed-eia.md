@@ -2,7 +2,7 @@
 
 - File dữ liệu: [`candidates-fed-eia.csv`](candidates-fed-eia.csv) (UTF-8, 69 dòng).
 - Mục đích: danh sách để Phước chọn 50 thông cáo thật làm bộ case kiểm labeling-v3 (theo [news-labeling-2026-10.md](../news-labeling-2026-10.md), mục "Việc tiếp theo").
-- Trạng thái: **chưa gắn đáp án**. Nhãn `relevant`, `event_type`, `impact_score`, `direction`, `confidence`, `evidence` do Phước gắn tay và chốt cùng ngưỡng trước khi chạy model.
+- Trạng thái: **chưa gắn đáp án**. Nhãn `relevant`, `event_type`, `impact_score`, `direction`, `confidence`, `evidence` do Phước gắn tay và chốt cùng ngưỡng trước khi chạy model. Cách điền và quy trình: [`labeling-v3-plan.md`](labeling-v3-plan.md).
 - Lập ngày 27/10/2026.
 
 ## Cách chọn
