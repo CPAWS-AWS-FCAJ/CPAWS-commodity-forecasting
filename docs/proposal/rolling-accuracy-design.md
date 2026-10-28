@@ -1,7 +1,7 @@
 # RFC — Thiết kế Rolling Accuracy và API lịch sử dự báo (CPAWS)
 
-> **Trạng thái:** DRAFT / PROPOSAL — **chưa được phê duyệt, chưa phải API contract chính thức**  
-> **Ngày cập nhật:** 2026-10-28 (điều chỉnh sau review PR #45; chờ họp 30/10/2026)  
+> **Trạng thái:** DRAFT / PROPOSAL  — **chưa được phê duyệt, chưa phải API contract chính thức**  
+> **Ngày cập nhật:** 2026-10-28 (v3, bổ sung review DynamoDB/IAM/data integrity của Tuấn; chờ họp 30/10/2026)  
 > **Người đề xuất:** Long — nhóm CPAWS  
 > **Người review:** Khải (đánh giá/hiển thị), Tuấn (API, DynamoDB, IAM), Tiến (Predict, Web)  
 > **Mục tiêu:** Chốt thiết kế MVP trước khi cập nhật `docs/api/contract.md` bằng PR riêng; nếu thay đổi quy tắc Walk-forward/Accuracy Schema thì cập nhật tài liệu tương ứng theo review.  
@@ -20,7 +20,7 @@ RFC đề xuất hai chức năng phục vụ Dashboard CPAWS:
 
 **Đề xuất MVP sau review Khải (chờ nhóm chốt):** cửa sổ 56 ngày UTC theo `base_date`; mốc `created_at >= 2026-10-27T12:00:00Z`; conditional write để không ghi đè forecast thật; lịch phát hành kỳ vọng suy từ trading calendar + lịch chạy TUE–SAT + predict logs, không xây bảng manifest riêng; kiểm tra sai lệch `prob_up` với dung sai `1e-6`; giới hạn Dashboard ở 4 metric; đề xuất ngưỡng hiển thị coverage gộp theo tối thiểu 20 ngày `base_date` khác nhau có nhãn hợp lệ.
 
-**Cần chốt trước triển khai:** cách chứng thực lịch phát hành dự kiến và trạng thái `no_forecast_row`, quy tắc chống leakage theo thời gian, chống ghi đè, trường JSON API, ngưỡng hiển thị, thời điểm đổi champion và xử lý khi log/snapshot chưa đầy đủ. Các thay đổi chính sách so với `docs/eval/walk-forward-contract.md` chỉ có hiệu lực sau PR contract được duyệt.
+**Cần chốt trước triển khai:** cách chứng thực lịch phát hành dự kiến và trạng thái `no_forecast_row`, quy tắc chống leakage theo thời gian, chống ghi đè, **DynamoDB access patterns/PK/SK, idempotency, run completion và IAM**, trường JSON API, ngưỡng hiển thị, thời điểm đổi champion và xử lý khi log/snapshot chưa đầy đủ. Các thay đổi chính sách so với `docs/eval/walk-forward-contract.md` chỉ có hiệu lực sau PR contract được duyệt.
 
 ---
 
@@ -114,6 +114,8 @@ Không dùng riêng các bản ghi Forecasts đã thành công để suy ra tấ
 
 Lưu/ghi nhận trong evaluation-run metadata các căn cứ lịch, thời điểm chạy, snapshot, số lượng expected/published/failed/missing/eligible/matured và trạng thái truy vết; không bắt buộc tạo bảng manifest mới. **`coverage_80` chỉ lấy mẫu số `n_obs` từ các cặp forecast–nhãn hợp lệ**, không dùng `expected_count`.
 
+**Điều kiện xác minh publication evidence [ĐỀ XUẤT — D14/D15]:** chỉ dùng trạng thái `schedule_evidence_status=verified` nếu có (a) calendar và cấu hình lịch chạy/ngoại lệ áp dụng cho giai đoạn đó; (b) chứng cứ log/record của các kỳ chạy hoặc lý do thất bại/skip, đủ để phân biệt expected với actual; (c) dấu vết `created_at`, `is_sample`, `model_version` và snapshot/input-as-of để đối chiếu; (d) tham chiếu run metadata có thể truy xuất lại (nguồn, khoảng thời gian, hash/version nếu có). Nếu log bị xóa theo retention, không truy cập được, hoặc không thể phân biệt kỳ thiếu với kỳ không lên lịch, ghi `incomplete/unverified`, **không biến thành `no_forecast_row` đã xác minh hoặc công bố run như đủ publication evidence**. MVP không bắt buộc xây một kho manifest mới; bản kê kỳ vọng dẫn xuất và dấu vết dùng để xác minh phải được lưu/tham chiếu cùng evaluation run. Cần xác nhận retention của log có bao phủ cửa sổ 56 ngày hay không.
+
 **Phụ thuộc contract:** `docs/eval/walk-forward-contract.md` hiện yêu cầu publication manifest cho `rolling_8w`. Nếu nhóm chọn phương án derived schedule trên, cần cập nhật rõ quy tắc/chứng cứ thay thế trong PR contract, trước khi áp dụng như tiêu chuẩn chính thức. Phạm vi khi log thiếu/chưa xác thực phải được chốt tại họp 30/10.
 
 ### 2.6. Issue #23.1 — So khớp `prob_up` nguồn đã làm tròn [ĐỀ XUẤT MVP]
@@ -157,8 +159,8 @@ Ví dụ job **05/11/2026**: cửa sổ lý thuyết là **11/09–05/11/2026**,
 6. Tách 7 horizons, xác nhận `target_date`, tính log return từ đúng target series và valid endpoints.
 7. Áp dụng common mask; tính metrics, `n_obs` riêng từng metric/h và thống kê số `base_date` khác nhau có cặp đủ điều kiện.
 8. Ghi các dòng Accuracy có `evaluation_kind`, `run_id`, `config_hash`, `evaluation_start/end`, `target_cutoff_date`, `status`, `undefined_reason` theo schema hiện hành.
-9. Ghi DynamoDB idempotent; chỉ đổi latest completed run khi hoàn tất và đạt chính sách evidence đã được chốt.
-10. Ghi run metadata: snapshot, window, champion, counts expected–published, exclusions, rounding check, thời điểm job và lỗi vận hành; không ghi thông tin bí mật.
+9. Ghi Accuracy bằng conditional/idempotent writes theo mục 4.2; kiểm đầy đủ các metric, snapshot và publication evidence theo mục 4.3 trước khi đánh dấu `COMPLETED`; chỉ sau đó mới cập nhật latest pointer bằng điều kiện chống run cũ ghi đè.
+10. Ghi run metadata: snapshot, window, champion, counts expected–published, exclusions, rounding check, `config_hash`/payload hashes, evidence refs và thời điểm job; không ghi thông tin bí mật.
 
 Không gọi predict để tạo forecast lịch sử hoặc viết validation/test vào bảng Accuracy.
 
@@ -186,12 +188,52 @@ Chỉ đánh giá `model_version` champion đang vận hành. Khi đổi champio
 
 ## 4. Accuracy Storage
 
-- **Đã chốt trong Accuracy Schema:** `validation`/`test` → Parquet trên S3 `eval/`; `rolling_8w` → DynamoDB.
-- Mỗi metric/h có khóa logic `(run_id, model_version, asset, sample, evaluation_kind, evaluation_start, evaluation_end, target_cutoff_date, h, metric)`; không đồng nhất khóa logic này với PK/SK vật lý.
-- **Tuấn chốt:** PK/SK/GSI, truy vấn latest completed per asset/champion, IAM, TTL, batch/idempotency và quy tắc hoàn tất run.
-- Để tính `overall`, đọc counts từ các cặp chi tiết hoặc aggregate riêng có provenance; không tự thêm `h=0` hay `metric=covered_count` vào schema hiện hành.
-- Lịch sử forecast–actual có thể tính khi đọc hoặc lưu chi tiết ngoài bảng Accuracy theo phương án được duyệt; snapshot correction phải có dấu vết.
-- Run metadata lưu/đối chiếu snapshot, lịch dự kiến, logs, trạng thái publication, cutoff, `n_base_dates`, `config_hash`; không tự thêm cột chính thức nếu chưa có PR schema.
+- **Đã chốt trong Accuracy Schema:** `validation`/`test` → Parquet trên S3 `eval/`; chỉ `rolling_8w` → DynamoDB.
+- Mỗi metric/h giữ nguyên khóa logic `(run_id, model_version, asset, sample, evaluation_kind, evaluation_start, evaluation_end, target_cutoff_date, h, metric)`; **khóa logic không đồng nhất PK/SK vật lý**.
+- `overall` lấy hit/count từ các cặp chi tiết hoặc aggregate riêng có provenance; không tự thêm `h=0` hay `metric=covered_count` vào Accuracy Schema. Lịch sử forecast–actual, nếu cần lưu, dùng nơi lưu chi tiết được duyệt riêng.
+
+### 4.1. Access patterns và khóa DynamoDB [ĐỀ XUẤT — TUẤN CHỐT, D05]
+
+**Các truy vấn MVP phải hỗ trợ mà không `Scan`:** (1) lấy run rolling **hoàn thành mới nhất** của từng asset và champion đang hiệu lực; (2) lấy metadata/trạng thái của run; (3) lấy đầy đủ 7 horizons × các metric theo đúng `run_id`, `asset`, `model_version`, `sample`, window và cutoff; (4) ghi/retry một run mà không đụng dữ liệu run khác. Truy vấn audit ngoài MVP không được dùng làm lý do cấp quyền `Scan` cho API.
+
+**Một phương án single-table để thẩm định**, dùng các item có chung bảng Accuracy:
+
+| Loại item | PK đề xuất | SK đề xuất | Mục đích |
+|---|---|---|---|
+| Metric | `RUN#<run_id>#ASSET#<asset>` | `METRIC#<model_version>#<sample>#<evaluation_kind>#<evaluation_start>#<evaluation_end>#<target_cutoff_date>#H#<h>#<metric>` | Một item/khóa logic, giữ đủ mọi chiều phân biệt |
+| Run metadata | `RUN#<run_id>#ASSET#<asset>` | `META` | Trạng thái run, `config_hash`, window/cutoff, champion, nguồn snapshot và publication evidence, số hàng/hashes |
+| Latest pointer | `ASSET#<asset>` | `LATEST_COMPLETED` | Trỏ tới PK run hoàn thành mới nhất **của champion hiện hành**; lưu `model_version`, `champion_effective_at`, thời điểm/cutoff và run ID |
+
+Các thành phần khóa động phải được mã hóa/escape nhất quán để ký tự phân cách không gây va chạm. `run_id` là **evaluation run ID**, khác `forecast_run_id`; một run nhiều asset dùng mỗi asset một partition riêng. Nếu cho phép nhiều `sample` hay `evaluation_kind` trên cùng run, khóa metric vẫn không được va chạm. **Đề xuất MVP không cần GSI**: API `GetItem` pointer → `GetItem` run `META` → `Query` metric items theo partition và prefix `METRIC#`. API đối chiếu champion đang hiệu lực và trạng thái run; nếu pointer trỏ champion cũ thì trả `not_ready`, không trả lẫn đời model. Nguồn xác định champion và chính sách thay pointer khi đổi champion phải được Tuấn/Khải chốt.
+
+### 4.2. Idempotency, immutable results và retry [ĐỀ XUẤT]
+
+- Khi bắt đầu run: ghi `META` với `status=RUNNING`, `run_id`, `asset`, champion, `config_hash`, snapshot ID/hash, window và cutoff. Cùng logical run chỉ được retry nếu **cùng fingerprint cấu hình + input**; khác fingerprint phải dùng `run_id` mới.
+- Từng metric item ghi với điều kiện **chưa tồn tại**. Nếu retry thấy item cùng khóa, so `payload_hash`/nội dung chuẩn hóa: **giống nhau → bỏ qua an toàn; khác nhau → báo conflict**, không ghi đè im lặng. Không dùng `BatchWriteItem` không điều kiện cho các metric bất biến.
+- Run dở có thể tiếp tục ghi các item còn thiếu; run `COMPLETED` và các metric đã công bố là bất biến. Sửa snapshot/correction, đổi config hoặc đánh giá lại phải tạo **run ID mới**, giữ run cũ để audit.
+- Run thất bại không thay latest pointer. Cập nhật pointer chỉ sau khi run `COMPLETED`, với điều kiện tránh một run cũ hoặc champion không còn hiệu lực ghi đè pointer mới; cần kiểm thử trường hợp hai job chạy đồng thời. Việc chốt cách ghi có điều kiện/transaction do Tuấn quyết định.
+
+### 4.3. Điều kiện chuyển `COMPLETED` và công bố [ĐỀ XUẤT]
+
+Một run có thể chuyển `RUNNING → VALIDATING → COMPLETED` **chỉ khi**:
+
+1. Đã chốt snapshot, window/cutoff/`config_hash`, champion và có publication evidence đủ theo **policy D14/D15 được duyệt**; mọi thiếu chứng cứ được ghi rõ, không tự gán `verified`.
+2. Đã ghi **đủ tập metric bắt buộc** theo contract (MVP: `coverage_80`, `width_80`, `sign_accuracy`, `up_rate` cho cả h=1..7 và scope cần trả về); kiểm đủ khóa logic, số hàng dự kiến, không trùng và hash/payload nhất quán. Dòng `status=undefined` với `undefined_reason` hợp lệ **vẫn là một dòng đầy đủ**, không bắt buộc có giá trị số.
+3. Đã đối chiếu `n_obs`, các counters publication/exclusion, `n_base_dates`, `target_cutoff_date`, input-as-of và không có lỗi chấm hoặc ghi còn mở ảnh hưởng tính đúng đắn. Các bộ đếm có thể cho biết publication `partial`; điều này **khác** với manifest/evidence `invalid`.
+4. Chỉ sau bước validate mới đánh dấu `COMPLETED` và cập nhật `LATEST_COMPLETED`. API phải đọc pointer, xác minh `META.status=COMPLETED`, champion đúng, nguồn evidence hợp lệ và đọc đủ các metric; nếu thiếu/sai, trả `not_ready` hoặc lỗi có kiểm soát, **không trả kết quả của run ghi dở**.
+
+`FAILED`/run thiếu chứng cứ không được promote. Dùng đọc nhất quán (`ConsistentRead` khi khả dụng) để tránh API thấy pointer mới trước khi thấy item tương ứng. Trạng thái `COMPLETED` của job **khác** `data_status=ready` trên Dashboard: một run hoàn tất vẫn có thể ít quan sát và `display_status=insufficient_data`.
+
+### 4.4. IAM tối thiểu và quyền dữ liệu [ĐỀ XUẤT — TUẤN CHỐT]
+
+| Thành phần | Quyền cần thiết | Giới hạn |
+|---|---|---|
+| Rolling writer | `dynamodb:GetItem`, `Query` trên `Forecasts`; `GetItem`, `Query`, `PutItem`, `UpdateItem` và (nếu dùng) `TransactWriteItems` trên Accuracy | Chỉ đúng bảng/index đã chọn; quyền ghi Accuracy gồm metric, `META`, pointer; không cấp `Scan` khi access pattern không cần |
+| Writer đọc dữ liệu | `s3:GetObject` trên clean snapshot/quality và tham chiếu run; quyền đọc log predict/ingest nếu policy dùng logs | Chỉ prefix S3 và log group cần thiết, kèm thời hạn log đủ rolling 56 ngày; KMS decrypt riêng nếu nguồn mã hóa |
+| Accuracy API reader | `dynamodb:GetItem`, `Query` trên Accuracy | Read-only, chỉ table/index cần thiết; **không** quyền ghi Accuracy/Forecasts, không `Scan`, không đọc log/S3 nếu API chỉ dùng dữ liệu đã tổng hợp |
+| Predict Lambda | Quyền ghi `Forecasts` có điều kiện theo PR predict riêng | Không cần quyền ghi Accuracy hoặc đọc metric lịch sử |
+
+Các ARN, account/region, role cụ thể và quyền index/CloudWatch/KMS (nếu có) được kiểm tra trong CDK/IAM PR triển khai, không nhúng policy JSON vào RFC. API chỉ trả dữ liệu cho web, không lộ đường dẫn nội bộ có thông tin nhạy cảm hoặc AWS errors.
 
 ---
 
@@ -258,7 +300,7 @@ Chỉ đánh giá `model_version` champion đang vận hành. Khi đổi champio
 - Dashboard MVP hiển thị `coverage_80`, `width_80`, `sign_accuracy`, `up_rate`. Không hiển thị `pinball_skill=0` của champion `baseline-q252` so với chính baseline. Metric khác vẫn được lưu nếu tính được.
 - `width_80` lưu log return; frontend đổi sang % và ghi rõ cách đổi. `sign_accuracy` và `up_rate` luôn đi cặp nhưng không mặc định có cùng mẫu số.
 - `coverage_80.display_value=null` khi chưa đạt ngưỡng hiển thị đã chốt; không sửa `status` nội bộ chỉ vì ngưỡng UX. Tránh đưa tỷ lệ bị ẩn lên web thông qua field phụ.
-- `data_status=not_ready|collecting|ready` là đề xuất; chưa có run → cân nhắc HTTP 200/`not_ready` với dữ liệu null. Lỗi asset/auth/hạ tầng theo error envelope contract hiện hành.
+- `data_status=not_ready|collecting|ready` là đề xuất; chưa có **run `COMPLETED` hợp lệ cho champion hiện hành** → cân nhắc HTTP 200/`not_ready` với dữ liệu null. API đọc latest pointer → run `META` → metric items bằng `GetItem`/`Query`, không `Scan`; không dùng run thiếu metric hay publication evidence. Lỗi asset/auth/hạ tầng theo error envelope contract hiện hành.
 - Không công bố là đã đủ lịch phát hành chỉ vì có forecast được chấm; tách publication completeness khỏi coverage. Không đưa logs/credentials hoặc thông tin nội bộ nhạy cảm ra API.
 
 ---
@@ -333,7 +375,7 @@ Giá trị chỉ minh họa, `target_date` phải xác nhận theo trading calen
 | D02 | Bắt đầu forecast live | `created_at >= 2026-10-27T12:00:00Z` | Khải + Tiến |
 | D03 | Tần suất job | Tuần 1 lần sau ingest/snapshot hoàn tất | Long + Tuấn |
 | D04 | Forecast immutable | Conditional `PutItem`, không overwrite production; retry idempotent | Khải + Tuấn + Tiến |
-| D05 | DynamoDB Accuracy | PK/SK/GSI, IAM, TTL, latest completed | Tuấn |
+| D05 | DynamoDB Accuracy | Single-table với run PK + `META`/`METRIC#…`, per-asset latest pointer; `GetItem`/`Query`, đề xuất không GSI; chốt TTL, IAM | Tuấn |
 | D06 | Ngưỡng hiển thị coverage | Ít nhất 20 `base_date` khác nhau có cặp hợp lệ | Khải + Tiến |
 | D07 | JSON `/accuracy/{asset}` | Overall và 7 h, 4 metric Dashboard MVP, trạng thái riêng | Long + Tuấn + Tiến |
 | D08 | Endpoint history | Ưu tiên `GET /forecast-history/{asset}` riêng | Khải + Tuấn + Tiến |
@@ -343,10 +385,12 @@ Giá trị chỉ minh họa, `target_date` phải xác nhận theo trading calen
 | D12 | Snapshot correction | Giữ tham chiếu nguồn và lịch sử chấm lại | Long + Tuấn |
 | D13 | Validation 2019 trên Dashboard | Để trong mục “Phương pháp”, không đặt cạnh rolling | Khải |
 | D14 (Issue #23.2) | Publication schedule | Calendar + lịch predict TUE–SAT + logs; không thêm kho manifest MVP | Khải + Tuấn + Tiến |
-| D15 (Issue #23.2) | Khi thiếu logs/schedule evidence | Chốt trạng thái thiếu chứng cứ và điều kiện công bố chính thức | Khải + Tuấn |
+| D15 (Issue #23.2) | Khi thiếu logs/schedule evidence | `verified` chỉ khi có lịch, log, snapshot/input-as-of đối chiếu được; thiếu chứng cứ → không promote run, chốt chính sách/retention | Khải + Tuấn |
 | D16 (Issue #23.1) | `prob_up` 6 chữ số | Tolerance `1e-6`, giữ nguồn; chốt policy khi vượt ngưỡng | Khải + Tuấn |
 | D17 (Issue #23.3) | Import provenance | Ngoài rolling MVP; giữ `external_unverified` cho import/historical khác | Khải + Tuấn + Tiến |
 | D18 | Cutoff dự báo trước nhãn | `created_at < target_date 13:30 UTC` và input-as-of | Khải + Tuấn + Tiến |
+| D19 | Idempotency và run completion | Conditional immutable metric writes; run `COMPLETED` đủ các hàng & evidence mới promote pointer | Tuấn + Long |
+| D20 | IAM và nguồn champion | Tách writer/reader, ARNs tối thiểu; kiểm nguồn champion và quyền đọc log/S3 cần dùng | Tuấn + Tiến |
 
 **Không coi các lựa chọn ở bảng trên là contract chính thức khi chưa được chốt.** Issue #23 mục 2 chỉ hoàn tất về mặt contract sau khi PR cập nhật contract tương ứng merge; không mặc định toàn bộ Issue #23 đã được đóng hoặc code đã hỗ trợ.
 
@@ -362,6 +406,9 @@ Giá trị chỉ minh họa, `target_date` phải xác nhận theo trading calen
 - [ ] Duyệt JSON response, trạng thái không đủ dữ liệu, `n_base_dates`, ngưỡng 20 và metric phục vụ web.
 - [ ] Giữ `evaluation_kind=rolling_8w`, `target_cutoff_date`, khóa logic, `n_obs` và `status` theo Accuracy Schema.
 - [ ] Chốt rule `prob_up` rounding và xử lý khi dữ liệu không nhất quán.
+- [ ] D05: duyệt access patterns, PK/SK, có/không GSI, nguồn champion; mọi truy vấn chính chỉ dùng `GetItem`/`Query` và giữ trọn khóa logic hiện hành.
+- [ ] D19: duyệt fingerprint/payload hash, conditional writes, retry, `COMPLETED`/latest pointer và chính sách correction với run mới.
+- [ ] D20: duyệt phân quyền IAM writer/reader theo table, S3 prefix, log group và KMS nếu áp dụng; không mặc định cấp quyền vượt nhu cầu.
 
 ### 9.2. Functional tests
 
@@ -375,6 +422,11 @@ Giá trị chỉ minh họa, `target_date` phải xác nhận theo trading calen
 - [ ] `overall.coverage_80` cộng hit/count đúng; `n_base_dates` chỉ đếm các ngày có cặp đánh giá hợp lệ; kiểm n=0/19/20.
 - [ ] `sign_accuracy` luôn kèm `up_rate` và `n_obs` riêng; `width_80` ghi đơn vị log return.
 - [ ] API đủ 4 asset × 7 horizons; champion đổi không trộn; run lỗi/partial không thay latest completed.
+- [ ] DynamoDB: không collision với nhiều run/model/asset/sample/h/metric/cutoff; Query 7 h × 4 metric theo PK, API không gọi Scan, không cần GSI nếu theo thiết kế MVP.
+- [ ] Retry cùng run/config/snapshot và payload: không nhân bản; payload khác cùng logical key bị chặn; rerun/correction dùng run ID mới.
+- [ ] Job đứt giữa ghi metric: `LATEST_COMPLETED` giữ nguyên; đủ các dòng `undefined` hợp lệ vẫn cho phép hoàn tất; fail/thiếu evidence/thiếu 1 metric không được promote.
+- [ ] Hai writer chạy song song: run cũ không ghi đè pointer mới; đổi champion không trả run thuộc champion cũ.
+- [ ] IAM negative tests: API không Put/Update/Scan; writer không ghi ngoài table/prefix được cấp; access log/S3 thất bại phải tạo trạng thái chứng cứ không đầy đủ, không gán verified.
 - [ ] Chưa có run, lỗi asset/auth, missing quality/roll dầu, API không tiết lộ AWS details.
 
 ### 9.3. Nghiệm thu MVP
@@ -408,6 +460,7 @@ Giá trị chỉ minh họa, `target_date` phải xác nhận theo trading calen
 3. `/accuracy/{asset}`: auth, JSON fields, errors, overall/by-horizon, `n_obs`, `n_base_dates`, ngưỡng UX, trạng thái.
 4. API lịch sử nếu được chọn: route, filter, phân trang, pending/observed, nguồn return/price.
 5. Bảo vệ bản forecast gốc và nguyên tắc không ghi đè `prob_up` nguồn.
+6. DynamoDB access patterns/key design và yêu cầu run-completion/idempotency/API reader; phần IAM/CDK chi tiết nằm ở PR implementation.
 
 ---
 
