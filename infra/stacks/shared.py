@@ -1,5 +1,8 @@
 """Hằng dùng chung giữa các stack, để tên tài nguyên và lịch không bị lệch nhau."""
 
+from aws_cdk import Stack
+from aws_cdk import aws_iam as iam
+
 # Phải KHỚP INGEST_SCHEDULE_EXPRESSION trong src/data/config.py (tests/test_infra_stacks.py kiểm tra).
 # 12:15 UTC thứ Ba-thứ Bảy = 19:15 giờ VN, sau mốc công bố D+1 12:00 UTC của yfinance.
 INGEST_SCHEDULE_EXPRESSION = "cron(15 12 ? * TUE-SAT *)"
@@ -27,3 +30,36 @@ def forecasts_table_name(env_name: str) -> str:
     (tests/test_infra_stacks.py kiểm tra). CpawsData tham chiếu bảng theo tên thay vì export
     chéo stack, để không khóa CpawsServing khi sau này đổi bảng."""
     return f"cpaws-{env_name}-forecasts"
+
+
+def news_labels_table_name(env_name: str) -> str:
+    """Tên bảng DynamoDB NewsLabels (contract POST /chat, ADR-0003 mục 6). Phải KHỚP table_name
+    trong cpaws_serving_stack.py (tests/test_infra_stacks.py kiểm tra). Lambda collector tin (ghi)
+    và Lambda /chat (đọc) dựng ARN từ tên này, không export chéo stack."""
+    return f"cpaws-{env_name}-news-labels"
+
+
+def _news_labels_table_arn(stack: Stack, env_name: str) -> str:
+    return stack.format_arn(
+        service="dynamodb", resource="table", resource_name=news_labels_table_name(env_name)
+    )
+
+
+def news_labels_read_statement(stack: Stack, env_name: str) -> iam.PolicyStatement:
+    """Quyền tối thiểu cho Lambda /chat (tool get_news): chỉ Query trên đúng bảng; không Scan,
+    GetItem hay index (bảng không có index)."""
+    return iam.PolicyStatement(
+        sid="NewsLabelsRead",
+        actions=["dynamodb:Query"],
+        resources=[_news_labels_table_arn(stack, env_name)],
+    )
+
+
+def news_labels_write_statement(stack: Stack, env_name: str) -> iam.PolicyStatement:
+    """Quyền tối thiểu cho collector tin: chỉ PutItem trên đúng bảng. Ghi lại cùng
+    (asset, sk) thì ghi đè item cũ, nên không cần UpdateItem hay DeleteItem."""
+    return iam.PolicyStatement(
+        sid="NewsLabelsWrite",
+        actions=["dynamodb:PutItem"],
+        resources=[_news_labels_table_arn(stack, env_name)],
+    )
