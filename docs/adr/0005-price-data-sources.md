@@ -149,13 +149,13 @@ Các quy tắc đi kèm:
 
 ## Hệ quả
 
-### Điều khoản và hiển thị: **chờ giảng viên quyết định việc hiển thị giá vàng/bạc**
+### Điều khoản và hiển thị: **chốt lựa chọn (b) ngày 28/10/2026**
 - **Yahoo Finance có điều khoản tương tự Tiingo**: dữ liệu chỉ dành cho mục đích cá nhân. yfinance là thư viện không chính thức, có thể bị chặn hoặc đổi định dạng bất cứ lúc nào.
 - Dùng yfinance để huấn luyện và đánh giá nội bộ có cùng mức rủi ro như mọi dự án học thuật dùng nguồn này. Phần rủi ro chính là **hiển thị giá** cho người khác.
-- Hai lựa chọn hiển thị, để giảng viên chọn:
+- Hai lựa chọn hiển thị đã cân nhắc:
   - **(a)** Giảng viên chấp nhận dùng dữ liệu Yahoo cho buổi demo đồ án. Web hiển thị giá và biểu đồ vàng, bạc, dầu như thiết kế, chỉ mở sau đăng nhập Cognito, có ghi nguồn và không có tính năng tải dữ liệu.
   - **(b)** Chỉ hiển thị chuỗi giá từ nguồn công khai (dầu từ EIA: RWTC, RBRTE). Với vàng và bạc, chỉ hiển thị **kết quả dự báo dạng % return và xác suất tăng**, không hiển thị chuỗi giá hay khoảng giá USD/VND dựng từ dữ liệu Yahoo.
-- Cho đến khi có quyết định, front-end chuẩn bị cả hai chế độ.
+- **Quyết định ngày 28/10/2026: chọn (b).** Nhóm tự chốt, không chờ giảng viên, vì (b) không phụ thuộc điều khoản Yahoo và đã chạy trên web từ trước. Web giữ `VITE_SHOW_METAL_PRICES=false`; chatbot cùng quy tắc (tool v2 không trả giá vàng/bạc). Bỏ chế độ (a) khỏi phạm vi trước buổi bảo vệ.
 - Áp dụng cho cả hai lựa chọn:
   - Dự án phi thương mại.
   - Luôn ghi nguồn (`config.SOURCE_ATTRIBUTION` = "Nguồn: Yahoo Finance, U.S. EIA").
