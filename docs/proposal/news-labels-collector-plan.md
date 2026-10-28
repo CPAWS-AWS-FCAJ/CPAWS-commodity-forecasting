@@ -245,6 +245,3 @@ Không triển khai hai hành vi mâu thuẫn trong cùng collector. Ghi có đi
 - Quyền truy cập, điều khoản nguồn và chính sách lưu trữ đã được xác nhận.
 
 - Test và review hoàn tất trước khi merge/deploy.
-
-
-
