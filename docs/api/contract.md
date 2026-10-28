@@ -182,7 +182,7 @@ Theo ADR-0003, MVP không cần Knowledge Base. Lambda chat đọc tin từ bả
 - Partition key `asset` (S): `gold`, `silver`, `brent` hoặc `wti`.
 - Sort key `sk` (S): `<published_at>#<article_id>`, ví dụ `2026-10-13T10:45:00Z#3f9a1c0b7e2d4a61`.
 - Một bài liên quan nhiều tài sản thì ghi mỗi tài sản một item, cùng `article_id`.
-- `article_id` cố định cho một bài (ví dụ 16 ký tự hex đầu của SHA-256 của `link`), chỉ gồm chữ thường, số và `-`. Nhờ vậy ghi lại cùng một bài sẽ ghi đè item cũ, không tạo bản trùng.
+- `article_id` cố định cho một bài (ví dụ 16 ký tự hex đầu của SHA-256 của `link`), chỉ gồm chữ thường, số và `-`. Collector ghi bằng conditional `PutItem` với `attribute_not_exists(asset) AND attribute_not_exists(sk)` theo RFC #44. Nếu khóa đã tồn tại thì coi là duplicate, không ghi đè item cũ.
 - Lambda đọc bằng `Query`: `asset = :asset AND sk BETWEEN "<from_date>" AND "<to_date>T23:59:59Z#~"`, `ScanIndexForward = false`, tối đa 5 trang. So sánh chuỗi chỉ đúng thứ tự thời gian khi `sk` bắt đầu bằng `published_at` đúng định dạng bên dưới.
 
 *7 trường của mỗi tin (bảng và file JSON giống nhau)*
