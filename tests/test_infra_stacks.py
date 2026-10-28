@@ -155,7 +155,12 @@ def test_predict_role_is_least_privilege(templates):
     fn = t["Resources"][_function_id(t, "cpaws-dev-predict")]["Properties"]
     role_id = fn["Role"]["Fn::GetAtt"][0]
     by_sid = {st["Sid"]: st for st in _role_statements(t, role_id)}
-    assert set(by_sid) == {"LakeReadCleanModels", "LakeListCleanModels", "ForecastsPutItem"}
+    assert set(by_sid) == {
+        "LakeReadCleanModels",
+        "LakeListCleanModels",
+        "ForecastsPutItem",
+        "WriteShadowEvaluationObjects",
+    }
 
     read = by_sid["LakeReadCleanModels"]
     assert read["Action"] == "s3:GetObject"
@@ -168,6 +173,10 @@ def test_predict_role_is_least_privilege(templates):
     put = by_sid["ForecastsPutItem"]
     assert put["Action"] == "dynamodb:PutItem"
     assert _render(put["Resource"]).endswith(":table/cpaws-dev-forecasts")
+
+    shadow = by_sid["WriteShadowEvaluationObjects"]
+    assert shadow["Action"] == "s3:PutObject"
+    assert _render(shadow["Resource"]).endswith("/eval/shadow/*")
 
     # Không có action hay resource "*" trong policy riêng của role
     for st in by_sid.values():
