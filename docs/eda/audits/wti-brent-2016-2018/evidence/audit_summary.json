@@ -3,7 +3,7 @@
   "status": "PASS_WITH_LIMITATIONS",
   "inputs": [
     {
-      "path": "C:\\Users\\Tien Long\\Downloads\\CPAWS-commodity-forecasting-developer (2).zip",
+      "path": "<INPUT_DIR>/CPAWS-commodity-forecasting-developer (2).zip",
       "sha256": "5ef0987d4c23979e9831d5df9069f2279b6c914a06274485dcd422d133c68021",
       "members": {
         "CPAWS-commodity-forecasting-developer/.dockerignore": "f0ecce2deeba79f6ffe23c8396024f80053ee6759c2dcc4bb4af8e258d8126e5",
@@ -290,7 +290,7 @@
       }
     },
     {
-      "path": "C:\\Users\\Tien Long\\Downloads\\data-20261018T113233Z-1-001.zip",
+      "path": "<INPUT_DIR>/data-20261018T113233Z-1-001.zip",
       "sha256": "b94b20beb7136c0db3598dfb9577b2c904572cbf3137cdc8da16d35d77b2d3a0",
       "members": {
         "data/lake/eda/dt=2026-10-09/wti_around_2020-04-20.csv": "6aea7349b166daf064cbf59badceee2fc321f284a1ff039e373d90889fac2a00",
@@ -375,7 +375,7 @@
       }
     },
     {
-      "path": "C:\\Users\\Tien Long\\Downloads\\CPAWS_Validation_2019_Drive_Review.zip",
+      "path": "<INPUT_DIR>/CPAWS_Validation_2019_Drive_Review.zip",
       "sha256": "dd616f2aa2f4807b9b1099c60f596e0b85b77c393af5c03a922e6a32bb08d934",
       "members": {
         "CPAWS-Validation-2019-Review/forecasts.parquet": "244c11e0213337b693ad7a479b25090a7006d8fbf6c39eefb45ef38df0c60592",
@@ -392,7 +392,7 @@
       }
     },
     {
-      "path": "C:\\Users\\Tien Long\\Downloads\\cpaws-validation-2019-diagnostics-results.zip",
+      "path": "<INPUT_DIR>/cpaws-validation-2019-diagnostics-results.zip",
       "sha256": "2a71860d6f7c43db71c43495910a28aa30da5cfde19da4a5a99ca3a2939126eb",
       "members": {
         "eval-2019-diagnostics/forecasts.parquet": "244c11e0213337b693ad7a479b25090a7006d8fbf6c39eefb45ef38df0c60592",

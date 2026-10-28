@@ -2,6 +2,10 @@
 
 Ngày audit: 28/10/2026. Trạng thái: **hoàn thành audit local với các giới hạn được nêu rõ**, chưa xác minh độc lập lịch settlement chính thức hoặc nguyên nhân thị trường/vendor.
 
+
+
+> **Phạm vi bàn giao PR #47:** Các file `scripts/run_audit.py`, `scripts/build_reports.py`, `scripts/input_inventory.json`, `scripts/evidence.json` và log pytest là script/artifact của lần chạy audit local, **không nằm trong repository hoặc PR này**. PR chỉ bàn giao báo cáo, summary và các bảng evidence đã commit. Không thể tái chạy đầy đủ audit chỉ từ PR.
+
 ## Executive summary
 Đã kiểm tra 3 ngày × 2 assets. Cả sáu trường hợp đều thiếu row trong raw futures lưu trong ZIP, thiếu trong clean và không có row rejected. Đây là **missing source row so với calendar hiện hành**, không phải lỗi rejection đã được chứng minh. EIA có giá spot tham chiếu, nhưng không thể dùng sự tồn tại của spot để chứng minh futures có settlement hay để điền nhãn futures.
 
@@ -19,7 +23,7 @@ ZIP1–ZIP4 là bốn file được đính kèm bằng đường dẫn thực t�
 | 3 | CPAWS_Validation_2019_Drive_Review.zip | dd616f2aa2f4807b9b1099c60f596e0b85b77c393af5c03a922e6a32bb08d934 |
 | 4 | cpaws-validation-2019-diagnostics-results.zip | 2a71860d6f7c43db71c43495910a28aa30da5cfde19da4a5a99ca3a2939126eb |
 
-Tên trong prompt có thêm hậu tố `(2)(4)/(3)/(4)/(1)` nhưng đường dẫn đính kèm dùng tên trong bảng trên; báo cáo dùng chính các đường dẫn đính kèm. CRC và toàn bộ member hashes được lưu trong `scripts/input_inventory.json`/`audit_summary.json`. Các bản source tham chiếu đã đọc ở lượt bị ngắt được đối chiếu byte với ZIP hiện tại trước khi import. Không suy phiên bản từ filename hoặc timestamp.
+Tên trong prompt có thêm hậu tố `(2)(4)/(3)/(4)/(1)` nhưng đường dẫn đính kèm dùng tên trong bảng trên; báo cáo dùng chính các đường dẫn đính kèm. CRC và member hashes được ghi trong artifact local `scripts/input_inventory.json` và bản summary được commit tại `evidence/audit_summary.json`. Các bản source tham chiếu đã đọc ở lượt bị ngắt được đối chiếu byte với ZIP hiện tại trước khi import. Không suy phiên bản từ filename hoặc timestamp.
 
 Cả 8 file chung giữa ZIP3 và ZIP4 có SHA-256 giống nhau: forecasts, detail, accuracy, model_comparison, manifest, log và hai CSV diagnostics/report. Chỉ phân tích **một run**. ZIP3 cũng khớp SHA-256 đã ghi trong audit 2018 trước đó; mọi kết luận lần này vẫn được tính lại từ input hiện tại. Không có hash lịch sử để chứng minh mọi ZIP khác đã thay đổi hay chưa so với tất cả bản cũ trên máy.
 
