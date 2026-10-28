@@ -119,3 +119,12 @@ Nếu PR chống ghi đè dự báo được merge trước, gộp vào cùng m�
 - Ghi S1a vào DynamoDB.
 - S1b, S2, K3 hay bất kỳ ứng viên nào khác chạy song song.
 - Tự động đổi champion.
+
+## 14. Cập nhật 28/10 theo review của Long trên #49 (trước khi viết code)
+
+1. **Trường dữ liệu và bằng chứng phát hành.**
+   - File shadow giữ nguyên bản ghi `Forecasts` (`asset`, `base_date`, `created_at`, `model_version`, `target_series`, `horizons[].{h, target_date, q, prob_up}`) và thêm `input_snapshot_dt` (ngày `dt=` của snapshot clean đã dùng). Trường này chỉ nằm trong file S3 nên không chờ `contract.md`; champion sẽ có cùng trường khi contract thêm.
+   - `dt=` trong key S3 là ngày chạy UTC, không bao giờ dùng thay `base_date`.
+   - `created_at` giống champion vì cả hai tính trong cùng một lần gọi Lambda. Bằng chứng độc lập là `LastModified` của object S3 (do S3 đặt, code không sửa được) kết hợp `IfNoneMatch="*"` (không ghi đè). Job `rolling_8w` kiểm cả hai mốc theo cùng quy tắc D18: `created_at` và `LastModified` đều phải sớm hơn `target_date` 13:30 UTC.
+2. **Cùng một tập chấm.** Champion và S1a chỉ được so trên đúng cùng tập `(asset, base_date, h)` có cả hai dự báo và target hợp lệ. Chỉ số của champion dùng để so được tính lại trên tập này, không lấy số `/accuracy/{asset}` đã công bố.
+3. **Tách khỏi API.** `/accuracy/{asset}` và `LATEST_COMPLETED` chỉ dành cho champion. Kết quả so sánh champion–S1a lưu Parquet tại `eval/shadow_eval/run_id=<run_id>/`, không ghi DynamoDB, không qua API, đúng ADR-0011 mục 3 (chỉ để báo cáo).
