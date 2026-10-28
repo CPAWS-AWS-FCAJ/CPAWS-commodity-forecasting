@@ -1,7 +1,7 @@
 # RFC — Thiết kế Rolling Accuracy và API lịch sử dự báo (CPAWS)
 
-> **Trạng thái:** RFC v4.1 — **KIẾN TRÚC ĐỀ XUẤT CUỐI, ĐỒNG BỘ ADR-0011 / PR #46** (chưa được cả nhóm approve, chưa phải API contract chính thức)  
-> **Ngày cập nhật:** 2026-10-28 (v4.1: giữ nguyên kiến trúc v4, bổ sung đánh giá champion/challenger theo ADR-0011 và kế hoạch shadow PR #49; chốt RFC tại họp 30/10/2026)  
+> **Trạng thái:** RFC v4.2 — **KIẾN TRÚC ĐỀ XUẤT CUỐI, ĐỒNG BỘ ADR-0011 / PR #46** (chưa được cả nhóm approve, chưa phải API contract chính thức)  
+> **Ngày cập nhật:** 2026-10-28 (v4.2: giữ nguyên kiến trúc v4.1/ADR-0011, làm rõ bất biến ghi forecast production, điều kiện `COMPLETED` so với ngưỡng hiển thị và acceptance tests theo review Tuấn; chốt RFC tại họp 30/10/2026)  
 > **Người đề xuất:** Long — nhóm CPAWS  
 > **Người review:** Khải (đánh giá/hiển thị), Tuấn (API, DynamoDB, IAM), Tiến (Predict, Web)  
 > **Mục tiêu:** Chốt thiết kế MVP trước khi cập nhật `docs/api/contract.md` bằng PR riêng; nếu thay đổi quy tắc Walk-forward/Accuracy Schema thì cập nhật tài liệu tương ứng theo review.  
@@ -21,7 +21,7 @@ RFC đề xuất hai chức năng phục vụ Dashboard CPAWS:
 
 **Chính sách MVP đã được Khải đồng ý và Tuấn đồng ý về nguyên tắc (chờ phê duyệt toàn RFC):** cửa sổ 56 ngày UTC theo `base_date`; mốc `created_at >= 2026-10-27T12:00:00Z`; conditional write để không ghi đè forecast thật; lịch phát hành kỳ vọng suy từ trading calendar + lịch chạy TUE–SAT + predict logs, không xây bảng manifest riêng; kiểm tra sai lệch `prob_up` với dung sai `1e-6`; giới hạn Dashboard ở 4 metric; ngưỡng hiển thị coverage gộp là tối thiểu 20 ngày `base_date` khác nhau có nhãn hợp lệ; lưu `n_obs` và `n_base_dates`, không dùng ngưỡng làm bằng chứng thống kê. Thêm `input_snapshot_dt` vào forecast production, và `prob_up` lệch >`1e-6` chỉ log, không loại.
 
-**Kiến trúc đề xuất cuối để duyệt:** một bảng `cpaws-<env>-accuracy`, item `STATE` theo asset làm nguồn champion kiêm latest pointer, partition riêng theo asset/model/run cho `META` và metric **champion**, **không GSI, không Scan**; ghi từng metric bằng conditional `PutItem` và kiểm hash (không overwrite cùng run); promote sau khi kiểm đủ 28 dòng metric MVP, snapshot và chứng cứ publication; IAM tách Predict/Writer/API/Champion admin. **Nhánh so sánh shadow** dùng S1a từ S3 `eval/shadow/s1a-l094/`, tính trên **paired common mask**, ghi **báo cáo nội bộ S3**, **không** tạo `STATE`/`LATEST` cho S1a và không chặn Accuracy production. Đây là phần bổ sung ADR-0011; vị trí lưu báo cáo kết quả là **đề xuất cụ thể của RFC v4.1**, cần nhóm xác nhận. Các thay đổi so với contract hiện hành chỉ có hiệu lực sau PR contract được merge.
+**Kiến trúc đề xuất cuối để duyệt:** một bảng `cpaws-<env>-accuracy`, item `STATE` theo asset làm nguồn champion kiêm latest pointer, partition riêng theo asset/model/run cho `META` và metric **champion**, **không GSI, không Scan**; ghi từng metric bằng conditional `PutItem` và kiểm hash (không overwrite cùng run); promote sau khi kiểm đủ 28 dòng metric MVP, snapshot và chứng cứ publication; IAM tách Predict/Writer/API/Champion admin. **Nhánh so sánh shadow** dùng S1a từ S3 `eval/shadow/s1a-l094/`, tính trên **paired common mask**, ghi **báo cáo nội bộ S3**, **không** tạo `STATE`/`LATEST` cho S1a và không chặn Accuracy production. Đây là phần bổ sung ADR-0011; vị trí lưu báo cáo kết quả là **đề xuất cụ thể của RFC v4.2**, cần nhóm xác nhận. Các thay đổi so với contract hiện hành chỉ có hiệu lực sau PR contract được merge.
 
 ---
 
@@ -94,8 +94,8 @@ ConditionExpression = "attribute_not_exists(asset) OR is_sample = :true"
 # ExpressionAttributeValues={":true": True}
 ```
 
-- Chưa có item thì ghi mới; item cũ là sample thì có thể thay bằng bản production; item production đã tồn tại thì không cho ghi đè.
-- `ConditionalCheckFailedException` với item production hợp lệ được xử lý idempotent và log `PREDICT_ALREADY_PUBLISHED`, không tính lỗi hệ thống. Những lỗi ghi thật vẫn phải báo lỗi.
+- Điều kiện trên được DynamoDB đánh giá **tại đúng item khóa ghép `(PK=asset, SK=base_date)`** của bảng `Forecasts`: chưa có item thì ghi mới; item hiện có là sample thì bản production hợp lệ có thể thay thế; **item production (`is_sample=false`) đã tồn tại không thể bị ghi đè bởi sample mới, production mới hoặc bất kỳ retry nào**. Không dựa vào việc payload mới tự khai `is_sample` để cho phép ghi đè production.
+- Khi `ConditionalCheckFailedException`, phải `GetItem` lại đúng `(asset,base_date)` (consistent read) và kiểm item hiện hữu là production hợp lệ, đồng thời đối chiếu danh tính dự báo/issuance (`model_version`, `created_at`, nội dung horizons hoặc fingerprint tương đương). **Chỉ retry cùng bản phát hành** mới được log `PREDICT_ALREADY_PUBLISHED` như kết quả idempotent; payload khác → báo conflict, không sửa bản cũ hoặc coi như publish thành công. Những lỗi ghi thật vẫn phải báo lỗi.
 - Logic `run_predict()`/kết quả Lambda cần thống nhất trạng thái retry để không phát sinh alarm giả.
 - Đổi champion chỉ áp dụng từ `base_date` kế tiếp; giữ forecast đã phát hành của model trước.
 - Cần kiểm tra dữ liệu/log production từ 27/10 vì điều kiện ghi mới không khôi phục được bản đã bị ghi đè trước khi áp dụng.
@@ -265,6 +265,8 @@ PK=RUN#wti#baseline-q252#20261105-a94e7b3d4d0c1fb8a5e0  SK=METRIC#all#rolling_8w
 2. Derived expected schedule bao phủ **toàn bộ** các ngày/asset kỳ vọng thuộc đoạn chấm, mỗi ngày có kết luận dựa trên calendar, lịch predict, log ingest/predict, forecast record và snapshot. Không có bất kỳ kỳ `publication_unverified`: `schedule_evidence_status=verified`. Verified **không đồng nghĩa** với hoàn thành đủ mọi lần phát hành: `publication_completeness=partial` vẫn hợp lệ nếu nguyên nhân upstream/skip/no row được xác minh.
 3. Có đủ **28 item metric bắt buộc** = 7 horizons × 4 metric (`coverage_80`,`width_80`,`sign_accuracy`,`up_rate`) cho `sample=all`; các metric mở rộng theo schema không phải điều kiện chặn MVP. `status=undefined` hoặc `not_applicable` hợp lệ với `undefined_reason` tương ứng **được tính là item đầy đủ**, không tạo số giả. Kiểm `n_obs`, phép cộng hit/count, `n_base_dates`, các counters, không trùng khóa và all payload hashes. `overall` lưu aggregate/counters trong META, không hàng `h=0`.
 4. Job đã hoàn thành kiểm tra giá/horizon/calendar, input-as-of, giá tại endpoints, common mask và publication evidence; không còn lỗi ghi/đọc hoặc conflict chưa giải quyết.
+
+**Phân biệt hoàn thành và đủ mẫu [D06/D11/D19]:** `COMPLETED` là trạng thái **hoàn chỉnh về xử lý và chứng cứ**, **không áp đặt `n_obs >= 1` hay `n_base_dates >= 20`** làm điều kiện chuyển trạng thái. Run có thể `COMPLETED` với `n_obs=0` ở một hoặc tất cả horizons nếu 28 item được ghi đầy đủ, `status=undefined` có `undefined_reason` hợp lệ, các counts nhất quán và mọi kỳ phát hành dự kiến đều có chứng cứ xác minh. **Không được đưa forecast thiếu provenance vào `n_obs`.** Ngưỡng **20 `base_date` khác nhau có cặp coverage hợp lệ chỉ là quy tắc hiển thị `overall.coverage_80`**: dưới ngưỡng, API ẩn phần trăm và trả `collecting`/`insufficient_data`, không tự đổi `META.status` từ `COMPLETED` sang `RUNNING` hoặc tạo kết quả giả. Nếu provenance unverified hoặc thiếu item bắt buộc, run **không** được `COMPLETED` dù `n_obs` lớn. Đây là lựa chọn MVP đề xuất để Tuấn/nhóm chốt khi approve RFC.
 
 **Điều kiện ghi áp dụng trực tiếp** (cú pháp minh họa):
 
@@ -453,7 +455,7 @@ Giá trị chỉ minh họa, `target_date` phải xác nhận theo trading calen
 
 ---
 
-## 8. Ma trận kiến trúc cuối (v4.1, đồng bộ ADR-0011) trình duyệt tại họp 30/10
+## 8. Ma trận kiến trúc cuối (v4.2, đồng bộ ADR-0011 và review Tuấn) trình duyệt tại họp 30/10
 
 Đây là **một bộ quyết định nhất quán**, không còn các ô “Tuấn tự chốt sau” trong nội dung thiết kế. **ADR-0011 trong PR #46 bổ sung nhánh so sánh shadow nội bộ**, không thay thế Accuracy API champion. Khải đã xác nhận bốn phản biện (derived schedule; input-as-of; prob_up; ngưỡng); Tuấn đã đồng ý hướng single-table/no-GSI, conditional concurrency, derived evidence, nhưng **chưa approve toàn bộ implementation**. Bảng này là quyết định **đề xuất cuối** để nhóm approve hoặc phản hồi thay đổi theo từng ID.
 
@@ -493,11 +495,11 @@ Giá trị chỉ minh họa, `target_date` phải xác nhận theo trading calen
 - [ ] Mọi metric `rolling_8w` dùng đúng khóa logic và 7 h của Accuracy Schema; validation/test vẫn chỉ lưu S3, không đưa vào bảng Accuracy.
 - [ ] Bảng `PK/SK` đúng mục 4.1; query chính chỉ `GetItem` và `Query`, không Scan/GSI; khi champion đổi không đọc run đời cũ.
 - [ ] `run_id`/fingerprint xác định từ job UTC, asset, generation, config, snapshot và evidence; khác fingerprint không được reuse run cũ.
-- [ ] `METRIC` bất biến; `META` chỉ đổi trạng thái có điều kiện; latest pointer chỉ được cập nhật sau completion có evidence verified.
+- [ ] `Forecasts` production bất biến tại đúng `(PK=asset, SK=base_date)`: sample/production/retry không thể ghi đè production; chỉ được thay sample cũ bằng production hợp lệ; conditional failure phải đọc và xác minh bản cũ trước khi coi là retry. `METRIC` bất biến; `META` chỉ đổi trạng thái có điều kiện; latest pointer chỉ được cập nhật sau completion có evidence verified.
 - [ ] `STATE` authoritative; Predict và Rolling đều đối chiếu generation/model; IAM chính xác từng role.
 - [ ] Log ingest/predict có retention **90 ngày** và đủ sự kiện để phân biệt schedule intent, PREDICT_DONE, skip, upstream failure và no log.
 - [ ] `input_snapshot_dt` trên Forecasts từ khi code predict triển khai; bản cũ thiếu chỉ verified nếu có chứng cứ tương đương; không backfill giả.
-- [ ] Chốt JSON `/accuracy/{asset}` cho 4 metrics, `n_obs`, `n_base_dates`, `status`/`display_status`, `not_ready`, `collecting`, `ready`; threshold 20 ngày chỉ UX.
+- [ ] Chốt JSON `/accuracy/{asset}` cho 4 metrics, `n_obs`, `n_base_dates`, `status`/`display_status`, `not_ready`, `collecting`, `ready`; `COMPLETED` chỉ cần đủ metric/evidence (cho phép `n_obs=0`/`undefined` hợp lệ), còn threshold 20 ngày chỉ UX, không phải điều kiện completion.
 - [ ] Kết quả lịch sử `/forecast-history/{asset}` tách giai đoạn chart, không tạo bảng detail/manifest mới để chặn MVP.
 - [ ] Theo ADR-0011, job có nhánh paired shadow từ S3, so sánh trên cặp chung; không sửa mẫu production/`n_obs` champion, không thêm model shadow vào `/accuracy/{asset}`.
 - [ ] Shadow report nội bộ có `pinball_skill`, `coverage_80`, `width_80` cho **cả hai** trên paired common mask và nguồn chứng cứ; nơi lưu `eval/shadow/reports/*` cần Khải/Tuấn chốt cùng quyền writer.
@@ -541,13 +543,15 @@ Giá trị chỉ minh họa, `target_date` phải xác nhận theo trading calen
 | T32 | API `/accuracy/{asset}` khi có shadow tốt hơn hoặc khi thiếu S1a, release chưa có ADR | Chỉ trả champion đang hiệu lực; không S1a/pinball shadow trong JSON, không auto-switch; IAM API không đọc shadow reports |
 | T33 | IAM Predict PutObject vào `eval/shadow/s1a-l094/*`, Rolling PutObject vào `eval/shadow/reports/*`, gọi ngược/sai prefix | Quyền đúng prefix, `AccessDenied` nếu ngoài phạm vi; không đòi ListBucket/GetObject riêng cho Predict shadow writer |
 | T34 | Shadow deploy sau MVP Accuracy (theo kế hoạch PR #49 ≤06/11) | MVP 05/11 vẫn đạt nếu champion `COMPLETED`; paired shadow chỉ có dữ liệu sau ngày thực phát hành, job tuần sau khi nhãn trưởng thành |
+| T35 | Bảng `Forecasts` đã có production `is_sample=false` tại đúng `(PK=asset, SK=base_date)`; thử `PutItem` bằng sample mới, production khác hoặc retry cùng khóa | **Mọi ghi đè đều bị điều kiện DynamoDB chặn**, item production gốc giữ nguyên nội dung/`created_at`/horizons; retry đồng nhất chỉ được xác nhận sau khi `GetItem` và so fingerprint; payload khác báo conflict |
+| T36 | Tại `(asset,base_date)` đã có sample: production hợp lệ thay sample; tiếp tục retry cùng production và thử ghi sample/production khác | Production thay thế sample đúng một lần; mọi lần ghi tiếp theo bị chặn; retry giống bản cũ được ghi nhận `PREDICT_ALREADY_PUBLISHED`, còn bản khác báo conflict; item production không đổi và không có alarm giả cho retry hợp lệ |
 
 ### 9.3. Nghiệm thu MVP 05/11
 
 - API `/accuracy/{asset}` bảo đảm không cung cấp số liệu chưa được phát hành hoặc thiếu chứng cứ; trạng thái **`not_ready` là hợp lệ** khi chưa đủ evidence production, không được tạo số liệu mô phỏng để lấp Dashboard.
-- Nếu có completed run: đủ 28 metric rows, 7 horizons, aggregate/counters chính xác, `n_obs`, `n_base_dates` và trạng thái hiển thị theo policy. `publication_completeness` không dùng làm mẫu số coverage.
+- Nếu có completed run: đủ 28 metric rows, 7 horizons, aggregate/counters chính xác, `n_obs`, `n_base_dates` và trạng thái hiển thị theo policy. `COMPLETED` không đòi ngưỡng 20 ngày hoặc `n_obs>0`, nhưng bắt buộc evidence verified và các item undefined hợp lệ; `publication_completeness` không dùng làm mẫu số coverage.
 - Chỉ có champion hiện hành **trên API**; dữ liệu trước lần đổi champion không trộn. Shadow chạy nội bộ, không làm điều kiện chặn MVP 05/11; so sánh S1a bắt đầu sau khi nguồn S3 thực phát hành và nhãn trưởng thành. Không đánh đồng 20 ngày với 20 quan sát độc lập.
-- PR implementation có kết quả automated tests T01–T34 (phân tách T25–T34 theo lịch deploy S1a ở PR #49) hoặc giải trình test tích hợp AWS tương đương, log/metadata truy vết, IAM access-denied tests và kiểm tra log retention.
+- PR implementation có kết quả automated tests T01–T36 (phân tách T25–T34 theo lịch deploy S1a ở PR #49; T35–T36 kiểm thử conditional writes Forecasts trong PR predict) hoặc giải trình test tích hợp AWS tương đương, log/metadata truy vết, IAM access-denied tests và kiểm tra log retention.
 - Không backfill 2020–2026, không retrain hoặc sửa Validation 2019/ADR-0008.
 
 ## 10. Phân công, mốc thời gian và cách cập nhật contract
@@ -603,4 +607,4 @@ Các trạng thái code là từ snapshot đã dùng để soạn RFC, không x�
 5. Dawid (1984), *The Prequential Approach*, DOI: https://doi.org/10.2307/2981683.
 6. Gneiting et al. (2007), *Probabilistic Forecasts, Calibration and Sharpness*, DOI: https://doi.org/10.1111/j.1467-9868.2007.00587.x.
 
-> **Trạng thái cuối:** RFC v4.1 chứa **kiến trúc đề xuất cuối đã đồng bộ ADR-0011** để review/approve một lần tại PR #45; chưa phải quyết định đã được toàn nhóm approve. Chỉ nội dung được chuyển qua PR contract và merge mới là chuẩn implementation; PR #45 **không merge**.
+> **Trạng thái cuối:** RFC v4.2 chứa **kiến trúc đề xuất cuối đã đồng bộ ADR-0011** để review/approve một lần tại PR #45; chưa phải quyết định đã được toàn nhóm approve. Chỉ nội dung được chuyển qua PR contract và merge mới là chuẩn implementation; PR #45 **không merge**.
