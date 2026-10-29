@@ -181,7 +181,10 @@ def _parse_body(event: dict):
     if event.get("isBase64Encoded"):
         import base64
 
-        raw = base64.b64decode(raw).decode("utf-8", errors="replace")
+        try:
+            raw = base64.b64decode(raw, validate=True).decode("utf-8", errors="replace")
+        except (ValueError, TypeError) as exc:  # binascii.Error là lớp con của ValueError
+            raise chat_core.ChatError(400, "invalid_body", "Thân request không hợp lệ.") from exc
     if len(raw.encode("utf-8")) > chat_core.MAX_BODY_BYTES:
         raise chat_core.ChatError(400, "invalid_body", "Thân request lớn hơn 64 KB.")
     try:

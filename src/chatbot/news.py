@@ -80,11 +80,14 @@ class StaticNewsRepository:
         self._data = {a: list(v) for a, v in (data or {}).items()}
 
     def items(self, asset: str, from_date: dt.date, to_date: dt.date) -> list[Mapping[str, Any]]:
-        return [
-            it
-            for it in self._data.get(asset, [])
-            if from_date <= dt.date.fromisoformat(str(it["published_at"])[:10]) <= to_date
-        ]
+        # Tin thiếu hoặc sai published_at vẫn được trả ra để get_news bỏ và ghi log ở một chỗ,
+        # thay vì làm lỗi cả nguồn tin
+        out = []
+        for it in self._data.get(asset, []):
+            day = _published_date(it)
+            if day is None or from_date <= day <= to_date:
+                out.append(it)
+        return out
 
 
 class JsonFileNewsRepository:
@@ -145,12 +148,38 @@ class DynamoNewsRepository:
 
 
 def _plain(item: Mapping[str, Any]) -> dict[str, Any]:
-    """Decimal của DynamoDB → int để kết quả tool JSON-safe."""
-    return {k: int(v) if isinstance(v, Decimal) else v for k, v in item.items()}
+    """Decimal của DynamoDB → int (số nguyên) hoặc float để kết quả tool JSON-safe. Không cắt phần
+    lẻ: impact_score 2.5 thành float và bị get_news bỏ, thay vì lặng lẽ thành 2."""
+    return {
+        k: (int(v) if v == v.to_integral_value() else float(v)) if isinstance(v, Decimal) else v
+        for k, v in item.items()
+    }
 
 
 def _error(code: str, message: str) -> dict[str, str]:
     return {"error": code, "message": message}
+
+
+def _published_date(item: Mapping[str, Any]) -> dt.date | None:
+    """Ngày UTC của `published_at` (10 ký tự đầu, YYYY-MM-DD); thiếu hoặc sai dạng thì None."""
+    value = item.get("published_at")
+    if not isinstance(value, str):
+        return None
+    return _date(value[:10])
+
+
+def _valid_item(item: Mapping[str, Any]) -> bool:
+    """Tin đủ điều kiện đưa cho model (contract #41, 7 trường): `impact_score` là số nguyên 0–3,
+    `published_at` có ngày hợp lệ, `link` là http(s)."""
+    score = item.get("impact_score")
+    return (
+        isinstance(score, int)
+        and not isinstance(score, bool)
+        and 0 <= score <= 3
+        and _published_date(item) is not None
+        and isinstance(item.get("link"), str)
+        and item["link"].startswith(LINK_PREFIXES)
+    )
 
 
 def _date(value: Any) -> dt.date | None:
@@ -171,7 +200,8 @@ def get_news(
     Thiếu to_date thì lấy hôm nay theo giờ Việt Nam; thiếu from_date thì lùi DEFAULT_DAYS ngày.
     Lỗi trả dạng contract: invalid_asset, invalid_date; news_unavailable khi nguồn tin lỗi (sai tên
     bảng, thiếu quyền, file JSON hỏng), để câu trả lời vẫn có phần dự báo thay vì cả request thành
-    500. Tin không có link http(s) bị bỏ, vì chatbot phải trích nguồn có link."""
+    500. Tin không có link http(s), impact_score sai kiểu hoặc thiếu published_at bị bỏ và ghi log
+    cảnh báo; chatbot phải trích nguồn có link."""
     asset = tool_input.get("asset")
     if not isinstance(asset, str) or asset not in ASSETS:
         return _error("invalid_asset", f"asset phải là một trong: {', '.join(ASSETS)}.")
@@ -193,11 +223,13 @@ def get_news(
         log.warning("get_news: news source error %s", type(exc).__name__, exc_info=True)
         return _error("news_unavailable", "Chưa lấy được tin tức lúc này.")
 
+    # Tin sai kiểu (impact_score không phải số nguyên 0–3, thiếu published_at, link không phải
+    # http(s)) bị bỏ và ghi log, không làm hỏng cả request (Khải review PR #55)
+    valid = [it for it in raw if isinstance(it, Mapping) and _valid_item(it)]
+    if len(valid) < len(raw):
+        log.warning("get_news: skipped %d invalid news items for %s", len(raw) - len(valid), asset)
     picked = [
-        {k: it.get(k) for k in ITEM_FIELDS}
-        for it in raw
-        if it.get("impact_score", 0) >= min_impact
-        and str(it.get("link", "")).startswith(LINK_PREFIXES)
+        {k: it.get(k) for k in ITEM_FIELDS} for it in valid if it["impact_score"] >= min_impact
     ]
     # tác động cao trước; cùng mức thì tin mới trước
     picked.sort(key=lambda it: str(it["published_at"]), reverse=True)

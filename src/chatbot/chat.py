@@ -53,18 +53,22 @@ DISCLAIMER = T.DISCLAIMER
 BLOCKED_ANSWER = (
     "Mình không thể trả lời yêu cầu này. Bạn có thể hỏi về dự báo vàng, bạc, dầu Brent và WTI."
 )
-# Lỗi Bedrock coi là "model không sẵn sàng" (503); lỗi khác là 500
+# Câu cố định khi model vẫn đòi gọi tool sau MAX_TOOL_ROUNDS vòng (Khải review PR #55): không trả
+# câu dạo đầu dở dang như "Đang tra."
+TOOL_ROUND_LIMIT_ANSWER = "Mình chưa trả lời được câu này, bạn thử hỏi cụ thể hơn nhé."
+# Lỗi Bedrock coi là "model không sẵn sàng" (503), được thử lại một lần nếu còn thời gian; lỗi
+# khác là 500
 UNAVAILABLE_CODES = frozenset(
     {
         "ServiceUnavailableException",
         "ThrottlingException",
         "ModelNotReadyException",
-        "ModelTimeoutException",
         "InternalServerException",
     }
 )
-# Lỗi tạm thời đáng thử lại một lần (nếu còn thời gian); ModelTimeout thì không, vì chậm sẵn rồi
-RETRY_CODES = UNAVAILABLE_CODES - {"ModelTimeoutException"}
+# Bedrock báo hết thời gian chờ model: 504 timeout như hết thời gian phía client, không thử lại
+# (Khải review PR #55, hợp đồng mục "Hạn chót")
+MODEL_TIMEOUT_CODES = frozenset({"ModelTimeoutException"})
 # Tên lớp lỗi hết thời gian của botocore (không import botocore trong module này)
 TIMEOUT_ERRORS = frozenset({"ReadTimeoutError", "ConnectTimeoutError", "ConnectTimeout"})
 
@@ -254,10 +258,13 @@ def _converse(deps: ChatDeps, kwargs: dict[str, Any], deadline: float) -> dict[s
                 log.warning("bedrock timeout: %s", type(exc).__name__)
                 raise _timeout_error() from exc
             code = _client_error_code(exc)
+            if code in MODEL_TIMEOUT_CODES:
+                log.warning("bedrock timeout: %s", code)
+                raise _timeout_error() from exc
             if code not in UNAVAILABLE_CODES:
                 raise
             log.warning("bedrock unavailable: %s (attempt %d)", code, attempt + 1)
-            if code not in RETRY_CODES or attempt == 1:
+            if attempt == 1:
                 raise ChatError(
                     503, "model_unavailable", "Trợ lý đang bận, bạn thử lại sau ít phút."
                 ) from exc
@@ -358,13 +365,16 @@ def answer(
             )
         messages.append({"role": "user", "content": results})
 
-    text = "\n".join(
-        b["text"]
-        for m in messages[len(req.history) + 1 :]
-        if m["role"] == "assistant"
-        for b in m["content"]
-        if "text" in b
-    ).strip()
+    if stop == "tool_round_limit":
+        text = TOOL_ROUND_LIMIT_ANSWER
+    else:
+        text = "\n".join(
+            b["text"]
+            for m in messages[len(req.history) + 1 :]
+            if m["role"] == "assistant"
+            for b in m["content"]
+            if "text" in b
+        ).strip()
     return ChatResult(
         answer=text,
         branch=branch,

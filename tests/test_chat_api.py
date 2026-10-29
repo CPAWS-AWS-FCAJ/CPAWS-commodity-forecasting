@@ -259,6 +259,18 @@ def test_tool_round_limit_stops_loop():
     res = C.answer(C.parse_request({"question": "vàng?"}), d)
     assert len(d.client.calls) == C.MAX_TOOL_ROUNDS + 1
     assert res.stop_reason == "tool_round_limit"
+    # Khải review PR #55: câu cố định, không trả câu dạo đầu; forecasts_used giữ như đã gọi
+    assert res.answer == C.TOOL_ROUND_LIMIT_ANSWER and "Đang tra" not in res.answer
+    assert [f["asset"] for f in res.forecasts_used] == ["gold"]
+    assert res.citations == []
+
+
+def test_handler_200_with_fixed_answer_on_tool_round_limit():
+    loop = [_tool_use(("get_forecast", {"asset": "gold"}), text="Đang tra.")] * 5
+    resp = H.handle(event({"question": "vàng?"}), deps(loop))
+    body = json.loads(resp["body"])
+    assert resp["statusCode"] == 200 and body["answer"] == C.TOOL_ROUND_LIMIT_ANSWER
+    assert body["forecasts_used"][0]["asset"] == "gold"
 
 
 def test_truncated_and_guardrail_blocked():
@@ -283,11 +295,12 @@ def test_model_unavailable_maps_to_503_and_other_errors_propagate():
         C.answer(C.parse_request({"question": "x"}), d)
     assert exc.value.status == 503 and exc.value.code == "model_unavailable"
     assert len(d.client.calls) == 2
-    # ModelTimeout không thử lại
+    # ModelTimeout: 504 timeout (Khải review PR #55), không thử lại
     d = deps([FakeClientError("ModelTimeoutException")])
     with pytest.raises(C.ChatError) as exc:
         C.answer(C.parse_request({"question": "x"}), d)
-    assert exc.value.status == 503 and len(d.client.calls) == 1
+    assert exc.value.status == 504 and exc.value.code == "timeout"
+    assert len(d.client.calls) == 1
     d = deps([FakeClientError("AccessDeniedException")])
     with pytest.raises(FakeClientError):
         C.answer(C.parse_request({"question": "x"}), d)
@@ -374,6 +387,46 @@ def test_get_news_keeps_only_http_and_https_links():
     repo = N.StaticNewsRepository({"wti": [{**base, "link": link} for link in links]})
     out = N.get_news({"asset": "wti"}, repo, today=dt.date(2026, 10, 14))
     assert sorted(it["link"] for it in out["items"]) == sorted(links[:2])
+
+
+def test_get_news_skips_invalid_items_and_logs(caplog):
+    """Khải review PR #55: tin có impact_score sai kiểu hoặc thiếu published_at bị bỏ và ghi log,
+    không ném TypeError làm cả request thành 500."""
+    good = {k: NEWS[0][k] for k in N.ITEM_FIELDS}
+    bad = [
+        {**good, "impact_score": None},
+        {**good, "impact_score": "3"},
+        {**good, "impact_score": 2.5},
+        {**good, "impact_score": True},
+        {**good, "impact_score": 4},
+        {k: v for k, v in good.items() if k != "impact_score"},
+        {k: v for k, v in good.items() if k != "published_at"},
+        {**good, "published_at": "hôm qua"},
+        {**good, "published_at": None},
+    ]
+    repo = N.StaticNewsRepository({"wti": [*bad, good]})
+    with caplog.at_level("WARNING"):
+        out = N.get_news({"asset": "wti", "min_impact": 0}, repo, today=dt.date(2026, 10, 14))
+    assert out["items"] == [good]
+    assert any("skipped 9 invalid news items" in r.getMessage() for r in caplog.records)
+    # Decimal lẻ từ DynamoDB không bị cắt thành số nguyên: impact_score 2.5 bị bỏ
+    from decimal import Decimal
+
+    assert N._plain({"impact_score": Decimal("2.5")})["impact_score"] == 2.5
+    assert N._plain({"impact_score": Decimal(2)})["impact_score"] == 2
+
+
+def test_handler_200_when_news_item_has_bad_impact_score():
+    d = deps(
+        [
+            _tool_use(("get_forecast", {"asset": "wti"}), ("get_news", {"asset": "wti"})),
+            _text("WTI h = 1: ... Dự báo mang tính tham khảo, không phải lời khuyên đầu tư."),
+        ],
+        news=N.StaticNewsRepository({"wti": [{**NEWS[0], "impact_score": None}]}),
+    )
+    resp = H.handle(event({"question": "WTI phiên tới thế nào, vì sao?"}), d)
+    assert resp["statusCode"] == 200
+    assert json.loads(resp["body"])["forecasts_used"][0]["asset"] == "wti"
 
 
 def test_get_news_source_error_returns_news_unavailable():
@@ -702,3 +755,19 @@ def test_handler_picks_news_source_from_env(monkeypatch, tmp_path):
     assert isinstance(H.news_repository(), N.StaticNewsRepository)
     monkeypatch.setenv("NEWS_DIR", str(tmp_path))
     assert isinstance(H.news_repository(), N.JsonFileNewsRepository)
+
+
+def test_handler_bad_base64_body_returns_400():
+    """Khải review PR #55 (nhỏ): base64 hỏng là 400 invalid_body, không phải 500."""
+    import base64
+
+    d = deps([_text("x")])
+    ev = {**event("@@không phải base64@@"), "isBase64Encoded": True}
+    resp = H.handle(ev, d)
+    assert resp["statusCode"] == 400
+    assert json.loads(resp["body"])["error"] == "invalid_body"
+    assert d.client.calls == []
+    # base64 hợp lệ vẫn đọc được
+    raw = base64.b64encode(json.dumps({"question": "vàng?"}).encode()).decode()
+    resp = H.handle({**event(raw), "isBase64Encoded": True}, deps([_text("Vàng.")]))
+    assert resp["statusCode"] == 200
