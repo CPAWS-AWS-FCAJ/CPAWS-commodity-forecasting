@@ -104,3 +104,13 @@ Ký hiệu: Q_τ,h = phân vị `baseline-q252` tại t; S_τ,h = phân vị S1a
 - Hansen, P., Lunde, A., Nason, J. (2011). The Model Confidence Set. Econometrica 79(2), 453–497.
 - Gilder, D., Tsiaras, L. (2020). Volatility forecasts embedded in the prices of crude-oil options.
   Journal of Futures Markets.
+
+## 8. Sửa đổi
+
+### 29/10/2026, trước khi chạy (sau bước probe dữ liệu, chưa có chỉ số nào)
+
+- Brent chỉ có 972 return hợp lệ trước 2016-01-01 (35 cặp phiên vắt qua phiên thiếu); return hợp lệ thứ 1000 là ngày 2016-02-11. Giữ cửa sổ 1000: FHS Brent không hợp lệ ở các ngày gốc từ 1/1 đến 29/2/2016 (39 ngày), nên Brent có 716 ngày gốc trong tập chung thay vì 755. Vàng, bạc, WTI không đổi.
+- Lần refit đầu tiên của một tài sản bị lỗi hoặc không hội tụ thì dừng chạy, vì không có tham số tháng trước để dùng lại.
+- Model Confidence Set (mục 4, chỉ báo cáo): chạy theo từng tài sản; loss của mỗi ngày gốc là pinball trung bình trên 7 h × 7 τ, sample `all`; size 0,10; 1000 lần bootstrap, block 20, seed 7.
+- Ba fold dùng chung một mốc cắt ngày đích là 2018-12-31.
+- Để tính `excl_roll` trên 2016–2018, cửa sổ ngày roll trong `src/eval/walk_forward.py` được tính từ kỳ đánh giá thay vì gắn cứng quanh 2019. Kết quả 2019 không đổi (có test hàm thuần, không đọc dữ liệu 2019).
