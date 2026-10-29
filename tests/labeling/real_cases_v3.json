@@ -1,7 +1,7 @@
 {
  "benchmark_name": "CPAWS News Labeling Real Fed/EIA Test Set",
  "version": "real-1",
- "status": "draft",
+ "status": "locked",
  "language": "vi",
  "purpose": "Bộ kiểm labeling-v3 trên thông cáo Fed/EIA thật; đáp án và ngưỡng chốt trước khi chạy model; không dùng làm dữ liệu huấn luyện.",
  "prompt_version": "labeling-v3",
@@ -2175,5 +2175,7 @@
  "source_sha256": {
   "candidates": "bf66944c594227efe5988bd77a883acdc1068c5d31e54fa66417d45fbad0f349",
   "labels": "a97adb852dfe43f21a00c786feaa44cbb91f56835c68aa60ef81bf57845354bd"
- }
+ },
+ "locked_by": "Khải",
+ "locked_at": "2026-10-29"
 }
