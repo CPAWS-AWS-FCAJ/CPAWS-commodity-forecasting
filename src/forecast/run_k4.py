@@ -4,7 +4,8 @@ Chạy từ gốc repo, bằng venv có arch 8.0.0 (requirements-dev.txt):
   python -m src.forecast.run_k4 --stage cv [--lake-dir data/lake] [--output-dir data] [--run-id k4-cv]
   python -m src.forecast.run_k4 --stage cv-dm --cv-dir data/eval/k4/k4-cv-clean [--run-id k4-cv-dm]
   python -m src.forecast.run_k4 --stage val2019 --cv-dir data/eval/k4/k4-cv-clean
-      --cv-dm-dir data/eval/k4/k4-cv-dm --candidate fhs-gjr-t-dm [--k3-dir …] [--run-id k4-val2019]
+      --cv-dm-dir data/eval/k4/k4-cv-dm --candidate fhs-gjr-t-dm [--k3-dir …]
+      (run-id cố định k4-val2019; run-id khác hoặc đã có started.json thì từ chối)
 
 - Stage cv: bản clean configs/k4.CLEAN_DT cắt tại 2018-12-31 ngay khi đọc; ngày gốc 2016–2018, ngày
   đích ≤ 2018-12-31 (một mốc cắt cho cả ba fold, mục 8). Bốn mô hình: baseline-q252, S1a (λ 0,94),
@@ -40,6 +41,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 from arch.bootstrap import MCS
+from scipy.special import xlogy
+from scipy.stats import chi2
 
 from configs import k4 as C
 from src.data import calendars
@@ -107,6 +110,35 @@ def no_ceemdan_cache():
     finally:
         for module, name, original in saved:
             setattr(module, name, original)
+
+
+def configs_seen_text() -> str:
+    """Tổng cấu hình đã xem trên 2019 (mục 8, 29/10 tối); None khi chưa biết số của DLinear MVP."""
+    if C.TOTAL_CONFIGS_SEEN is None:
+        return f"DLinear MVP (số cấu hình chưa xác định) + {C.K3_K3B_K4_CONFIGS}"
+    return str(C.TOTAL_CONFIGS_SEEN)
+
+
+def check_roll_calendar(config) -> None:
+    """Lịch đáo hạn và ngày roll của dầu phải dựng được cho kỳ đánh giá (walk_forward trả None khi
+    lỗi, khi đó excl_roll không tính được): dừng thay vì chấm thiếu."""
+    cfg = config("roll-check")
+    for asset in ("brent", "wti"):
+        try:
+            expiry, roll = wf.roll_calendar(asset, cfg)
+        except (ValueError, IndexError, KeyError) as exc:
+            raise StopRun(f"{asset}: roll calendar unavailable ({exc})") from exc
+        inside = roll[(roll >= cfg.evaluation_start) & (roll <= cfg.evaluation_end)]
+        if expiry is None or roll is None or not len(expiry) or not len(inside):
+            raise StopRun(f"{asset}: roll calendar is empty for {cfg.evaluation_start[:4]}")
+
+
+def check_roll_flags(named: dict) -> None:
+    """Sau đánh giá: mọi dòng dầu phải có roll_in_horizon (không None)."""
+    for name, e in named.items():
+        d = e["detail"]
+        if d.loc[d.asset.isin(["brent", "wti"]), "roll_in_horizon"].isna().any():
+            raise StopRun(f"{name}: roll_in_horizon is None for oil rows")
 
 
 def cv_config(model_version: str) -> wf.EvaluationConfig:
@@ -180,8 +212,9 @@ def build_cv(prices: pd.DataFrame, invalid: dict, assets=C.ASSETS) -> dict:
         f = fhs_asset(prices, asset, base, months, invalid[asset])
         r, fits, logs = f["r"], f["fits"], f["logs"]
         out["seconds"]["fit"][asset] = f["fit_seconds"]
+        fhs_diag = {}
         q_f, ok_f, numpy_seconds = FF.fhs_forecasts(
-            r, asset, base, fits, demean=C.FHS_DEMEAN[C.FHS]
+            r, asset, base, fits, demean=C.FHS_DEMEAN[C.FHS], diag=fhs_diag
         )
         out["seconds"]["fhs_numpy_batch"][asset] = numpy_seconds
         ok = ok_b & ok_s & ok_f
@@ -190,6 +223,7 @@ def build_cv(prices: pd.DataFrame, invalid: dict, assets=C.ASSETS) -> dict:
             "baseline_valid": int(ok_b.sum()),
             "s1a_valid": int(ok_s.sum()),
             "fhs_valid": int(ok_f.sum()),
+            "fhs_invalid": fhs_diag,
             "common": int(ok.sum()),
             "first_common": str(base[ok][0].date()) if ok.any() else None,
         }
@@ -240,13 +274,17 @@ def check_anchor(named: dict) -> None:
 
 
 def run_mcs(named: dict, assets=C.ASSETS, models=C.MCS_MODELS) -> dict:
+    """MCS theo tài sản trên các ngày gốc đủ 7 h ở MỌI mô hình (giao các tập); n_full_by_model và
+    origins_changed cho biết tập có bị thu hẹp so với tập của từng mô hình không."""
     out = {}
     for asset in assets:
         series = {m: mcs_losses(named[m]["detail"], asset) for m in models}
         index = series[models[0]].index
-        if any(not s.index.equals(index) for s in series.values()):
-            raise StopRun(f"{asset}: MCS losses on different origins")
-        losses = pd.DataFrame(series)
+        for s in series.values():
+            index = index.intersection(s.index, sort=False)
+        index = index.sort_values()
+        changed = any(not s.index.sort_values().equals(index) for s in series.values())
+        losses = pd.DataFrame({m: s.loc[index] for m, s in series.items()})
         mcs = MCS(
             losses,
             size=C.MCS_SIZE,
@@ -263,6 +301,8 @@ def run_mcs(named: dict, assets=C.ASSETS, models=C.MCS_MODELS) -> dict:
             "included": [m for m in models if m in set(mcs.included)],
             "excluded": [m for m in models if m in set(mcs.excluded)],
             "pvalue": {m: float(mcs.pvalues.loc[m].iloc[0]) for m in models},
+            "n_full_by_model": {m: len(s) for m, s in series.items()},
+            "origins_changed": bool(changed),
         }
     return out
 
@@ -296,11 +336,346 @@ def fit_summary(logs: list[dict]) -> dict:
                 }
                 for p in PARAMS
             },
+            "max_consecutive_reuse": max_consecutive_reuse(g),
+            "at_persistence_bound": [
+                {
+                    "month": str(row.month.date()),
+                    "persistence": float(row.persistence),
+                    "gap": float(C.PERSISTENCE_MAX - row.persistence),
+                }
+                for row in ok.itertuples()
+                if C.PERSISTENCE_MAX - row.persistence <= C.PERSISTENCE_TOL
+            ],
         }
     return out
 
 
+def max_consecutive_reuse(g: pd.DataFrame) -> int:
+    """Số tháng liên tiếp lớn nhất dùng lại tham số của một tháng trước (fit lỗi/không hội tụ)."""
+    best = run = 0
+    for month, used in zip(g.month, g.used_month, strict=True):
+        run = run + 1 if pd.notna(used) and used != month else 0
+        best = max(best, run)
+    return best
+
+
+# ---------- báo cáo bổ sung (mục 8, 29/10 tối; chỉ báo cáo, không đổi chọn hay tiêu chí) ----------
+
+
+def samples_of(asset: str) -> tuple[str, ...]:
+    return ("all", "excl_roll") if asset in ("brent", "wti") else ("all",)
+
+
+def scored(detail: pd.DataFrame, asset: str, h: int, sample: str) -> pd.DataFrame:
+    """Các dòng được chấm của (asset, h) theo mask của sample, xếp theo ngày gốc."""
+    rows = detail.loc[(detail.asset == asset) & (detail.h == h)].sort_values("base_date")
+    return rows.loc[rows["common_mask_" + sample].fillna(False).to_numpy(bool)]
+
+
+def _skill(g: pd.DataFrame) -> float:
+    if not len(g):
+        return float("nan")
+    return M.pinball_skill(
+        g.y_true.to_numpy(float),
+        g[list(wf.QCOLS)].to_numpy(float),
+        g[list(wf.BCOLS)].to_numpy(float),
+    )
+
+
+def valid_counts(detail: pd.DataFrame) -> pd.DataFrame:
+    """Số ngày gốc được chấm theo tài sản × h (all, excl_roll cho dầu)."""
+    rows = []
+    for asset in C.ASSETS:
+        for h in HORIZONS:
+            row = {"asset": asset, "h": h}
+            for sample in samples_of(asset):
+                row[f"n_{sample}"] = len(scored(detail, asset, h, sample))
+            rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def fold_table(named: dict, models) -> pd.DataFrame:
+    """pinball_skill trung bình 7 h theo năm của ngày gốc (fold), mô hình × tài sản × sample."""
+    rows = []
+    for name in models:
+        d = named[name]["detail"]
+        years = sorted({str(x)[:4] for x in d.base_date})
+        for asset in C.ASSETS:
+            for sample in samples_of(asset):
+                for year in years:
+                    by_h, n = [], []
+                    for h in HORIZONS:
+                        g = scored(d, asset, h, sample)
+                        g = g[g.base_date.astype(str).str[:4] == year]
+                        by_h.append(_skill(g))
+                        n.append(len(g))
+                    if not sum(n):
+                        continue
+                    rows.append(
+                        {
+                            "model": name,
+                            "asset": asset,
+                            "sample": sample,
+                            "fold": int(year),
+                            "pinball_skill trung bình 7 h": float(np.mean(by_h)),
+                            "n min": min(n),
+                            "n max": max(n),
+                        }
+                    )
+    return pd.DataFrame(rows)
+
+
+def bootstrap_dates(cfg) -> pd.DatetimeIndex:
+    """Lịch hợp nhất NYSE/CME của kỳ đánh giá, như walk_forward.shared_bootstrap_plan."""
+    return (
+        calendars.sessions("NYSE", cfg.evaluation_start, cfg.evaluation_end)
+        .union(calendars.sessions("CME", cfg.evaluation_start, cfg.evaluation_end))
+        .sort_values()
+    )
+
+
+def skill_bootstrap(detail: pd.DataFrame, groups, sample: str, cfg, block_length: int) -> dict:
+    """Như run_k3b.groups_skill_ci nhưng nhận block length và trả thêm p một phía
+    (1 + #lần ≤ 0) / (B + 1). Block 20 cho đúng CI của groups_skill_ci (có test)."""
+    dates = bootstrap_dates(cfg)
+    parts = []
+    for asset, h in groups:
+        g = scored(detail, asset, h, sample)
+        parts.append(
+            (
+                pd.Index(pd.to_datetime(g.base_date)).get_indexer(dates),
+                g.y_true.to_numpy(float),
+                g[list(wf.QCOLS)].to_numpy(float),
+                g[list(wf.BCOLS)].to_numpy(float),
+            )
+        )
+    values = []
+
+    def statistic(sampled):
+        index = sampled.astype(int)
+        skills = []
+        for lookup, y, q, b in parts:
+            take = lookup[index]
+            take = take[take >= 0]
+            skills.append(M.pinball_skill(y[take], q[take], b[take]) if len(take) else np.nan)
+        values.append(float(np.mean(skills)))
+        return values[-1]
+
+    low, high = M.block_bootstrap_ci(
+        np.arange(len(dates), dtype=float),
+        statistic,
+        block_length=block_length,
+        n_resamples=cfg.n_bootstrap,
+        confidence_level=cfg.confidence_level,
+        seed=cfg.seed,
+    )
+    reps = np.asarray(values)
+    return {
+        "value": float(np.mean([M.pinball_skill(y, q, b) for _, y, q, b in parts])),
+        "ci_low": low,
+        "ci_high": high,
+        "p_one_sided": float((1 + np.sum(reps <= 0)) / (len(reps) + 1)),
+        "block": block_length,
+    }
+
+
+def ci_sensitivity(named: dict, models, config) -> pd.DataFrame:
+    """CI 95% của pinball_skill trung bình 7 h (theo tài sản × sample) và 28 nhóm theo block."""
+    rows = []
+    for name in models:
+        d, cfg = named[name]["detail"], config(name)
+        targets = [("28 nhóm", "all", [(a, h) for a in C.ASSETS for h in HORIZONS])]
+        targets += [
+            (asset, sample, [(asset, h) for h in HORIZONS])
+            for asset in C.ASSETS
+            for sample in samples_of(asset)
+        ]
+        for label, sample, groups in targets:
+            for block in C.CI_BLOCKS:
+                r = skill_bootstrap(d, groups, sample, cfg, block)
+                rows.append({"model": name, "asset": label, "sample": sample, **r})
+    return pd.DataFrame(rows)
+
+
+def holm_table(sensitivity: pd.DataFrame, model: str) -> pd.DataFrame:
+    """Kiểm định mục 5 với Holm qua 4 tài sản (sample all, block 20); excl_roll chỉ báo p riêng."""
+    s = sensitivity[
+        (sensitivity.model == model) & (sensitivity.block == 20) & (sensitivity.asset != "28 nhóm")
+    ]
+    main = s[s["sample"] == "all"].reset_index(drop=True)
+    adjusted = M.holm_adjust(main.p_one_sided.to_numpy(float))
+    out = main[["asset", "sample", "value", "ci_low", "p_one_sided"]].assign(
+        p_holm=adjusted,
+        ci_low_gt_0=main.ci_low > 0,
+        holm_pass=adjusted < C.HOLM_ALPHA,
+    )
+    extra = s[s["sample"] == "excl_roll"][["asset", "sample", "value", "ci_low", "p_one_sided"]]
+    return pd.concat([out, extra.assign(ci_low_gt_0=extra.ci_low > 0)], ignore_index=True)
+
+
+def christoffersen_independence(hits) -> tuple[float, float]:
+    """LR độc lập của Christoffersen (1998) trên chuỗi vượt khoảng 0/1 (Markov bậc 1): (LR, p)."""
+    h = np.asarray(hits, dtype=int)
+    a, b = h[:-1], h[1:]
+    n00, n01 = int(np.sum((a == 0) & (b == 0))), int(np.sum((a == 0) & (b == 1)))
+    n10, n11 = int(np.sum((a == 1) & (b == 0))), int(np.sum((a == 1) & (b == 1)))
+    if n01 + n11 == 0 or n00 + n10 == 0:
+        return float("nan"), float("nan")
+    pi0 = n01 / (n00 + n01) if n00 + n01 else 0.0
+    pi1 = n11 / (n10 + n11) if n10 + n11 else 0.0
+    pi = (n01 + n11) / (n00 + n01 + n10 + n11)
+    ll0 = xlogy(n00 + n10, 1 - pi) + xlogy(n01 + n11, pi)
+    ll1 = xlogy(n00, 1 - pi0) + xlogy(n01, pi0) + xlogy(n10, 1 - pi1) + xlogy(n11, pi1)
+    lr = float(max(-2.0 * (ll0 - ll1), 0.0))
+    return lr, float(chi2.sf(lr, 1))
+
+
+def christoffersen_table(named: dict, models) -> pd.DataFrame:
+    """Vượt khoảng 80% [q10, q90] theo mô hình × tài sản × h (sample all), chuỗi các ngày gốc được
+    chấm theo thứ tự. Với h > 1 các return chồng nhau nên các lần vượt phụ thuộc sẵn."""
+    rows = []
+    for name in models:
+        d = named[name]["detail"]
+        for asset in C.ASSETS:
+            for h in HORIZONS:
+                g = scored(d, asset, h, "all")
+                y = g.y_true.to_numpy(float)
+                hits = (y < g.q10.to_numpy(float)) | (y > g.q90.to_numpy(float))
+                lr, p = christoffersen_independence(hits)
+                rows.append(
+                    {
+                        "model": name,
+                        "asset": asset,
+                        "h": h,
+                        "n": len(g),
+                        "tỷ lệ vượt": float(np.mean(hits)) if len(hits) else float("nan"),
+                        "LR_ind": lr,
+                        "p": p,
+                    }
+                )
+    return pd.DataFrame(rows)
+
+
+def skill_on_mask(detail: pd.DataFrame, forecasts: dict, sample: str = "all") -> dict:
+    """pinball_skill theo (asset, h) của các phân vị `forecasts` trên đúng các dòng, y và mốc mà
+    detail đã chấm (không gọi lại walk_forward)."""
+    out = {}
+    for asset in (a for a in C.ASSETS if a in forecasts):
+        if sample not in samples_of(asset):
+            continue
+        base, q, _ = forecasts[asset]
+        pos = {str(pd.Timestamp(d).date()): i for i, d in enumerate(base)}
+        for h in HORIZONS:
+            g = scored(detail, asset, h, sample)
+            idx = np.array([pos[str(x)[:10]] for x in g.base_date], dtype=int)
+            out[(asset, h)] = M.pinball_skill(
+                g.y_true.to_numpy(float), q[idx, h - 1], g[list(wf.BCOLS)].to_numpy(float)
+            )
+    return out
+
+
+def skill_summary(skills: dict) -> dict:
+    """Trung bình 28 nhóm (nếu đủ) và trung bình 7 h theo tài sản."""
+    by_asset = {a: float(np.mean([skills[(a, h)] for h in HORIZONS])) for a, _ in skills}
+    out = {"by_asset": by_asset}
+    if len(skills) == len(C.ASSETS) * len(HORIZONS):
+        out["mean_28"] = float(np.mean(list(skills.values())))
+    return out
+
+
+def dm_robustness(detail: pd.DataFrame, inputs: dict) -> pd.DataFrame:
+    """Bản dm với 2 seed khác và 10000 đường trên cùng ngày gốc và cùng mask (chỉ kiểm độ bền)."""
+    variants = [("đã chốt", 0, C.FHS_PATHS)]
+    variants += [(f"seed + {o}", o, C.FHS_PATHS) for o in C.DM_ROBUST_SEED_OFFSETS]
+    variants += [(f"{C.DM_ROBUST_PATHS} đường", 0, C.DM_ROBUST_PATHS)]
+    rows = []
+    for label, offset, paths in variants:
+        forecasts = {}
+        for asset, (r, fits, base) in inputs.items():
+            q, ok, _ = FF.fhs_forecasts(
+                r, asset, base, fits, demean=True, seed_offset=offset, n_paths=paths
+            )
+            if not ok.all():
+                raise StopRun(f"{asset}: robustness variant {label} invalid on common origins")
+            forecasts[asset] = (base, *normalize_quantiles(q))
+        skills = skill_summary(skill_on_mask(detail, forecasts))
+        oil = skill_summary(skill_on_mask(detail, forecasts, "excl_roll"))["by_asset"]
+        rows.append(
+            {
+                "biến thể": label,
+                "trung bình 28 nhóm": skills.get("mean_28", float("nan")),
+                **skills["by_asset"],
+                **{f"{a} excl_roll": v for a, v in oil.items()},
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def dm_vs_fhs(detail_dm: pd.DataFrame, detail_fhs: pd.DataFrame) -> pd.DataFrame:
+    """pinball_skill của fhs-gjr-t-dm trừ fhs-gjr-t trên cùng common mask (cùng ngày gốc, h)."""
+    rows = []
+    for asset in C.ASSETS:
+        for sample in samples_of(asset):
+            for h in HORIZONS:
+                a, b = scored(detail_dm, asset, h, sample), scored(detail_fhs, asset, h, sample)
+                if list(a.base_date.astype(str)) != list(b.base_date.astype(str)):
+                    raise StopRun(f"{asset} h{h} {sample}: dm and fhs masks differ")
+                sa, sb = _skill(a), _skill(b)
+                rows.append(
+                    {
+                        "asset": asset,
+                        "sample": sample,
+                        "h": h,
+                        "n": len(a),
+                        C.FHS_DM: sa,
+                        C.FHS: sb,
+                        "chênh lệch": sa - sb,
+                    }
+                )
+    return pd.DataFrame(rows)
+
+
+def file_sha256(path: Path) -> str:
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def finalize(eval_dir: Path, summary: dict, markdown: str) -> None:
+    """Ghi summary.md, rồi summary.json kèm SHA-256 của mọi file kết quả khác trong thư mục."""
+    (eval_dir / "summary.md").write_text(markdown, encoding="utf-8")
+    summary["file_sha256"] = {
+        p.name: file_sha256(p)
+        for p in sorted(eval_dir.iterdir())
+        if p.is_file() and p.name != "summary.json"
+    }
+    (eval_dir / "summary.json").write_text(
+        json.dumps(wf._plain(summary), indent=2, ensure_ascii=False, allow_nan=False),
+        encoding="utf-8",
+    )
+
+
+def records(frame: pd.DataFrame) -> list[dict]:
+    return frame.to_dict("records")
+
+
 # ---------- stage cv ----------
+
+
+def code_fingerprint() -> dict:
+    """SHA-256 của config và code dùng cho K4 (CODE_FILES)."""
+    return {name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest() for name in CODE_FILES}
+
+
+def environment_versions() -> dict:
+    return {**T.versions(), "arch": version("arch")}
+
+
+def data_lineage(prices, rejected, cutoff: str) -> dict:
+    return {
+        "clean_dt": C.CLEAN_DT,
+        "cutoff": cutoff,
+        "prices_view": T.frame_lineage(prices),
+        "rejected_view": T.frame_lineage(rejected) if len(rejected) else {"n_rows": 0},
+    }
 
 
 def provenance(prices, rejected, cutoff: str = C.CV_CUTOFF) -> dict:
@@ -308,16 +683,9 @@ def provenance(prices, rejected, cutoff: str = C.CV_CUTOFF) -> dict:
     return {
         "commit": commit,
         "commit_dirty": dirty,
-        "versions": {**T.versions(), "arch": version("arch")},
-        "code_sha256": {
-            name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest() for name in CODE_FILES
-        },
-        "data_lineage": {
-            "clean_dt": C.CLEAN_DT,
-            "cutoff": cutoff,
-            "prices_view": T.frame_lineage(prices),
-            "rejected_view": T.frame_lineage(rejected) if len(rejected) else {"n_rows": 0},
-        },
+        "versions": environment_versions(),
+        "code_sha256": code_fingerprint(),
+        "data_lineage": data_lineage(prices, rejected, cutoff),
     }
 
 
@@ -385,17 +753,10 @@ def forecast_rows(forecasts: dict, models) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def write_summary(eval_dir: Path, summary: dict, markdown: str) -> None:
-    (eval_dir / "summary.json").write_text(
-        json.dumps(wf._plain(summary), indent=2, ensure_ascii=False, allow_nan=False),
-        encoding="utf-8",
-    )
-    (eval_dir / "summary.md").write_text(markdown, encoding="utf-8")
-
-
 def run_cv(lake_dir: Path, output_dir: Path, run_id: str) -> dict:
     t_start = time.perf_counter()
     eval_dir = check_environment(output_dir, run_id)
+    check_roll_calendar(cv_config)
     with no_ceemdan_cache():
         prices, rejected = T.read_clean(Path(lake_dir), C.CLEAN_DT, cutoff=C.CV_CUTOFF)
         prov = provenance(prices, rejected)
@@ -412,11 +773,22 @@ def run_cv(lake_dir: Path, output_dir: Path, run_id: str) -> dict:
         named = R3.evaluate_set(built["forecasts"], built["common"], p, r, config=cv_config)
         seconds["evaluation"] = time.perf_counter() - t
     check_anchor(named)
+    check_roll_flags(named)
     scores = score(named, cv_config)
     choice = select_candidate({c: scores[c]["mean_28"] for c in C.CANDIDATES})
     t = time.perf_counter()
     mcs = run_mcs(named)
     seconds["mcs"] = time.perf_counter() - t
+    t = time.perf_counter()
+    sensitivity = ci_sensitivity(named, C.CANDIDATES, cv_config)
+    supplementary = {
+        "folds": records(fold_table(named, MODELS)),
+        "valid_counts": records(valid_counts(named[C.FHS]["detail"])),
+        "ci_blocks": records(sensitivity),
+        "holm": {c: records(holm_table(sensitivity, c)) for c in C.CANDIDATES},
+        "christoffersen": records(christoffersen_table(named, MODELS)),
+    }
+    seconds["supplementary"] = time.perf_counter() - t
 
     eval_dir.mkdir(parents=True, exist_ok=False)
     forecast_rows(built["forecasts"], MODELS).to_parquet(
@@ -460,8 +832,9 @@ def run_cv(lake_dir: Path, output_dir: Path, run_id: str) -> dict:
             for name, e in named.items()
         },
         "bootstrap_plan": named[C.BASELINE]["log"]["bootstrap_plan"],
+        "supplementary": supplementary,
     }
-    write_summary(eval_dir, summary, render(summary, named))
+    finalize(eval_dir, summary, render(summary, named))
     return summary
 
 
@@ -525,7 +898,7 @@ def build_cv_dm(prices: pd.DataFrame, invalid: dict, reference: dict, assets=C.A
     """fhs-gjr-t-dm trên tập ngày gốc chung của cv. Cùng các lần fit với fhs-gjr-t; dựng lại
     fhs-gjr-t (demean=False) và dừng nếu khác kết quả cv từng bit, hoặc tập chung khác cv."""
     months = pd.date_range(*C.CV, freq="MS")
-    out = {"forecasts": {C.FHS_DM: {}}, "common": {}, "fits": [], "validity": {}}
+    out = {"forecasts": {C.FHS_DM: {}}, "common": {}, "fits": [], "validity": {}, "inputs": {}}
     out["seconds"] = {"fit": {}, "fhs_numpy_batch": {}, "single_forecast": {}}
     for asset in assets:
         base = calendars.sessions(ASSETS[asset].calendar, *C.CV)
@@ -536,8 +909,9 @@ def build_cv_dm(prices: pd.DataFrame, invalid: dict, reference: dict, assets=C.A
         if not same_fits(f["logs"], reference["fits"], asset):
             raise StopRun(f"{asset}: refits differ from the cv run")
         q_f, ok_f, _ = FF.fhs_forecasts(r, asset, base, fits, demean=C.FHS_DEMEAN[C.FHS])
+        dm_diag = {}
         q_d, ok_d, numpy_seconds = FF.fhs_forecasts(
-            r, asset, base, fits, demean=C.FHS_DEMEAN[C.FHS_DM]
+            r, asset, base, fits, demean=C.FHS_DEMEAN[C.FHS_DM], diag=dm_diag
         )
         ok = ok_b & ok_s & ok_d
         if not np.array_equal(ok_d, ok_f) or ok.sum() != C.CV_EXPECTED_N[asset]:
@@ -553,7 +927,12 @@ def build_cv_dm(prices: pd.DataFrame, invalid: dict, reference: dict, assets=C.A
         out["forecasts"][C.FHS_DM][asset] = (common, normalized, crossed)
         out["common"][asset] = common
         out["fits"] += f["logs"]
-        out["validity"][asset] = {"origins": len(base), "common": int(ok.sum())}
+        out["inputs"][asset] = (r, fits, common)
+        out["validity"][asset] = {
+            "origins": len(base),
+            "common": int(ok.sum()),
+            "fhs_dm_invalid": dm_diag,
+        }
         out["seconds"]["fit"][asset] = f["fit_seconds"]
         out["seconds"]["fhs_numpy_batch"][asset] = numpy_seconds
         last = common[-1]
@@ -625,6 +1004,7 @@ DECISION_ORDER = (
 def run_cv_dm(lake_dir: Path, output_dir: Path, run_id: str, cv_dir: Path) -> dict:
     t_start = time.perf_counter()
     eval_dir = check_environment(output_dir, run_id)
+    check_roll_calendar(cv_config)
     reference = cv_reference(cv_dir)
     ref = reference["summary"]
     with no_ceemdan_cache():
@@ -646,6 +1026,7 @@ def run_cv_dm(lake_dir: Path, output_dir: Path, run_id: str, cv_dir: Path) -> di
         seconds["evaluation"] = time.perf_counter() - t
     if not same_scoring_inputs(named[C.FHS_DM]["detail"], reference["named"][C.FHS]["detail"]):
         raise StopRun("targets, baseline or scoring masks differ from the cv run")
+    check_roll_flags(named)
     scores = score(named, cv_config)
     m28 = scores[C.FHS_DM]["mean_28"]
     proceed = bool(m28 > C.CV_DM_PROCEED_ABOVE)
@@ -654,6 +1035,19 @@ def run_cv_dm(lake_dir: Path, output_dir: Path, run_id: str, cv_dir: Path) -> di
     mcs = run_mcs(report, models=(*C.MCS_MODELS, C.FHS_DM))
     seconds["mcs"] = time.perf_counter() - t
     direction = direction_table(report, (C.BASELINE, C.FHS, C.FHS_DM))
+    t = time.perf_counter()
+    dm_detail = named[C.FHS_DM]["detail"]
+    sensitivity = ci_sensitivity(named, (C.FHS_DM,), cv_config)
+    supplementary = {
+        "folds": records(fold_table(report, (C.FHS, C.FHS_DM))),
+        "valid_counts": records(valid_counts(dm_detail)),
+        "ci_blocks": records(sensitivity),
+        "holm": {C.FHS_DM: records(holm_table(sensitivity, C.FHS_DM))},
+        "christoffersen": records(christoffersen_table(report, (C.FHS, C.FHS_DM))),
+        "dm_robustness": records(dm_robustness(dm_detail, built["inputs"])),
+        "dm_minus_fhs": records(dm_vs_fhs(dm_detail, reference["named"][C.FHS]["detail"])),
+    }
+    seconds["supplementary"] = time.perf_counter() - t
 
     eval_dir.mkdir(parents=True, exist_ok=False)
     forecast_rows(built["forecasts"], (C.FHS_DM,)).to_parquet(
@@ -702,21 +1096,69 @@ def run_cv_dm(lake_dir: Path, output_dir: Path, run_id: str, cv_dir: Path) -> di
             C.FHS_DM: [g for g in named[C.FHS_DM]["log"]["dm_calendar_gaps"] if g["blocked"]]
         },
         "bootstrap_plan": named[C.FHS_DM]["log"]["bootstrap_plan"],
+        "supplementary": supplementary,
     }
-    write_summary(eval_dir, summary, render_cv_dm(summary, report, direction))
+    finalize(eval_dir, summary, render_cv_dm(summary, report, direction))
     return summary
 
 
 # ---------- stage val2019 ----------
 
 
+RESULT_FILES = {
+    "cv": (
+        "forecasts_cv.parquet",
+        "accuracy.parquet",
+        "comparison.parquet",
+        "detail.parquet",
+        "mean7.parquet",
+        "fhs_fits.parquet",
+        "summary.md",
+    ),
+    "cv-dm": (
+        "forecasts_cv_dm.parquet",
+        "accuracy.parquet",
+        "comparison.parquet",
+        "detail.parquet",
+        "mean7.parquet",
+        "fhs_fits.parquet",
+        "direction.parquet",
+        "summary.md",
+    ),
+}
+
+
+def verified_result(directory: Path, stage: str) -> dict:
+    """Mục 8 (29/10 tối): chỉ nhận kết quả chạy từ code đã commit (commit_dirty = False), cùng
+    fingerprint config/code và phiên bản thư viện với code hiện tại, và mọi file kết quả khớp
+    SHA-256 đã ghi trong summary."""
+    s = read_summary(directory, stage)
+    prov = s.get("provenance") or {}
+    if not prov.get("commit") or prov.get("commit_dirty") is not False:
+        raise StopRun(f"{directory}: {stage} result was not run from committed code")
+    if prov.get("code_sha256") != code_fingerprint():
+        raise StopRun(f"{directory}: config/code fingerprint differs from the current code")
+    if prov.get("versions") != environment_versions():
+        raise StopRun(f"{directory}: library versions differ from the current environment")
+    hashes = s.get("file_sha256") or {}
+    missing = [name for name in RESULT_FILES[stage] if name not in hashes]
+    if missing:
+        raise StopRun(f"{directory}: no checksum for {', '.join(missing)}")
+    for name, digest in hashes.items():
+        path = Path(directory) / name
+        if not path.is_file() or file_sha256(path) != digest:
+            raise StopRun(f"{directory}: checksum mismatch for {name}")
+    return s
+
+
 def val2019_gate(cv_dir: Path, cv_dm_dir: Path, candidate: str) -> dict:
     """Mục 8, sửa đổi sau kiểm định chéo: chỉ fhs-gjr-t-dm; cần kết quả cv (quy tắc mục 4 tính lại
     từ điểm đã lưu chọn fhs-gjr-t, không dừng sớm) và cv-dm chạy trên đúng kết quả cv đó, với
-    trung bình 28 nhóm > 0 (tính lại từ điểm đã lưu). Không đọc dữ liệu giá."""
+    trung bình 28 nhóm > 0 (tính lại từ điểm đã lưu). Cả hai kết quả phải qua verified_result và
+    cùng fingerprint dữ liệu. Không đọc dữ liệu giá (fingerprint dữ liệu kiểm ở run_val2019)."""
     if candidate != C.VAL2019_CANDIDATE:
         raise StopRun(f"only {C.VAL2019_CANDIDATE} may run on 2019 (plan section 8)")
-    cv = read_summary(cv_dir, "cv")
+    cv = verified_result(cv_dir, "cv")
     try:
         recomputed = select_candidate({c: cv["scores"][c]["mean_28"] for c in C.CANDIDATES})
     except (KeyError, TypeError) as exc:
@@ -731,7 +1173,9 @@ def val2019_gate(cv_dir: Path, cv_dm_dir: Path, candidate: str) -> dict:
         raise StopRun(
             f"cv selected {recomputed['selected']!r}; the dm amendment applies to {C.FHS}"
         )
-    dm = read_summary(cv_dm_dir, "cv-dm")
+    dm = verified_result(cv_dm_dir, "cv-dm")
+    if dm["provenance"].get("data_lineage") != cv["provenance"].get("data_lineage"):
+        raise StopRun(f"{cv_dm_dir}: data fingerprint differs from the cv result")
     link = dm.get("cv_reference") or {}
     if dm.get("model") != C.FHS_DM or (link.get("run_id"), link.get("commit")) != (
         cv.get("run_id"),
@@ -764,7 +1208,7 @@ def build_val(prices: pd.DataFrame, invalid: dict, origins: dict, assets=C.ASSET
     """fhs-gjr-t-dm, baseline-q252, S1a trên tập chung K3 của 2019; refit đầu mỗi tháng 2019 chỉ
     dùng return trước ngày đầu tháng. Mọi mô hình phải hợp lệ ở mọi ngày gốc của tập K3."""
     months = pd.date_range(*C.VALID, freq="MS")
-    out = {"forecasts": {m: {} for m in C.VAL_MODELS}, "fits": []}
+    out = {"forecasts": {m: {} for m in C.VAL_MODELS}, "fits": [], "inputs": {}, "validity": {}}
     out["seconds"] = {"fit": {}, "fhs_numpy_batch": {}, "single_forecast": {}}
     for asset in assets:
         base = _ns(origins[asset])
@@ -773,15 +1217,24 @@ def build_val(prices: pd.DataFrame, invalid: dict, origins: dict, assets=C.ASSET
         q_b, ok_b = baseline_quantiles(prices, asset, base, invalid[asset])
         q_s, ok_s, _ = s1_quantiles(prices, asset, base, C.S1A_LAMBDA, invalid[asset])
         f = fhs_asset(prices, asset, base, months, invalid[asset])
+        dm_diag = {}
         q_d, ok_d, numpy_seconds = FF.fhs_forecasts(
-            f["r"], asset, base, f["fits"], demean=C.FHS_DEMEAN[C.FHS_DM]
+            f["r"], asset, base, f["fits"], demean=C.FHS_DEMEAN[C.FHS_DM], diag=dm_diag
         )
+        out["validity"][asset] = {
+            "origins": len(base),
+            "baseline_valid": int(ok_b.sum()),
+            "s1a_valid": int(ok_s.sum()),
+            "fhs_dm_valid": int(ok_d.sum()),
+            "fhs_dm_invalid": dm_diag,
+        }
         if not (ok_b & ok_s & ok_d).all():
             raise StopRun(f"{asset}: a model is invalid on K3 common origins")
         for name, q in ((C.FHS_DM, q_d), (C.BASELINE, q_b), (C.S1A, q_s)):
             normalized, crossed = normalize_quantiles(q)  # đúng một lần
             out["forecasts"][name][asset] = (base, normalized, crossed)
         out["fits"] += f["logs"]
+        out["inputs"][asset] = (f["r"], f["fits"], base)
         out["seconds"]["fit"][asset] = f["fit_seconds"]
         out["seconds"]["fhs_numpy_batch"][asset] = numpy_seconds
         last = base[-1]
@@ -820,14 +1273,34 @@ def run_val2019(
     candidate: str,
     k3_dir: Path,
 ) -> dict:
-    """Một lần duy nhất (mục 8): phần chặn, đánh dấu started.json trước khi đọc 2019, rồi đánh giá
-    fhs-gjr-t-dm, baseline-q252, S1a trên tập chung K3; tiêu chí mục 5 theo tài sản × sample."""
+    """Một lần duy nhất (mục 8): phần chặn, fingerprint dữ liệu (đọc bản cắt 2018-12-31, so với
+    cv), đánh dấu started.json trước khi đọc 2019, rồi đánh giá fhs-gjr-t-dm, baseline-q252, S1a
+    trên tập chung K3. Tiêu chí mục 5 theo tài sản; dầu quyết định theo sample all, excl_roll
+    chỉ báo cáo (mục 8, 29/10 tối).
+
+    "Một lần" là chặn ở mức quy trình (review #60), không phải bảo đảm tuyệt đối: run-id cố định
+    configs/k4.VAL2019_RUN_ID, từ chối run-id khác và từ chối khi đã có started.json (của run-id
+    này hoặc bất kỳ thư mục val2019 nào trong eval/k4/); kết quả được upload lên S3
+    eval/k4/k4-val2019/ để cả nhóm thấy đã chạy. Xóa started.json hay chạy ở máy khác vẫn lách
+    được, nên việc tuân thủ dựa vào quy trình và lịch sử S3."""
     t_start = time.perf_counter()
+    if run_id != C.VAL2019_RUN_ID:
+        raise StopRun(f"val2019 run-id must be {C.VAL2019_RUN_ID!r}, got {run_id!r}")
+    marker = Path(output_dir) / "eval" / "k4" / C.VAL2019_RUN_ID / "started.json"
+    if marker.exists():
+        raise StopRun(f"{marker} exists: 2019 already started once; the plan allows one run")
     gate = val2019_gate(cv_dir, cv_dm_dir, candidate)
     previous = runs_on_2019(output_dir)
     if previous:
         raise StopRun(f"2019 already run for K4 ({', '.join(previous)}); the plan allows one run")
     eval_dir = check_environment(output_dir, run_id)
+    check_roll_calendar(val_config)
+    with no_ceemdan_cache():
+        cv_prices, cv_rejected = T.read_clean(Path(lake_dir), C.CLEAN_DT, cutoff=C.CV_CUTOFF)
+    if data_lineage(cv_prices, cv_rejected, C.CV_CUTOFF) != gate["cv"]["provenance"].get(
+        "data_lineage"
+    ):
+        raise StopRun("clean data fingerprint (≤ 2018-12-31) differs from the cv result")
     eval_dir.mkdir(parents=True, exist_ok=False)
     started = {"stage": "val2019", "candidate": candidate, "started_at": pd.Timestamp.now("UTC")}
     (eval_dir / "started.json").write_text(json.dumps(wf._plain(started)), encoding="utf-8")
@@ -847,18 +1320,29 @@ def run_val2019(
         named = R3.evaluate_set(built["forecasts"], origins, p, r, config=val_config)
         seconds["evaluation"] = time.perf_counter() - t
     check_anchor(named)
+    check_roll_flags(named)
     scores = score(named, val_config)
     criterion = {
         name: {f"{row.asset}/{row.sample}": bool(row.ci_low > 0) for row in e["mean7"].itertuples()}
         for name, e in named.items()
     }
     passes = {
-        asset: {
-            sample: criterion[C.FHS_DM][f"{asset}/{sample}"]
-            for sample in (("all", "excl_roll") if asset in ("brent", "wti") else ("all",))
-        }
+        asset: {sample: criterion[C.FHS_DM][f"{asset}/{sample}"] for sample in samples_of(asset)}
         for asset in C.ASSETS
     }
+    decision = {asset: by["all"] for asset, by in passes.items()}  # dầu: theo all
+    t = time.perf_counter()
+    sensitivity = ci_sensitivity(named, (C.FHS_DM, C.S1A), val_config)
+    supplementary = {
+        "folds": records(fold_table(named, C.VAL_MODELS)),
+        "valid_counts": records(valid_counts(named[C.FHS_DM]["detail"])),
+        "ci_blocks": records(sensitivity),
+        "holm": {C.FHS_DM: records(holm_table(sensitivity, C.FHS_DM))},
+        "christoffersen": records(christoffersen_table(named, C.VAL_MODELS)),
+        "dm_robustness": records(dm_robustness(named[C.FHS_DM]["detail"], built["inputs"])),
+        "dm_minus_fhs": "not computed: fhs-gjr-t is not run on 2019 (one configuration only)",
+    }
+    seconds["supplementary"] = time.perf_counter() - t
     forecast_rows(built["forecasts"], C.VAL_MODELS).to_parquet(
         eval_dir / "forecasts_val2019.parquet", index=False
     )
@@ -888,9 +1372,13 @@ def run_val2019(
         "provenance": prov,
         "k3_reference": {"dir": str(k3_dir), "run_id": R3.C.K3_RUN_ID, "commit": R3.C.K3_COMMIT},
         "common_origins": {a: len(v) for a, v in origins.items()},
+        "validity": built["validity"],
         "scores": scores,
         "criterion_ci_low_gt_0": criterion,
         "asset_passes": passes,
+        "decision_rule": "asset passes when ci_low > 0 on sample all; excl_roll reported only",
+        "asset_decision": decision,
+        "any_asset_passes": any(decision.values()),
         "mean7": {name: e["mean7"].to_dict("records") for name, e in named.items()},
         "fhs_fits": fit_summary(built["fits"]),
         "seconds": {
@@ -905,8 +1393,9 @@ def run_val2019(
             for name, e in named.items()
         },
         "bootstrap_plan": named[C.BASELINE]["log"]["bootstrap_plan"],
+        "supplementary": supplementary,
     }
-    write_summary(eval_dir, summary, render_val(summary, named))
+    finalize(eval_dir, summary, render_val(summary, named))
     return summary
 
 
@@ -917,7 +1406,7 @@ def render(summary: dict, named: dict) -> str:
     models = list(MODELS)
     out = [f"# K4 FHS GJR-GARCH và kết hợp phân vị: kiểm định chéo 2016–2018 ({summary['run_id']})"]
     look = summary["look_number_if_2019_runs"]
-    seen = summary["total_configs_seen_on_2019_if_run"]
+    seen = configs_seen_text()
     out += [
         "",
         (
@@ -967,8 +1456,49 @@ def render(summary: dict, named: dict) -> str:
         out += [T.md(named[name]["comparison"][cols]), ""]
     out += mcs_section(summary["mcs"])
     out += fits_section(summary["fhs_fits"])
+    out += supplementary_section(summary["supplementary"])
     out += timing_section(summary["seconds"])
     return "\n".join(out) + "\n"
+
+
+def supplementary_section(supp: dict) -> list[str]:
+    """Báo cáo bổ sung mục 8 (29/10 tối): chỉ báo cáo, không đổi quy tắc chọn hay tiêu chí."""
+    titles = {
+        "folds": "Theo fold (năm của ngày gốc): pinball_skill trung bình 7 h",
+        "valid_counts": "Số ngày gốc được chấm theo tài sản × h",
+        "ci_blocks": "Độ nhạy CI 95% theo block length (p một phía = (1 + #≤ 0)/(B + 1))",
+        "christoffersen": (
+            "Kiểm định độc lập Christoffersen (1998), vượt khoảng 80%, sample all "
+            "(h > 1: return chồng nhau nên phụ thuộc sẵn)"
+        ),
+        "dm_robustness": "Độ bền fhs-gjr-t-dm: seed khác và số đường lớn hơn (chỉ kiểm tra)",
+        "dm_minus_fhs": "fhs-gjr-t-dm trừ fhs-gjr-t trên cùng common mask",
+    }
+    out = ["## Báo cáo bổ sung (mục 8, 29/10 tối; chỉ báo cáo)", ""]
+    out += [
+        (
+            "Hạn chế: q252 và S1a có liên hệ trực tiếp nên combo-eq3 không kết hợp ba nguồn độc "
+            "lập; FHS lấy đuôi từ phần dư lịch sử nên có thể thiếu các cú sốc ngoài mẫu."
+        ),
+        "",
+    ]
+    for key, title in titles.items():
+        if key not in supp:
+            continue
+        value = supp[key]
+        out += [f"### {title}", ""]
+        out += [value if isinstance(value, str) else T.md(pd.DataFrame(value)), ""]
+    for model, rows in supp.get("holm", {}).items():
+        out += [
+            (
+                f"### Holm qua 4 tài sản cho kiểm định mục 5 ({model}; sample all, block 20, "
+                f"ngưỡng {C.HOLM_ALPHA}; excl_roll chỉ báo p riêng)"
+            ),
+            "",
+            T.md(pd.DataFrame(rows)),
+            "",
+        ]
+    return out
 
 
 def mcs_section(mcs: dict) -> list[str]:
@@ -986,10 +1516,12 @@ def mcs_section(mcs: dict) -> list[str]:
             **{f"loss {k}": v for k, v in m["mean_loss"].items()},
             **{f"p {k}": v for k, v in m["pvalue"].items()},
             "trong MCS": ", ".join(m["included"]),
+            "tập ngày gốc thu hẹp": "có" if m.get("origins_changed") else "không",
         }
         for asset, m in mcs.items()
     ]
-    return [*out, T.md(pd.DataFrame(rows), ".5f"), ""]
+    note = "Chỉ ngày gốc đủ 7 h ở mọi mô hình (giao các tập)."
+    return [*out, note, "", T.md(pd.DataFrame(rows), ".5f"), ""]
 
 
 def fits_section(fhs_fits: dict) -> list[str]:
@@ -1001,11 +1533,26 @@ def fits_section(fhs_fits: dict) -> list[str]:
             "tháng": f["months"],
             "trạng thái": ", ".join(f"{k} {v}" for k, v in f["status"].items()),
             "dùng tham số tháng trước": len(f["fallback_months"]),
+            "liên tiếp lớn nhất": f["max_consecutive_reuse"],
+            "ở biên persistence": len(f["at_persistence_bound"]),
         }
         for p in PARAMS:
             row[p] = f"{f[p]['min']:.3f} / {f[p]['median']:.3f} / {f[p]['max']:.3f}"
         rows.append(row)
-    return [*out, "min / trung vị / max trên các lần fit ok.", "", T.md(pd.DataFrame(rows)), ""]
+    bound = [
+        {"asset": asset, **b} for asset, f in fhs_fits.items() for b in f["at_persistence_bound"]
+    ]
+    out += ["min / trung vị / max trên các lần fit ok.", "", T.md(pd.DataFrame(rows)), ""]
+    out += [
+        (
+            "Các lần fit nằm ở biên ràng buộc của arch (gap = 1 − persistence ≤ "
+            f"{C.PERSISTENCE_TOL}; vẫn hợp lệ):"
+        ),
+        "",
+        T.md(pd.DataFrame(bound), ".3e") if bound else "không có",
+        "",
+    ]
+    return out
 
 
 def timing_section(s: dict) -> list[str]:
@@ -1039,8 +1586,9 @@ def render_cv_dm(summary: dict, named: dict, direction: pd.DataFrame) -> str:
             f"{summary['cv_reference']['run_id']} @ {summary['cv_reference']['commit'][:7]}; "
             f"{C.FHS} dựng lại ở đây trùng từng bit với kết quả đó. Kiểm định chéo đã xem "
             f"{summary['cv_configs_seen']} cấu hình; nếu chạy 2019, đó là lần nhìn thứ "
-            f"{summary['look_number_if_2019_runs']}, tổng "
-            f"{summary['total_configs_seen_on_2019_if_run']} cấu hình."
+            f"{summary['look_number_if_2019_runs']}, tổng {configs_seen_text()} cấu hình. "
+            "fhs-gjr-t và combo-eq3 là ứng viên đăng ký trước; fhs-gjr-t-dm là sửa đổi hậu "
+            "nghiệm (lý do: trung bình z âm, q50 âm chỉ là hệ quả)."
         ),
         "",
         "Thứ tự quyết định:",
@@ -1078,6 +1626,7 @@ def render_cv_dm(summary: dict, named: dict, direction: pd.DataFrame) -> str:
     out += ["## Hướng: q50 < 0 và prob_up (các dòng được chấm, sample all)", ""]
     out += [T.md(direction), ""]
     out += fits_section(summary["fhs_fits"])
+    out += supplementary_section(summary["supplementary"])
     out += timing_section(summary["seconds"])
     return "\n".join(out) + "\n"
 
@@ -1088,8 +1637,9 @@ def render_val(summary: dict, named: dict) -> str:
     out = [f"# K4 {summary['candidate']}: validation 2019 ({summary['run_id']})", ""]
     out += [
         (
-            f"Lần nhìn thứ {summary['look_number']} vào validation 2019; tổng "
-            f"{summary['total_configs_seen_on_2019']} cấu hình đã xem trên 2019; kiểm định chéo "
+            f"Lần dùng validation 2019 thứ {summary['look_number']} của dự án (tính cả DLinear MVP);"
+            f" tổng {configs_seen_text()} cấu hình đã xem trên 2019 (rủi ro data snooping, White "
+            f"2000); kiểm định chéo "
             f"{summary['cv_configs_seen']} cấu hình. Phần chặn: cv {gate['cv']['run_id']} @ "
             f"{gate['cv']['commit'][:7]}, cv-dm {gate['cv_dm']['run_id']} @ "
             f"{gate['cv_dm']['commit'][:7]} (trung bình 28 nhóm {gate['cv_dm']['mean_28']:+.4f})."
@@ -1104,11 +1654,19 @@ def render_val(summary: dict, named: dict) -> str:
         + ".",
         "",
         "## Tiêu chí mục 5: cận dưới CI 95% của pinball_skill trung bình 7 h > 0",
+        "Quyết định theo sample all; excl_roll của dầu chỉ báo cáo (mục 8, 29/10 tối).",
         "",
         T.md(
             pd.DataFrame(
                 [
-                    {"asset": a, **{s: ("đạt" if ok else "không") for s, ok in by.items()}}
+                    {
+                        "asset": a,
+                        "quyết định (all)": "đạt" if summary["asset_decision"][a] else "không",
+                        **{
+                            f"{s} (báo cáo)" if s == "excl_roll" else s: ("đạt" if ok else "không")
+                            for s, ok in by.items()
+                        },
+                    }
                     for a, by in summary["asset_passes"].items()
                 ]
             )
@@ -1130,6 +1688,7 @@ def render_val(summary: dict, named: dict) -> str:
     out.append(f"## DM ({summary['candidate']} vs baseline-252, walk_forward DM_GAP_POLICY)")
     out += [T.md(named[summary["candidate"]]["comparison"][cols]), ""]
     out += fits_section(summary["fhs_fits"])
+    out += supplementary_section(summary["supplementary"])
     out += timing_section(summary["seconds"])
     return "\n".join(out) + "\n"
 
@@ -1146,7 +1705,7 @@ def main(argv=None) -> int:
     parser.add_argument("--k3-dir", type=Path, default=R3.DEFAULT_K3_DIR)
     args = parser.parse_args(argv)
     run_id = (
-        args.run_id or {"cv": "k4-cv", "cv-dm": "k4-cv-dm", "val2019": "k4-val2019"}[args.stage]
+        args.run_id or {"cv": "k4-cv", "cv-dm": "k4-cv-dm", "val2019": C.VAL2019_RUN_ID}[args.stage]
     )
     if args.stage in ("cv-dm", "val2019") and args.cv_dir is None:
         parser.error(f"--stage {args.stage} needs --cv-dir")
@@ -1169,7 +1728,7 @@ def main(argv=None) -> int:
                 args.candidate,
                 args.k3_dir,
             )
-            out = {"asset_passes": s["asset_passes"]}
+            out = {"asset_decision": s["asset_decision"], "asset_passes": s["asset_passes"]}
     except STOPS as exc:
         print(f"DỪNG: {exc}", file=sys.stderr)
         return 2

@@ -137,20 +137,33 @@ def monthly_fits(r: pd.Series, months, asset: str = "") -> tuple[dict, list[dict
 
 
 def fhs_forecasts(
-    r: pd.Series, asset: str, base_dates, fits: dict, demean: bool = False
+    r: pd.Series,
+    asset: str,
+    base_dates,
+    fits: dict,
+    demean: bool = False,
+    *,
+    seed_offset: int = 0,
+    n_paths: int = C.FHS_PATHS,
+    diag: dict | None = None,
 ) -> tuple[np.ndarray, np.ndarray, float]:
-    """Phân vị FHS [n, 7, 7] chưa normalize (NaN ở ngày gốc không có mô hình), mask hợp lệ và
-    số giây phần NumPy (đệ quy + mô phỏng). demean=True là fhs-gjr-t-dm (kế hoạch mục 8)."""
+    """Phân vị FHS [n, 7, 7] chưa normalize (NaN ở ngày gốc không hợp lệ), mask hợp lệ và số giây
+    phần NumPy (đệ quy + mô phỏng). demean=True là fhs-gjr-t-dm (kế hoạch mục 8). Ngày gốc chỉ
+    hợp lệ khi có mô hình của tháng, σ² bước kế tiếp hữu hạn và dương, và mọi phân vị hữu hạn
+    (mục 8, 29/10 tối); diag (nếu truyền) nhận số ngày bị loại theo từng lý do. seed_offset và
+    n_paths chỉ dùng cho kiểm tra độ bền (mặc định đúng mô hình đã chốt)."""
     base = pd.DatetimeIndex(pd.to_datetime(base_dates))
     q = np.full((len(base), C.FHS_STEPS, len(LEVELS)), np.nan)
     ok = np.zeros(len(base), dtype=bool)
     seconds = 0.0
+    counts = {"no_model": 0, "invalid_variance": 0, "nonfinite_quantiles": 0}
     months = base.to_period("M").to_timestamp()
     for month in months.unique():
         fit = fits.get(month)
-        if fit is None:
-            continue
         rows = np.flatnonzero(months == month)
+        if fit is None:
+            counts["no_model"] += len(rows)
+            continue
         seq = r[(r.index >= fit.window_start) & (r.index <= base[rows].max())].dropna()
         if len(seq) < C.FHS_WINDOW or seq.index[C.FHS_WINDOW - 1] != fit.window_end:
             raise FitStop(
@@ -160,18 +173,28 @@ def fhs_forecasts(
         _, s2_next = variance_path(C.FHS_SCALE * seq.to_numpy(float), fit.params, fit.backcast)
         last = seq.index.searchsorted(base[rows], side="right") - 1  # return hợp lệ cuối ≤ t
         for i, pos in zip(rows, last, strict=True):
-            q[i] = fhs_quantiles(
-                float(s2_next[pos]),
+            s2 = float(s2_next[pos])
+            if not np.isfinite(s2) or s2 <= 0:
+                counts["invalid_variance"] += 1
+                continue
+            qi = fhs_quantiles(
+                s2,
                 fit.z,
                 fit.params,
-                seed=seed_for(asset, base[i].to_datetime64()),
+                seed=seed_for(asset, base[i].to_datetime64()) + seed_offset,
                 scale=C.FHS_SCALE,
-                n_paths=C.FHS_PATHS,
+                n_paths=n_paths,
                 n_steps=C.FHS_STEPS,
                 demean=demean,
             )
+            if not np.isfinite(qi).all():
+                counts["nonfinite_quantiles"] += 1
+                continue
+            q[i] = qi
             ok[i] = True
         seconds += time.perf_counter() - t0
+    if diag is not None:
+        diag.update(counts)
     return q, ok, seconds
 
 

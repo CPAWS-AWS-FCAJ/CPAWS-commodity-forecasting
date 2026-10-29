@@ -22,12 +22,17 @@ import numpy as np
 LEVELS = [0.05, 0.10, 0.25, 0.50, 0.75, 0.90, 0.95]
 N_PATHS = 5000
 N_STEPS = 7
+# Kế hoạch K4 mục 8 (29/10 tối): ν > 2; α + γ/2 + β ≤ 1 như ràng buộc của arch, kèm dung sai số
+NU_MIN_EXCLUSIVE = 2.0
+PERSISTENCE_MAX = 1.0
+PERSISTENCE_TOL = 1e-9
 
 
 @dataclass(frozen=True)
 class GjrParams:
     """Tham số GJR-GARCH(1,1) trên thang return × scale; ν chỉ dùng lúc fit (FHS lấy z thực
-    nghiệm), giữ lại để báo cáo."""
+    nghiệm), giữ lại để báo cáo. Từ chối ν ≤ 2 và α + γ/2 + β > 1 + 1e-9; nghiệm ở biên
+    (persistence trong [1, 1 + 1e-9]) vẫn nhận."""
 
     omega: float
     alpha: float
@@ -41,6 +46,10 @@ class GjrParams:
             raise ValueError("GJR parameters must be finite")
         if self.omega <= 0 or self.alpha < 0 or self.beta < 0 or self.alpha + self.gamma < 0:
             raise ValueError("GJR parameters give a non-positive variance")
+        if self.nu <= NU_MIN_EXCLUSIVE:
+            raise ValueError("Student-t nu must be > 2")
+        if self.persistence > PERSISTENCE_MAX + PERSISTENCE_TOL:
+            raise ValueError("alpha + gamma/2 + beta exceeds 1 beyond the arch tolerance")
 
     @property
     def persistence(self) -> float:
