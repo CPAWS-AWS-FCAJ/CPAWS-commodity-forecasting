@@ -5,7 +5,8 @@
     forecast_format.py           ← infra/lambda/forecast_api/forecast_format.py
     chatbot/__init__.py, tools.py, news.py, chat.py, quota.py   ← src/chatbot/
     prompts/chatbot-nova-v2.md, chatbot-haiku-v2.md   ← docs/prompts/ (bản đã khóa SHA-256)
-    news/gold.json, silver.json, brent.json, wti.json ← infra/lambda/chat_api/news/ (demo, NEWS_DIR)
+    news/gold.json, silver.json, brent.json, wti.json ← infra/lambda/chat_api/news/ (demo, NEWS_DIR;
+        cách làm mới và bật: docs/api/demo-news.md)
 
 Biến môi trường:
 - FORECASTS_TABLE_NAME (bắt buộc), AWS_REGION;
