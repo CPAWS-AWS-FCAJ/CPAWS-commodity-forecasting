@@ -1,0 +1,41 @@
+{
+  "asset": "gold",
+  "items": [
+    {
+      "title": "Federal Reserve issues FOMC statement",
+      "summary": "FOMC giữ lãi suất mục tiêu ở 3,75–4,00% với phiếu 10–2; hai thành viên Lisa Cook và Beth Hammack phản đối vì muốn tăng thêm 0,25 điểm %. Thông cáo nói lạm phát vẫn cao, kinh tế tăng trưởng mạnh và Ủy ban cần thêm thông tin để chọn mức lãi suất phù hợp.",
+      "link": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20261028a.htm",
+      "source": "Federal Reserve",
+      "published_at": "2026-10-28T18:00:00Z",
+      "impact_score": 2,
+      "direction": "bearish"
+    },
+    {
+      "title": "Weekly Petroleum Status Report (week ending October 23, 2026)",
+      "summary": "Tuần kết thúc 23/10, tồn kho dầu thô thương mại Mỹ giảm 1,9 triệu thùng xuống 410,6 triệu thùng, thấp hơn trung bình 5 năm 4%. Tồn kho xăng tăng 3,9 triệu thùng trong khi nhiên liệu chưng cất giảm 1,5 triệu thùng; nhập khẩu dầu thô tăng lên 6,4 triệu thùng/ngày.",
+      "link": "https://www.eia.gov/petroleum/supply/weekly/archive/2026/2026_10_28/wpsr_2026_10_28.php",
+      "source": "EIA",
+      "published_at": "2026-10-28T14:30:00Z",
+      "impact_score": 0,
+      "direction": "uncertain"
+    },
+    {
+      "title": "Weekly Petroleum Status Report (week ending October 16, 2026)",
+      "summary": "Tuần kết thúc 16/10, tồn kho dầu thô thương mại Mỹ giảm 3,1 triệu thùng xuống 412,5 triệu thùng và tồn kho xăng giảm 3,0 triệu thùng, trong khi nhiên liệu chưng cất tăng 1,7 triệu thùng. Tổng tồn kho xăng dầu thương mại giảm 8,5 triệu thùng trong tuần.",
+      "link": "https://www.eia.gov/petroleum/supply/weekly/archive/2026/2026_10_21/wpsr_2026_10_21.php",
+      "source": "EIA",
+      "published_at": "2026-10-21T14:30:00Z",
+      "impact_score": 0,
+      "direction": "uncertain"
+    },
+    {
+      "title": "Minutes of the Federal Open Market Committee, September 15-16, 2026",
+      "summary": "Biên bản kỳ họp 15–16/9 cho thấy mọi thành viên ủng hộ đợt tăng 0,25 điểm % lên 3,75–4,00% và đa số cho rằng nhiều khả năng cần tăng thêm một lần trước cuối năm. Các thành viên lo giá năng lượng cao kéo dài có thể lan sang mặt bằng giá chung.",
+      "link": "https://www.federalreserve.gov/monetarypolicy/fomcminutes20260916.htm",
+      "source": "Federal Reserve",
+      "published_at": "2026-10-07T18:00:00Z",
+      "impact_score": 2,
+      "direction": "bearish"
+    }
+  ]
+}
