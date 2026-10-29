@@ -138,6 +138,10 @@ BRANCH_ALLOWED_NUMBERS = {"simple": (20,), "complex": (0,)}
 # Kiểm tra nhãn khoảng 80% (Khải 25/10: gắn sai nhãn thì trượt tự động): đoạn có các cụm này mà
 # chứa số khớp q05/q25/q75/q95 (và không khớp q10/q90) là gắn sai nhãn.
 INTERVAL_LABEL_TRIGGERS = ("80%", "khoảng dự báo", "khoảng tin cậy")
+# Số width_80_* của tool v2 chỉ được coi là hợp lệ trên đoạn có các từ này (Khải review PR #38):
+# width có thể trùng |q05| hay |q95| của tài sản, kỳ hạn khác (WTI h4 width_80_price 7,92 = |q05|
+# Brent h6), nên nhận width ở mọi đoạn thì có thể bỏ sót lỗi gắn nhãn.
+INTERVAL_WIDTH_WORDS = ("rộng",)
 VIETNAMESE_MIN_WORD_RATIO = 0.3  # tỷ lệ từ có dấu tiếng Việt tối thiểu
 METAL_PRICE_REL_TOL = 0.002  # vàng/bạc: số lệch ≤ 0,2% so với last_price/prices coi là nêu giá
 
