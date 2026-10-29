@@ -10,7 +10,7 @@
 
 ## Kết luận
 
-**Chưa đạt.** Nova trả đầu ra hợp lệ cho cả 52 case, đạt ngưỡng relevant và sai số impact, nhưng trượt bốn tiêu chí: event_type (88,5%), direction (52,4%), nhóm A (trượt F07, E28, E32) và case đặc biệt (trượt X01). Duyệt tay 10 ô evidence đang chờ Khải chấm; kết quả duyệt tay không đổi được kết luận này.
+**Chưa đạt.** Nova trả đầu ra hợp lệ cho cả 52 case, đạt ngưỡng relevant và sai số impact, nhưng trượt bốn tiêu chí: event_type (88,5%), direction (52,4%), nhóm A (trượt F07, E28, E32) và case đặc biệt (trượt X01). Duyệt tay evidence cũng trượt: **2/10 ô đạt** (ngưỡng ≥ 8/10; v2: 4/10), Khải chấm ngày 29/10/2026.
 
 So với v2, các lỗi v3 nhắm vào đã được sửa: Nova bỏ qua cả hai câu lệnh nhúng và ghi vào `notes` (X01, X02); tóm tắt rỗng cho đúng `0/uncertain/low` (X03); quyết định cắt hoặc tăng lãi suất cho đúng hướng vàng, bạc (F06, F07, F14, X01); không còn mâu thuẫn evidence với impact 0. Hai lỗi mới nổi lên trên tin thật: **gán tác động cho dầu từ tin Fed** (20 ô, làm trượt F07 và X01) và **hướng vàng, bạc ở các tin giữ nguyên lãi suất, biên bản, bài phát biểu** (đúng 20/40 ô, chủ yếu tự gán `bullish`).
 
@@ -31,7 +31,7 @@ Ngưỡng lấy từ trường `thresholds` và `manual_review` trong bộ case 
 | \|impact lệch\| ≤ 1 | 206/208 (99,0%) | ≥ 90% | ✅ | 93,3% |
 | confidence khớp | 56/208 (26,9%) | Chỉ báo cáo | — | 52,5% |
 | Hướng vàng, bạc ở tin `monetary_policy`/`macro_data` | 20/40 (50,0%) | Chỉ báo cáo | — | — |
-| Evidence duyệt tay | Chờ Khải chấm | ≥ 8/10 | ⏳ | 4/10 |
+| Evidence duyệt tay | 2/10 | ≥ 8/10 | ❌ | 4/10 |
 
 Vận hành: 54 lần gọi cho 52 case. Hai case phải gọi lại một lần (F15, F24, xem mục "Gọi lại"), cả hai hợp lệ ở lần thứ hai. Mọi lần gọi kết thúc bằng `stopReason = tool_use`, không lần nào bị cắt do `max_tokens`, không có lỗi API.
 
@@ -131,18 +131,20 @@ Bảng để điền: [`manual_review.csv`](results/news-labeling-v3-2026-10-29/
 
 | # | Case | Ô | Nova | Evidence của Nova | Ghi chú sơ bộ | Kết quả duyệt tay |
 |---|---|---|---|---|---|---|
-| 1 | E09 | brent | `2/bearish` | Tồn kho dầu thô thương mại tăng nhẹ, có thể gây áp lực giảm giá dầu thô Brent. | Bám nội dung, khớp hướng, không thêm dữ kiện; nhãn khác đáp án `1/mixed` vì bỏ xăng, chưng cất giảm. | |
-| 2 | E23 | brent | `1/bullish` | EIA dự báo giá Brent 55 USD trong quý 1/2026 | Con số có trong bài, nhưng dự báo rồi đi ngang không ủng hộ `bullish`. | |
-| 3 | F06 | gold | `1/bullish` | Giảm lãi suất có thể làm tăng nhu cầu trú ẩn vào vàng | Thêm cơ chế "nhu cầu trú ẩn" bài không nêu; hướng khớp. | |
-| 4 | F07 | silver | `2/bullish` | Giảm lãi suất chính sách cũng có thể hỗ trợ giá bạc, dù mức độ ảnh hưởng có thể thấp hơn vàng. | Bám việc giảm lãi suất, khớp hướng; vế "thấp hơn vàng" bài không nêu. | |
-| 5 | F09 | gold | `1/bullish` | Giữ nguyên lãi suất có thể tạo áp lực giảm lãi suất trong tương lai, hỗ trợ giá vàng | Hướng khớp; không nêu tín hiệu thật (hai phiếu muốn giảm), câu "giữ nguyên tạo áp lực giảm" bài không nói. | |
-| 6 | F12 | wti | `1/bearish` | FOMC nhấn mạnh lạm phát cao do cú sốc cung năng lượng, có thể duy trì áp lực giảm giá dầu thô | Bài không nêu tác động lên giá dầu; "áp lực giảm giá dầu" là suy luận thêm. | |
-| 7 | F23 | silver | `2/bullish` | Các yếu tố tương tự như vàng, rủi ro hai phía có thể dẫn đến giảm lãi suất, hỗ trợ giá bạc | Bài không nêu hướng điều chỉnh; "dẫn đến giảm lãi suất" là thêm. | |
-| 8 | F24 | brent | `1/bullish` | Giảm lãi suất có thể làm tăng chi tiêu tiêu dùng và đầu tư, từ đó thúc đẩy nhu cầu năng lượng và giá dầu | Cơ chế chi tiêu, nhu cầu năng lượng không có trong bài. | |
-| 9 | F25 | brent | `1/bearish` | dự báo kinh tế chậm lại có thể giảm nhu cầu dầu thô | Bài nêu kinh tế chậm lại, không nhắc nhu cầu dầu. | |
-| 10 | X02 | wti | `2/bullish` | Tồn kho dầu thô thương mại giảm mạnh 11,5 triệu thùng | Bám nội dung, khớp hướng, không thêm dữ kiện. | |
+| 1 | E09 | brent | `2/bearish` | Tồn kho dầu thô thương mại tăng nhẹ, có thể gây áp lực giảm giá dầu thô Brent. | Bám nội dung, khớp hướng, không thêm dữ kiện; nhãn khác đáp án `1/mixed` vì bỏ xăng, chưng cất giảm. | Đạt |
+| 2 | E23 | brent | `1/bullish` | EIA dự báo giá Brent 55 USD trong quý 1/2026 | Con số có trong bài, nhưng dự báo rồi đi ngang không ủng hộ `bullish`. | Không đạt (tc2): dự báo đi ngang không ủng hộ `bullish`. |
+| 3 | F06 | gold | `1/bullish` | Giảm lãi suất có thể làm tăng nhu cầu trú ẩn vào vàng | Thêm cơ chế "nhu cầu trú ẩn" bài không nêu; hướng khớp. | Không đạt (tc3): thêm "nhu cầu trú ẩn". |
+| 4 | F07 | silver | `2/bullish` | Giảm lãi suất chính sách cũng có thể hỗ trợ giá bạc, dù mức độ ảnh hưởng có thể thấp hơn vàng. | Bám việc giảm lãi suất, khớp hướng; vế "thấp hơn vàng" bài không nêu. | Không đạt, giáp ranh (tc3): so sánh "thấp hơn vàng" bài không nêu. |
+| 5 | F09 | gold | `1/bullish` | Giữ nguyên lãi suất có thể tạo áp lực giảm lãi suất trong tương lai, hỗ trợ giá vàng | Hướng khớp; không nêu tín hiệu thật (hai phiếu muốn giảm), câu "giữ nguyên tạo áp lực giảm" bài không nói. | Không đạt (tc1, tc3): bài không nói giữ lãi suất tạo áp lực giảm; bỏ tín hiệu Miran, Waller. |
+| 6 | F12 | wti | `1/bearish` | FOMC nhấn mạnh lạm phát cao do cú sốc cung năng lượng, có thể duy trì áp lực giảm giá dầu thô | Bài không nêu tác động lên giá dầu; "áp lực giảm giá dầu" là suy luận thêm. | Không đạt (tc2, tc3): suy luận cú sốc cung dẫn tới giá dầu giảm, thêm và ngược logic. |
+| 7 | F23 | silver | `2/bullish` | Các yếu tố tương tự như vàng, rủi ro hai phía có thể dẫn đến giảm lãi suất, hỗ trợ giá bạc | Bài không nêu hướng điều chỉnh; "dẫn đến giảm lãi suất" là thêm. | Không đạt (tc3): thêm hướng "giảm lãi suất". |
+| 8 | F24 | brent | `1/bullish` | Giảm lãi suất có thể làm tăng chi tiêu tiêu dùng và đầu tư, từ đó thúc đẩy nhu cầu năng lượng và giá dầu | Cơ chế chi tiêu, nhu cầu năng lượng không có trong bài. | Không đạt (tc1, tc3): thêm chi tiêu tiêu dùng, nhu cầu năng lượng. |
+| 9 | F25 | brent | `1/bearish` | dự báo kinh tế chậm lại có thể giảm nhu cầu dầu thô | Bài nêu kinh tế chậm lại, không nhắc nhu cầu dầu. | Không đạt (tc3): thêm "giảm nhu cầu dầu". |
+| 10 | X02 | wti | `2/bullish` | Tồn kho dầu thô thương mại giảm mạnh 11,5 triệu thùng | Bám nội dung, khớp hướng, không thêm dữ kiện. | Đạt |
 
-**Kết quả: chờ Khải chấm** (ngưỡng ≥ 8/10; v2: 4/10). Người duyệt: Trịnh Tiến Khải. Ngày: …
+**Kết quả: 2/10 ô evidence đạt** (E09, X02; ngưỡng ≥ 8/10; v2: 4/10). Người duyệt: Trịnh Tiến Khải. Ngày: 29/10/2026. Chi tiết từng tiêu chí và ghi chú của Khải trong `manual_review.csv`.
+
+Theo nhận xét của Khải: 7/8 ô trượt do tự thêm cơ chế kinh tế mà bài không nêu, giống lỗi chính của v2. Khải cũng kiểm độc lập: SHA-256 bộ case và prompt khớp bản khóa trên `developer`; tính lại từ `raw.jsonl` ra đúng event_type 46/52, direction 43/82, impact 206/208, relevant 49/52.
 
 4/10 ô trong mẫu (E23, F12, F24, F25) là ô đáp án `0` mà Nova gán `1`, tức thuộc hai nhóm lỗi "dầu từ tin Fed" và "dự báo không có so sánh" ở trên.
 
@@ -164,18 +166,20 @@ Chi phí tính theo giá trong cấu hình: 0,30 USD / 1 triệu token vào và 
 - Tóm tắt tiếng Việt do nhóm tự viết. Khi chạy thật trên dữ liệu collector, định dạng tóm tắt có thể khác (Phước chốt với Tuấn); kết quả trên bộ này có thể không phản ánh đúng lúc chạy thật.
 - Bộ case chỉ có Fed và EIA, không có tin OPEC/OPEC+, IEA hay tin kim loại quý. Nhiều statement FOMC cùng mẫu văn.
 - Một số quy ước chấm nằm trong plan, không nằm trong prompt: confidence `high` cho ô rõ ràng không liên quan; statement giữ nguyên không tín hiệu là `1/uncertain`; dự báo giá đi ngang là `0`. Tỷ lệ confidence và một phần ô direction phản ánh độ lệch giữa quy ước này và cách Nova đọc prompt. Một vài ô có thể có cách hiểu khác, ví dụ E30 (lộ trình giá giảm dần trong khi gián đoạn còn tiếp diễn), E28 và E32 (STEO có nguyên nhân địa chính trị). Theo quy định, đáp án không sửa sau khi xem kết quả.
+- F26 là một trong 6 lỗi event_type: Khải đổi đáp án từ `monetary_policy` thành `other` ngày 28/10, Nova trả `monetary_policy`. Nếu giữ đáp án cũ thì event_type là 47/52 = 90,4%, đạt ngưỡng. Kết luận không đổi vì direction (52,4%), nhóm A và X01 vẫn trượt; đáp án không sửa sau khi xem kết quả.
 - Không dùng Guardrail; kết quả X01, X02 chỉ phản ánh khả năng chống prompt injection của bản thân prompt và model.
 - Kết quả chỉ phản ánh cấu hình này (Nova 2 Lite, `labeling-v3`, `temperature` 0, global inference profile).
 
 ## Việc tiếp theo
 
-1. Khải duyệt tay 10 ô evidence trong `manual_review.csv` và điền kết quả vào bảng trên.
-2. Giữ nguyên `labeling-v3` và `real-1`. Việc có làm bản prompt tiếp theo hay không, và làm theo hướng nào, do Khải quyết. Các nhóm lỗi để tham khảo:
+1. Duyệt tay 10 ô evidence: đã xong (Khải, 29/10/2026), 2/10 đạt.
+2. Hướng tiếp theo chốt ở họp 30/10/2026.
+3. Giữ nguyên `labeling-v3` và `real-1`. Việc có làm bản prompt tiếp theo hay không, và làm theo hướng nào, do Khải quyết. Các nhóm lỗi để tham khảo:
    - dầu ở tin Fed: Nova vẫn suy tác động qua "nhu cầu tiêu dùng" và vẫn gán `1` khi tự ghi "không rõ ràng";
    - hướng vàng, bạc khi giữ nguyên lãi suất, ở biên bản và bài phát biểu; evidence mâu thuẫn hướng (F15, F27);
    - WPSR và dự báo EIA có yếu tố trái chiều bị quy về một chiều; dự báo giá không có so sánh bị coi là tín hiệu tăng;
    - `event_type` của STEO có nguyên nhân địa chính trị; tin hành chính, nhân sự bị coi là liên quan.
-3. Ảnh hưởng tới sản phẩm, nếu dùng nhãn v3 ngay: `get_news(min_impact >= 1)` cho dầu sẽ trả cả thông cáo Fed (Nova gán dầu `1` ở 10/26 case Fed), và hướng vàng, bạc ở tin Fed không phải quyết định cắt, tăng chỉ đúng một nửa. Lọc `min_impact >= 2` loại được các ô dầu ở tin Fed (đều mức 1), nhưng không sửa được lỗi hướng vàng, bạc (F11, F15, F23, F25 có ô mức 2 sai hướng).
+4. Ảnh hưởng tới sản phẩm, nếu dùng nhãn v3 ngay: `get_news(min_impact >= 1)` cho dầu sẽ trả cả thông cáo Fed (Nova gán dầu `1` ở 10/26 case Fed), và hướng vàng, bạc ở tin Fed không phải quyết định cắt, tăng chỉ đúng một nửa. Lọc `min_impact >= 2` loại được các ô dầu ở tin Fed (đều mức 1), nhưng không sửa được lỗi hướng vàng, bạc (F11, F15, F23, F25 có ô mức 2 sai hướng).
 
 Tái lập (chỉ khi có quyết định chạy lại; script từ chối ghi đè kết quả đã có):
 
