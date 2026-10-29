@@ -1,168 +1,247 @@
-# Fed/EIA NewsLabels Collector ? Implementation Plan
+# Fed/EIA NewsLabels Collector — Implementation Plan
 
-- Tr?ng th?i: k? ho?ch tri?n khai; ch?a ph?i collector production.
-- H?n ho?n thi?n PR t?i li?u: tr??c 30/10/2026.
-- M?c m?c ti?u: code collector 03/11/2026; d? li?u t?ch h?p 05/11/2026; JSON fallback s?n s?ng cho demo 08/11/2026.
-- Ph?m vi PR: t?i li?u k? ho?ch v? c?p nh?t contract li?n quan. Kh?ng deploy AWS trong PR n?y.
 
-## 1. M?c ti?u
 
-X?y d?ng collector thu th?p tin ch?nh th?c t? Federal Reserve v? U.S. Energy Information Administration (EIA), chu?n h?a metadata, t?o summary ng?n, g?n nh?n t?c ??ng l?n gold, silver, brent v? wti, sau ?? ghi d? li?u v?o `NewsLabels` ?? chatbot CPAWS truy v?n.
+## 1. Mục tiêu
 
-Collector ph?i c? l?ch ch?y, x? l? retry c? gi?i h?n, idempotency, logging, alarm v? ph??ng ?n JSON fallback cho demo. Kh?ng ???c coi n?i dung b?i b?o l? ch? th? cho model.
 
-## 2. Ngu?n d? li?u v? l?ch c?ng b?
 
-### 2.1 Federal Reserve ? FOMC
+Lập kế hoạch xây dựng collector thu thập tin tức từ nguồn chính thức của Federal Reserve và U.S. Energy Information Administration (EIA), chuẩn hóa metadata, tạo nhãn tác động lên bốn tài sản và ghi kết quả vào bảng `NewsLabels` để chatbot CPAWS sử dụng.
 
-- L?ch h?p, statements v? minutes: https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm
-- Th?ng c?o ch?nh th?c: https://www.federalreserve.gov/newsevents/pressreleases.htm
-- L?y l?ch th?c t? t? trang ch?nh th?c; kh?ng hard-code ng?y h?p t??ng lai n?u l?ch c? th? thay ??i.
-- Statements th??ng ???c c?ng b? l?c 2:00 PM gi? mi?n ??ng Hoa K? v?o ng?y quy?t ??nh ch?nh s?ch; h?p b?o th??ng b?t ??u l?c 2:30 PM ET. ??y l? l?ch tham kh?o, ph?i x?c minh t?ng s? ki?n.
-- L?p k? ho?ch backfill cho s? ki?n FOMC ng?y 28/10/2026, ki?m tra ngu?n th?c t? tr??c khi n?p v? kh?ng t? t?o b?i n?u ngu?n ch?a c? n?i dung.
-- Tu?n th? ?i?u kho?n s? d?ng c?a ngu?n; ch? l?u metadata, link v? summary ng?n c?n thi?t.
 
-### 2.2 EIA ? Weekly Petroleum Status Report (WPSR)
 
-- Trang b?o c?o tu?n: https://www.eia.gov/petroleum/supply/weekly/
-- L?ch c?ng b? ch?nh th?c: https://www.eia.gov/petroleum/supply/weekly/schedule.php
-- B?o c?o th??ng c?ng b? th? T? l?c 10:30 AM Eastern Time; ng?y l? c? th? l?m l?ch thay ??i. Lu?n x?c minh l?ch ngu?n thay v? gi? ??nh ng?y c? ??nh.
-- Collector c?n x? l? tr??ng h?p ch?a ph?t h?nh, l?ch d?i, l?i HTTP v? d? li?u ch?a c?p nh?t.
+**Phạm vi PR này chỉ là tài liệu kế hoạch.** Không triển khai collector, thay đổi hạ tầng hoặc deploy AWS trong PR này.
 
-### 2.3 EIA ? Today in Energy
 
-- Trang b?i vi?t: https://www.eia.gov/todayinenergy/
-- ??y l? ngu?n b?i vi?t, kh?ng m?c ??nh c? m?t gi? ph?t h?nh c? ??nh. Poll theo l?ch c?u h?nh v? d?a v?o metadata th?i gian c?a b?i.
-- Kh?ng ???c g?n gi? c?ng b? gi? cho b?i vi?t n?u ngu?n kh?ng cung c?p.
 
-### 2.4 M?i gi?
+## 2. Phạm vi nguồn dữ liệu
 
-- Scheduler d?ng `ScheduleExpressionTimezone=America/New_York`.
-- L?u th?i ?i?m chu?n h?a `published_at` theo UTC ISO 8601 d?ng `YYYY-MM-DDTHH:MM:SSZ`.
-- Khi hi?n th? ho?c ki?m tra l?ch ngu?n, gi? kh? n?ng truy nguy?n th?i gian g?c v? m?i gi? ngu?n.
-- C? ki?m th? qua c?c th?i ?i?m chuy?n DST, ng?y ngh? v? l?ch ph?t h?nh b? d?i.
 
-## 3. Ph?m vi v? lu?ng x? l?
 
-1. Trigger theo l?ch ho?c ch?y backfill c? ch? ??nh kho?ng th?i gian.
-2. L?y danh s?ch b?i t? c?c URL ngu?n ?? c?u h?nh.
-3. Chu?n h?a URL, ti?u ??, ngu?n, th?i gian c?ng b? v? ??nh danh b?i.
-4. Ki?m tra d? li?u b?t bu?c; b? qua b?n ghi kh?ng c? URL HTTP(S) h?p l? ho?c kh?ng ?? metadata.
-5. L?y ph?n n?i dung ???c ph?p s? d?ng ?? t?o summary ng?n; kh?ng l?u to?n v?n b?i b?o.
-6. G?i title v? summary cho b??c g?n nh?n theo `docs/prompts/news-labeling-v2.md` v? schema hi?n h?nh.
-7. Validate k?t qu? theo `docs/prompts/news-labeling-schema.json`; kh?ng tin JSON tr? v? cho ??n khi validate xong.
-8. Ghi item v?o `NewsLabels` b?ng conditional `PutItem`.
-9. Ghi log s? b?i ??c ???c, h?p l?, b? b? qua, tr?ng, g?n nh?n th?nh c?ng v? l?i.
-10. Ph?t metric/alarm khi th?t b?i theo ng??ng c?u h?nh.
+- **Federal Reserve:** FOMC statements và thông báo chính thức liên quan đến chính sách tiền tệ.
 
-Summary v? labeling l? hai tr?ch nhi?m c?n ph?n bi?t. Tr??c khi code, ph?i h?p v?i Ph??c x?c nh?n b??c t?o summary: d?ng b??c/model ri?ng hay pipeline ?? c?. Kh?ng t? gi? ??nh prompt labeling hi?n t?i t? t?o summary n?u contract/prompt kh?ng n?i nh? v?y.
+- **EIA:** Weekly Petroleum Status Report (WPSR) và Today in Energy.
 
-## 4. H?p ??ng d? li?u
 
-B?ng `NewsLabels` d?ng:
 
-- Partition key `asset` (S): `gold`, `silver`, `brent`, `wti`.
-- Sort key `sk` (S): `<published_at>#<article_id>`.
-- M?t b?i li?n quan nhi?u t?i s?n th? ghi m?i t?i s?n m?t item, c?ng `article_id`.
-- `article_id` ph?i ?n ??nh cho c?ng m?t URL, v? d? 16 k? t? hex ??u c?a SHA-256 c?a URL canonical ?? chu?n h?a.
-- B?y tr??ng b?t bu?c: `title`, `summary`, `link`, `source`, `published_at`, `impact_score`, `direction`.
-- `published_at` ph?i l? UTC ISO 8601 `YYYY-MM-DDTHH:MM:SSZ`, kh?ng c? ph?n l? gi?y; ph?n tr??c `#` c?a `sk` ph?i tr?ng gi? tr? n?y.
-- `impact_score` l?u DynamoDB Number, s? nguy?n 0?3.
-- `direction` ch? nh?n `bullish`, `bearish`, `mixed`, `uncertain`.
-- `title` t?i ?a 300 k? t?; `summary` t?i ?a 600 k? t?, 1?3 c?u.
-- `link` ph?i l? URL `https://` ho?c `http://`.
-- Kh?ng l?u to?n v?n ho?c ?o?n tr?ch d?i; chatbot ph?i d?n ng??i ??c t?i ngu?n g?c qua link.
-- JSON fallback ph?i tu?n th? c?ng schema v? ki?u d? li?u nh? DynamoDB.
+Trước khi đưa nội dung vào pipeline gán nhãn, cần kiểm tra điều khoản sử dụng, quyền lưu trữ và quyền gửi nội dung cho dịch vụ AI bên thứ ba. Chỉ sử dụng nội dung trong phạm vi được phép.
 
-M?i thay ??i schema ph?i ???c ??i chi?u v?i `docs/api/contract.md` v? c?c prompt/schema hi?n h?nh tr??c khi tri?n khai.
 
-## 5. B?o m?t v? ch?ng prompt injection
 
-- N?i dung b?i b?o, ti?u ??, metadata v? summary l? d? li?u kh?ng ??ng tin c?y; kh?ng ph?i system instruction.
-- Kh?ng th?c thi, l?m theo ho?c chuy?n ti?p ch? th? nh?ng trong b?i b?o nh? ?ignore previous instructions?, y?u c?u l? secret, g?i tool ho?c thay ??i ch?nh s?ch.
-- System/developer instruction c?a pipeline ph?i t?ch bi?t v?i n?i dung ngu?n.
-- Ch? truy?n c?c tr??ng c?n thi?t (title, summary v? metadata ???c ch?n) cho model; kh?ng truy?n credential, token, bi?n m?i tr??ng ho?c th?ng tin n?i b?.
-- Validate schema, enum, ?? d?i v? ki?u d? li?u sau ph?n h?i model. JSON sai ph?i ???c x? l? nh? l?i labeling, kh?ng ghi th?ng v?o b?ng.
-- Gi?i h?n quy?n IAM theo nguy?n t?c least privilege; secret kh?ng ???c ghi v?o log.
-- Ki?m th? c?c m?u prompt injection tr?c ti?p v? gi?n ti?p trong title/summary.
+Không đưa toàn bộ bài viết vào DynamoDB. Chỉ lưu tiêu đề, đường dẫn và bản tóm tắt ngắn do nhóm tạo hoặc bước labeling tạo ra. Lưu bản nguồn trên S3 chỉ khi quyền sử dụng và lưu trữ đã được xác nhận.
 
-## 6. Idempotency v? x? l? b?n ghi tr?ng
 
-??y l? quy?t ??nh ?? ch?t theo RFC #44, kh?ng ph?i m?c ?ang ch? xem x?t.
 
-- Ghi b?ng DynamoDB `PutItem` c? ?i?u ki?n:
-  `attribute_not_exists(asset) AND attribute_not_exists(sk)`.
-- Kh?ng d?ng unconditional overwrite cho ???ng ghi collector.
-- Khi ?i?u ki?n th?t b?i do kh?a ?? t?n t?i, coi l? duplicate v? ghi metric/log; kh?ng xem ??y l? l?i collector c?n retry li?n t?c.
-- `asset` v? `sk` c?ng x?c ??nh item. `article_id` ph?i ?n ??nh ?? c?ng m?t b?i t?o ra c?ng kh?a cho c?ng asset.
-- N?u b?i ngu?n ???c c?p nh?t sau l?n ghi ??u ti?n, kh?ng t? ghi ?? item ?? c?. Ch?nh s?ch c?p nh?t/phi?n b?n h?a c?n ???c thi?t k? ri?ng v? review tr??c khi tri?n khai.
-- Backfill ph?i ?i qua c?ng c? ch? idempotency nh? l?ch ch?y th??ng ng?y.
+## 3. Luồng xử lý dự kiến
 
-## 7. Ki?n tr?c AWS d? ki?n
 
-- T?o stack ri?ng cho collector, t?ch bi?t v?i stack serving/API v? c?c stack hi?n c?.
-- D?ng EventBridge Scheduler v?i `ScheduleExpressionTimezone=America/New_York`; l?ch c? th? c?u h?nh ri?ng cho t?ng lo?i ngu?n n?u c?n.
-- Collector ch?y trong Lambda ho?c compute target ???c th?ng nh?t trong CDK design; kh?ng t?o t?i nguy?n tr?c ti?p ngo?i quy tr?nh CDK.
-- Lambda ch? c? quy?n ??c c?u h?nh/secret c?n thi?t v? ghi v?o ??ng b?ng `NewsLabels`; kh?ng c?p quy?n r?ng kh?ng li?n quan.
-- D?ng CloudWatch logs/metrics v? CloudWatch Alarm g?i qua SNS cho l?i li?n t?c, t? l? l?i v??t ng??ng ho?c thi?u d? li?u theo ti?u ch? ???c th?ng nh?t.
-- Alarm ph?i c? h??ng d?n h?nh ??ng: ki?m tra ngu?n, quy?n IAM, Bedrock throttling, l?i schema v? tr?ng th?i DynamoDB.
-- C? th? ch?y backfill th? c?ng v?i kho?ng th?i gian t??ng minh; backfill kh?ng ???c bypass validate ho?c idempotency.
-- Tr??c khi deploy, review CDK diff, IAM diff, l?ch ch?y v? ??c t?nh chi ph?.
 
-## 8. Retry, l?i v? ph??ng ?n JSON fallback
+1. Thu thập các thông báo mới từ nguồn chính thức.
 
-- Retry l?i t?m th?i nh? HTTP 429/5xx, timeout v? Bedrock throttling b?ng exponential backoff c? jitter v? gi?i h?n s? l?n.
-- Kh?ng retry v? h?n l?i d? li?u kh?ng h?p l?, URL sai, schema sai ho?c duplicate condition.
-- T?ch lo?i l?i ngu?n, summary, Bedrock labeling, validation v? DynamoDB trong log/metric.
-- Kh?ng log to?n v?n b?i b?o, credential ho?c payload nh?y c?m.
-- N?u ngu?n kh?ng truy c?p ???c ho?c labeling th?t b?i, kh?ng ghi item thi?u tr??ng b?t bu?c.
-- JSON fallback cho demo 08/11 ph?i l? d? li?u m?u ?? validate, ??nh d?u r? l? sample/fallback, kh?ng tr?nh b?y nh? d? li?u live.
-- JSON v? DynamoDB ph?i d?ng chung b?y tr??ng, c?ng ki?u d? li?u v? c?ng enum.
-- C? h??ng d?n chuy?n l?i ngu?n DynamoDB/collector th?t sau demo; kh?ng ?? fallback che gi?u l?i production.
+2. Chuẩn hóa URL, tiêu đề, thời điểm xuất bản và thông tin nguồn.
 
-## 9. ??c t?nh chi ph? Bedrock theo th?ng
+3. Kiểm tra dữ liệu bắt buộc; loại bỏ URL không hợp lệ hoặc timestamp không thể chuẩn hóa đáng tin cậy.
 
-Kh?ng ch?t m?t con s? khi ch?a x?c nh?n model, inference profile v? gi? hi?n h?nh ? region tri?n khai.
+4. Tạo bản tóm tắt ngắn, tối đa 600 ký tự.
 
-D?ng c?ng th?c:
+5. Kiểm tra quyền sử dụng trước khi gửi tiêu đề và bản tóm tắt sang bước labeling.
 
-`Chi ph? labeling/th?ng = s? b?i/th?ng ? (input_tokens/b?i ? gi?_input/1M + output_tokens/b?i ? gi?_output/1M)`
+6. Gọi labeling prompt đã được phê duyệt; xác thực kết quả theo JSON Schema hiện hành.
 
-C?ng th?m chi ph? retry, summary n?u d?ng model ri?ng, Lambda, EventBridge Scheduler, CloudWatch Logs/Alarms, SNS, DynamoDB v? l?u tr? li?n quan.
+7. Chuyển kết quả hợp lệ thành một bản ghi cho mỗi tài sản liên quan.
 
-B?ng benchmark c?n ghi:
+8. Ghi vào `NewsLabels` theo chính sách idempotency đã được nhóm thống nhất.
 
-- S? b?i trung b?nh/ng?y v? s? ng?y ch?y/th?ng.
-- T? l? b?i b? lo?i, duplicate v? ph?i retry.
-- Model/inference profile v? AWS region th?c t?.
-- Input/output token trung b?nh tr?n m?t b?i ?o t? d? li?u th? nghi?m.
-- Gi? input/output l?y t? trang gi? Bedrock ch?nh th?c t?i th?i ?i?m l?p estimate.
-- Chi ph? th?p/trung b?nh/cao v?i gi? ??nh ???c n?u r?.
+9. Ghi log số lượng bản ghi thu thập, hợp lệ, bị loại, labeling thất bại và ghi DynamoDB thất bại.
 
-Kh?ng d?ng gi? c?a model kh?c thay cho model ?ang c?u h?nh. Ch?y benchmark tr?n m?u b?i Fed/EIA th?c t? v? ghi l?i s? li?u tr??c khi ?? xu?t ng?n s?ch.
 
-## 10. M?c tri?n khai v? tr?ch nhi?m
 
-| H?n | K?t qu? c?n c? |
+Tần suất chạy, cơ chế retry và lịch chạy production sẽ được chốt trong PR triển khai.
+
+
+
+## 4. Hợp đồng dữ liệu
+
+
+
+Tuân thủ `docs/api/contract.md`. Bảng `NewsLabels` hiện có partition key `asset` và sort key `sk`.
+
+
+
+Bốn giá trị `asset` hợp lệ:
+
+
+
+- `gold`
+
+- `silver`
+
+- `brent`
+
+- `wti`
+
+
+
+`sk` có định dạng:
+
+
+
+`<published_at>#<article_id>`
+
+
+
+Ví dụ: `2026-10-13T10:45:00Z#3f9a1c0b7e2d4a61`
+
+
+
+Mỗi bản ghi phải có đủ bảy trường:
+
+
+
+| Trường | Quy tắc |
+
 |---|---|
-| Tr??c 30/10/2026 | Ho?n thi?n PR k? ho?ch, URL ngu?n, l?ch, idempotency, ki?n tr?c, b?o m?t, chi ph? v? contract; ???c review |
-| 31/10/2026 | Ch?t thi?t k? ngu?n, l?ch, summary/labeling v? test plan v?i c?c th?nh vi?n li?n quan |
-| 03/11/2026 | Ho?n th?nh code collector MVP v? stack ri?ng; c? ki?m th? ??n v? |
-| 05/11/2026 | C? d? li?u Fed/EIA ?? validate ?? ki?m th?/t?ch h?p; th?c hi?n backfill FOMC 28/10 theo d? li?u ngu?n c? th?t |
-| 06?07/11/2026 | Ki?m th? idempotency, prompt injection, retry, alarm SNS, schema v? chi ph? |
-| 08/11/2026 | JSON fallback ?? validate v? s?n s?ng cho demo; ghi r? sample n?u collector th?t ch?a s?n s?ng |
 
-Ph?i h?p v?i Ph??c ?? x?c nh?n c?ch t?o summary; ph?i h?p v?i Ti?n ?? review stack, timezone, IAM, alarm v? l?ch tri?n khai. X?c minh ?? c? b?y ?i?m Ti?n ?? y?u c?u tr??c khi coi k? ho?ch ho?n t?t.
+| `title` | Chuỗi, tối đa 300 ký tự |
 
-## 11. Ti?u ch? ho?n th?nh
+| `summary` | Chuỗi, 1–3 câu, tối đa 600 ký tự |
 
-- [ ] Ba ngu?n ch?nh th?c c? URL v? quy t?c l?ch/m?i gi?.
-- [ ] C? x? l? ng?y ngh?, l?ch ??i v? backfill FOMC 28/10.
-- [ ] Conditional `PutItem` v?i `attribute_not_exists(...)` theo RFC #44; kh?ng c?n tr?ng th?i ?xem x?t?.
-- [ ] Stack collector ri?ng, Scheduler theo `America/New_York`, alarm SNS v? IAM least privilege.
-- [ ] C? bi?n ph?p ch?ng prompt injection v? validate k?t qu? model.
-- [ ] Contract th?ng nh?t v? kh?a, tr??ng, ki?u d? li?u v? duplicate policy.
-- [ ] C? k? ho?ch retry, logging, JSON fallback v? chi ph? Bedrock c? gi? ??nh.
-- [ ] C? test plan cho ngu?n, schema, idempotency, l?i v? backfill.
-- [ ] ?? x?c minh ?? b?y ?i?m c?a Ti?n.
-- [ ] PR ???c review tr??c khi merge; tri?n khai theo quy tr?nh nh?m.
+| `link` | URL HTTP hoặc HTTPS hợp lệ |
+
+| `source` | Tên nguồn, ví dụ `Federal Reserve` hoặc `EIA` |
+
+| `published_at` | UTC theo định dạng `YYYY-MM-DDTHH:MM:SSZ`, không có phần lẻ giây |
+
+| `impact_score` | Số nguyên từ 0 đến 3, không lưu dưới dạng chuỗi |
+
+| `direction` | `bullish`, `bearish`, `mixed` hoặc `uncertain` |
+
+
+
+`published_at` phải trùng với phần timestamp đứng trước dấu `#` trong `sk`.
+
+
+
+Có thể lưu thêm `article_id`, `confidence`, `event_type`, `prompt_version`, `model_id`, `fetched_at` và `labeled_at` theo nhu cầu truy vết.
+
+
+
+Tạo `article_id` ổn định từ URL chuẩn hóa, chẳng hạn 16 ký tự hex đầu của SHA-256. Nếu một bài liên quan đến nhiều tài sản, tạo một bản ghi cho mỗi tài sản với cùng `article_id`.
+
+
+
+## 5. Gán nhãn và kiểm soát chất lượng
+
+
+
+- Dùng `docs/prompts/news-labeling-schema.json` làm schema đầu ra; không nhầm schema đầu ra của model với schema lưu DynamoDB.
+
+- `labeling-v2` là phiên bản hiện có. Chưa coi `labeling-v3` là đã triển khai hoặc được phê duyệt.
+
+- Trước production, rà soát lỗi của v2, thống nhất phiên bản prompt tiếp theo và benchmark trên 50 bản tin Fed/EIA thực tế có nhãn tham chiếu.
+
+- Kiểm tra JSON Schema và các quy tắc prompt trước khi cho phép ghi nhãn.
+
+- Nếu model trả kết quả không hợp lệ sau số lần retry được quy định, đánh dấu thất bại và không sử dụng kết quả đó làm feature dự báo.
+
+- Khi `relevant=false`, cả bốn tài sản phải có `impact_score=0`, `direction=uncertain` và `evidence` rỗng.
+
+- Khi `impact_score=0`, `direction` phải là `uncertain`.
+
+- Không gửi `published_at` hoặc metadata timestamp vào model labeling; ứng dụng quản lý metadata riêng.
+
+- Nhãn phản ánh nhận định của mô hình về nội dung, không khẳng định bài viết gây ra biến động giá.
+
+
+
+## 6. Idempotency và xử lý bản ghi trùng
+
+
+
+Dùng khóa `asset` và `sk` để nhận diện bản ghi. RFC #44 yêu cầu xem xét ghi có điều kiện bằng `attribute_not_exists(...)`.
+
+
+
+Trước khi triển khai, nhóm cần thống nhất chính sách đối với bài đã tồn tại: bỏ qua bản ghi trùng hay cho phép cập nhật khi nội dung, summary hoặc nhãn được sửa. Chính sách này phải tương thích với hợp đồng hiện hành, trong đó cùng khóa có thể được ghi đè khi xử lý lại bài viết.
+
+
+
+Không triển khai hai hành vi mâu thuẫn trong cùng collector. Ghi có điều kiện phải được kiểm thử cho cả lần chạy đầu, lần chạy lặp lại và trường hợp bài viết được sửa.
+
+
+
+## 7. Point-in-time integrity và bảo mật
+
+
+
+- Giữ timestamp gốc và múi giờ nếu cần để truy vết; chuẩn hóa thời điểm lưu trữ sang UTC.
+
+- Chỉ dùng tin có `published_at` không muộn hơn thời điểm chốt dự báo.
+
+- Nếu timestamp thiếu hoặc không đáng tin cậy, không dùng bài đó làm feature theo thời gian nếu chưa có quy tắc xử lý được phê duyệt.
+
+- Collector có quyền ghi tối thiểu cần thiết; chatbot chỉ cần quyền `Query` đọc dữ liệu.
+
+- Không ghi nội dung bài viết đầy đủ hoặc thông tin nhạy cảm vào log.
+
+- Không đưa bí mật AWS hoặc thông tin xác thực vào mã nguồn.
+
+
+
+## 8. Hạ tầng và kiểm thử dự kiến
+
+
+
+- Tận dụng bảng `NewsLabels` và cấu trúc CDK hiện có; không tạo bảng trùng.
+
+- Kiểm tra các helper IAM liên quan trong `infra/stacks/shared.py`.
+
+- Chọn cơ chế schedule phù hợp với hạ tầng CDK hiện tại trong PR triển khai.
+
+- Viết unit test cho chuẩn hóa timestamp, tạo `article_id`, xác thực schema, lọc URL, ánh xạ tài sản và xử lý bản ghi trùng.
+
+- Viết test tích hợp cho ghi DynamoDB có điều kiện và đọc dữ liệu qua hợp đồng `get_news`.
+
+- Dùng fixture đánh dấu rõ là dữ liệu mẫu khi nguồn thật không khả dụng; không trộn dữ liệu mẫu với dữ liệu thật mà không có nhãn phân biệt.
+
+- Kiểm tra không rò rỉ dữ liệu tương lai và bảo đảm tương thích với `docs/api/contract.md`.
+
+
+
+## 9. Các bước triển khai tiếp theo
+
+
+
+1. Xác nhận quyền sử dụng nguồn và phạm vi nội dung được phép lưu/gửi cho AI.
+
+2. Chốt chính sách idempotency và xử lý bài viết được cập nhật.
+
+3. Chốt lịch chạy và cơ chế retry.
+
+4. Hoàn thiện, benchmark và phê duyệt prompt labeling trước production.
+
+5. Triển khai collector và kiểm thử trên môi trường dev.
+
+6. Xác minh bản ghi thực trong `NewsLabels` và khả năng đọc của chatbot.
+
+7. Chỉ triển khai theo quy trình review/merge/deploy của nhóm.
+
+
+
+## 10. Tiêu chí hoàn thành
+
+
+
+- Dữ liệu tuân thủ hợp đồng `NewsLabels` hiện hành.
+
+- Bản ghi hợp lệ có thể được truy vấn theo tài sản và khoảng thời gian.
+
+- Chạy lặp không tạo bản ghi trùng ngoài chính sách đã thống nhất.
+
+- Kết quả labeling sai schema không được ghi như dữ liệu hợp lệ.
+
+- Không dùng thông tin xuất bản sau thời điểm dự báo.
+
+- Quyền truy cập, điều khoản nguồn và chính sách lưu trữ đã được xác nhận.
+
+- Test và review hoàn tất trước khi merge/deploy.
