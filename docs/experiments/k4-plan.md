@@ -114,3 +114,10 @@ Ký hiệu: Q_τ,h = phân vị `baseline-q252` tại t; S_τ,h = phân vị S1a
 - Model Confidence Set (mục 4, chỉ báo cáo): chạy theo từng tài sản; loss của mỗi ngày gốc là pinball trung bình trên 7 h × 7 τ, sample `all`; size 0,10; 1000 lần bootstrap, block 20, seed 7.
 - Ba fold dùng chung một mốc cắt ngày đích là 2018-12-31.
 - Để tính `excl_roll` trên 2016–2018, cửa sổ ngày roll trong `src/eval/walk_forward.py` được tính từ kỳ đánh giá thay vì gắn cứng quanh 2019. Kết quả 2019 không đổi (có test hàm thuần, không đọc dữ liệu 2019).
+
+### 29/10/2026, sau kiểm định chéo, trước khi chạy 2019
+
+- Chẩn đoán trên k4-cv-clean: phần dư chuẩn hóa z dùng để bootstrap không được trừ trung bình (trung vị của mean(z) theo tài sản từ −0,017 đến −0,051), nên FHS mang một độ trôi âm; q50 âm ở khoảng 90% ngày gốc, trái với mục 3 ("trung bình 0, không dự báo hướng").
+- Sửa: ứng viên chạy 2019 là `fhs-gjr-t-dm`, giống `fhs-gjr-t` nhưng bootstrap từ z − mean(z) của cửa sổ fit (không đổi độ lệch chuẩn). Tham số GJR, cửa sổ, lịch refit, số đường và seed giữ nguyên.
+- Đây là sửa đổi sau khi đã xem kết quả kiểm định chéo của bản gốc. `fhs-gjr-t-dm` chạy kiểm định chéo một lần, chỉ để kiểm tra. Quy tắc chốt trước khi xem số: trung bình pinball_skill 28 nhóm của bản dm > 0 thì chạy 2019 cho bản dm một lần, theo tiêu chí mục 5; ≤ 0 thì dừng, không chạy 2019. Không chọn lại giữa FHS và combo.
+- Báo cáo cả `fhs-gjr-t` (kiểm định chéo) và `fhs-gjr-t-dm` (kiểm định chéo và 2019), ghi rõ thứ tự quyết định. Số cấu hình xem trên 2019 vẫn là 1 (tổng 12); kiểm định chéo thêm 1 cấu hình.
