@@ -129,6 +129,50 @@ def test_demeaned_forecasts_reuse_fits_with_centred_residuals(returns):
     assert np.array_equal(q1, q2)
 
 
+def test_forecast_valid_only_with_finite_positive_variance_and_quantiles(returns, monkeypatch):
+    fits, _ = FF.monthly_fits(returns, pd.DatetimeIndex(["2016-01-01"]), "gold")
+    base = calendars.sessions("NYSE", "2016-01-04", "2016-01-11")
+    q0, _, _ = FF.fhs_forecasts(returns, "gold", base, fits)
+    original_path, original_quantiles = FF.variance_path, FF.fhs_quantiles
+    last = returns[returns.index <= base[1]].dropna().index[-1]
+
+    def bad_variance(x, params, backcast):
+        sigma2, nxt = original_path(x, params, backcast)
+        nxt = nxt.copy()
+        seq = returns[(returns.index >= fits[base[0].to_period("M").to_timestamp()].window_start)]
+        nxt[int(np.flatnonzero(seq.dropna().index == last)[0])] = np.nan  # ngày gốc base[1]
+        return sigma2, nxt
+
+    calls = []
+
+    def bad_quantiles(*args, **kwargs):
+        calls.append(1)
+        q = original_quantiles(*args, **kwargs)
+        return np.full_like(q, np.inf) if len(calls) == 3 else q
+
+    monkeypatch.setattr(FF, "variance_path", bad_variance)
+    monkeypatch.setattr(FF, "fhs_quantiles", bad_quantiles)
+    diag = {}
+    q, ok, _ = FF.fhs_forecasts(returns, "gold", base, fits, diag=diag)
+    assert diag == {"no_model": 0, "invalid_variance": 1, "nonfinite_quantiles": 1}
+    assert ok.sum() == len(base) - 2 and not ok[1]
+    assert np.isnan(q[~ok]).all() and np.array_equal(q[ok], q0[ok])
+
+
+def test_robustness_options_default_to_the_locked_model(returns):
+    fits, _ = FF.monthly_fits(returns, pd.DatetimeIndex(["2016-01-01"]), "gold")
+    base = calendars.sessions("NYSE", "2016-01-04", "2016-01-06")
+    q0, _, _ = FF.fhs_forecasts(returns, "gold", base, fits, demean=True)
+    same, _, _ = FF.fhs_forecasts(
+        returns, "gold", base, fits, demean=True, seed_offset=0, n_paths=C.FHS_PATHS
+    )
+    shifted, _, _ = FF.fhs_forecasts(returns, "gold", base, fits, demean=True, seed_offset=10**6)
+    longer, _, _ = FF.fhs_forecasts(returns, "gold", base, fits, demean=True, n_paths=10_000)
+    assert np.array_equal(q0, same)
+    assert not np.array_equal(q0, shifted) and not np.array_equal(q0, longer)
+    assert np.allclose(q0, shifted, atol=5e-3) and np.allclose(q0, longer, atol=5e-3)
+
+
 def test_month_without_model_is_invalid(returns):
     base = calendars.sessions("NYSE", "2016-01-04", "2016-01-08")
     q, ok, _ = FF.fhs_forecasts(returns, "brent", base, {_month(base[0]): None})

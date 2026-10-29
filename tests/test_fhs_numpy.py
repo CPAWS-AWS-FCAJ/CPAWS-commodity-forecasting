@@ -140,12 +140,29 @@ def test_seed_matches_ceemdan_convention():
         {"beta": -0.1},
         {"alpha": 0.01, "gamma": -0.02},
         {"nu": float("nan")},
+        {"nu": 2.0},  # mục 8 (29/10 tối): ν > 2
+        {"nu": 1.5},
+        {"alpha": 0.05, "gamma": 0.0, "beta": 0.95 + 2e-9},  # vượt 1 + 1e-9
+        {"alpha": 0.1, "gamma": 0.1, "beta": 0.9},
     ],
 )
 def test_params_reject_invalid_variance(values):
     base = {"omega": 0.02, "alpha": 0.03, "gamma": 0.08, "beta": 0.9, "nu": 7.0}
     with pytest.raises(ValueError):
         F.GjrParams(**{**base, **values})
+
+
+def test_params_accept_arch_boundary_solutions():
+    """Nghiệm ở biên ràng buộc của arch (persistence trong [1, 1 + 1e-9]) vẫn nhận; như 11 lần fit
+    của kiểm định chéo (gap tới −4,4e−11)."""
+    for beta in (0.95, 0.95 + 4.4e-11, 0.95 + 9e-10):
+        p = F.GjrParams(omega=0.02, alpha=0.0, gamma=0.1, beta=beta, nu=2.0 + 1e-12)
+        assert p.persistence <= F.PERSISTENCE_MAX + F.PERSISTENCE_TOL
+    assert (F.NU_MIN_EXCLUSIVE, F.PERSISTENCE_MAX, F.PERSISTENCE_TOL) == (
+        C.NU_MIN_EXCLUSIVE,
+        C.PERSISTENCE_MAX,
+        C.PERSISTENCE_TOL,
+    )
 
 
 def test_inputs_are_validated():
