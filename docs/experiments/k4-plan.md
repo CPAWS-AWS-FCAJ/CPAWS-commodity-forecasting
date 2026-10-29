@@ -134,3 +134,5 @@ Ký hiệu: Q_τ,h = phân vị `baseline-q252` tại t; S_τ,h = phân vị S1a
 - Hạn chế ghi trong báo cáo: q252 và S1a có liên hệ trực tiếp nên `combo-eq3` không kết hợp ba nguồn độc lập; FHS lấy đuôi từ phần dư lịch sử nên có thể thiếu các cú sốc ngoài mẫu.
 - **Tiêu chí mục 5 cho dầu:** quyết định "đạt" theo sample `all`; `excl_roll` chỉ báo cáo. Nếu `all` đạt mà `excl_roll` không đạt thì ghi rõ trong ADR-0012.
 - **Toàn vẹn kết quả kiểm định chéo:** phần chặn val2019 chỉ nhận kết quả cv và cv-dm chạy từ code đã commit (không dirty), khớp fingerprint config/code/data và checksum từng file.
+
+- **Sửa lại (29/10 khuya):** điều kiện persistence là α + γ/2 + β ≤ 1 (đúng ràng buộc của arch khi fit), không phải < 1. 11/142 lần fit trên kiểm định chéo nằm ở biên 1 (gần IGARCH); với kỳ hạn tối đa 7 phiên phương sai mô phỏng vẫn hữu hạn nên vẫn hợp lệ. Chỉ từ chối tham số có persistence > 1 + 1e-9 hoặc ν ≤ 2. Báo cáo liệt kê các lần fit nằm ở biên.
