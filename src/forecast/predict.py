@@ -346,6 +346,8 @@ def predict_asset(
             is_sample=False,
             created_at=created_at,
         )
+        # Ngày dt= của snapshot clean đã dùng; rolling_8w loại bản ghi thiếu trường này (RFC #45 mục 7)
+        record["input_snapshot_dt"] = snap.dt
         return AssetResult(
             asset, STATUS_OK, base_date=_day(base), n_crossed=n_crossed, record=record
         )
