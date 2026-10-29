@@ -197,10 +197,10 @@ def test_cache_reads_raise_inside_guard():
     assert [getattr(m, n) for m, n in R.CACHE_READERS] == saved
 
 
-def _fake_lake(tmp_path, dt):
+def _fake_lake(tmp_path, dt, end="2019-06-28"):
     directory = tmp_path / "clean" / "prices" / f"dt={dt}"
     directory.mkdir(parents=True)
-    prices = _fake_prices(end="2019-06-28")
+    prices = _fake_prices(end=end)
     prices.to_parquet(directory / "prices.parquet", index=False)
     rejected = pd.DataFrame(
         {
@@ -235,46 +235,166 @@ def test_cv_reads_nothing_after_2018(tmp_path, monkeypatch):
         T.read_clean(lake, C.CLEAN_DT, cutoff=C.CV_CUTOFF)
 
 
-def _cv_summary(tmp_path, fhs, combo, **override):
-    choice = R.select_candidate({C.FHS: fhs, C.COMBO: combo})
-    summary = {
+# ---------- cv-dm ----------
+
+
+@pytest.fixture(scope="module")
+def cv_dir(built, evaluated, tmp_path_factory):
+    """Thư mục kết quả cv giả: forecasts/fits từ build_cv, detail… của fhs-gjr-t đã đánh giá."""
+    _, out, _, _ = built
+    _, _, named = evaluated
+    d = tmp_path_factory.mktemp("cv")
+    R.forecast_rows(out["forecasts"], R.MODELS).to_parquet(d / "forecasts_cv.parquet")
+    R.write_frames(d, named)
+    R.write_fits(d, out["fits"])
+    summary = {"run_id": "k4-cv-fake", "stage": "cv", "plan": R.PLAN, "models": [C.FHS]}
+    (d / "summary.json").write_text(json.dumps(summary), encoding="utf-8")
+    return d
+
+
+def test_cv_dm_rebuilds_fhs_exactly_and_demeans(built, cv_dir):
+    cut, out, expected, _ = built
+    ref = R.cv_reference(cv_dir)
+    base, q, crossed = out["forecasts"][C.FHS]["gold"]
+    rb, rq, rc = ref["forecasts"][C.FHS]["gold"]
+    assert R._ns(base).equals(rb) and np.array_equal(q, rq) and np.array_equal(crossed, rc)
+    invalid = {a: [] for a in C.ASSETS}
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(C, "CV_EXPECTED_N", expected)
+        dm = R.build_cv_dm(cut, invalid, ref, assets=("gold", "brent"))
+        bad = {**ref, "forecasts": {C.FHS: {"gold": (rb, rq + 1e-12, rc)}}}
+        with pytest.raises(R.StopRun, match="differs from the cv run"):
+            R.build_cv_dm(cut, invalid, bad, assets=("gold",))
+        fits = ref["fits"].copy()
+        fits.loc[fits.asset == "gold", "beta"] += 1e-12
+        with pytest.raises(R.StopRun, match="refits differ"):
+            R.build_cv_dm(cut, invalid, {**ref, "fits": fits}, assets=("gold",))
+    for asset in ("gold", "brent"):
+        b_dm, q_dm, _ = dm["forecasts"][C.FHS_DM][asset]
+        b_f, q_f, _ = out["forecasts"][C.FHS][asset]
+        assert R._ns(b_dm).equals(R._ns(b_f)) and len(b_dm) == expected[asset]
+        assert not np.array_equal(q_dm, q_f) and (np.diff(q_dm, axis=-1) >= 0).all()
+
+
+def test_scoring_inputs_and_direction_table(evaluated):
+    _, _, named = evaluated
+    d = named[C.FHS]["detail"]
+    assert R.same_scoring_inputs(d, d.copy())
+    other = d.copy()
+    other.loc[other.index[0], "y_true"] = 1.0
+    assert not R.same_scoring_inputs(other, d)
+    t = R.direction_table(named, [C.FHS])
+    assert len(t) == 28 and t.n.gt(0).all()
+    # prob_up < 0,5 đúng khi q50 < 0 (nội suy tuyến tính giữa các phân vị)
+    assert np.allclose(t["prob_up<0,5"], t["q50<0"])
+    assert t["q50<0"].between(0, 1).all() and t["sign_accuracy"].between(0, 1).all()
+
+
+# ---------- phần chặn val2019 (mục 8, sửa đổi sau kiểm định chéo) ----------
+
+
+def _gate_dirs(root, fhs=0.0155, combo=0.0133, dm=0.002, cv_override=None, **dm_override):
+    cv_dir, dm_dir = root / "cv", root / "cv-dm"
+    cv_dir.mkdir(exist_ok=True)
+    dm_dir.mkdir(exist_ok=True)
+    cv = {
+        "run_id": "k4-cv-clean",
         "stage": "cv",
         "plan": R.PLAN,
+        "provenance": {"commit": "a" * 40},
         "scores": {C.FHS: {"mean_28": fhs}, C.COMBO: {"mean_28": combo}},
-        **choice,
-        **override,
+        **R.select_candidate({C.FHS: fhs, C.COMBO: combo}),
+        **(cv_override or {}),
     }
-    (tmp_path / "summary.json").write_text(json.dumps(summary), encoding="utf-8")
-    return tmp_path
+    cv_dm = {
+        "run_id": "k4-cv-dm",
+        "stage": "cv-dm",
+        "plan": R.PLAN,
+        "model": C.FHS_DM,
+        "provenance": {"commit": "b" * 40},
+        "cv_reference": {"run_id": "k4-cv-clean", "commit": "a" * 40},
+        "scores": {C.FHS_DM: {"mean_28": dm}},
+        "proceed_to_2019": dm > 0,
+        **dm_override,
+    }
+    (cv_dir / "summary.json").write_text(json.dumps(cv), encoding="utf-8")
+    (dm_dir / "summary.json").write_text(json.dumps(cv_dm), encoding="utf-8")
+    return cv_dir, dm_dir
 
 
-def test_val2019_gate_blocks_without_cv_results(tmp_path, monkeypatch):
+def test_val2019_gate_only_for_dm_after_cv_and_positive_cv_dm(tmp_path, monkeypatch):
     def no_data(*_args, **_kwargs):
         raise AssertionError("val2019 gate must not read prices")
 
     monkeypatch.setattr(T, "read_clean", no_data)
+    gate = R.val2019_gate
+    cv, dm = _gate_dirs(tmp_path)
+    assert gate(cv, dm, C.FHS_DM)["cv_dm"]["scores"][C.FHS_DM]["mean_28"] == 0.002
+    for candidate in (C.FHS, C.COMBO):
+        with pytest.raises(R.StopRun, match="only fhs-gjr-t-dm"):
+            gate(cv, dm, candidate)
     with pytest.raises(R.StopRun, match="no cv results"):
-        R.run_val2019(tmp_path, C.FHS)
-    assert R.main(["--stage", "val2019", "--cv-dir", str(tmp_path), "--candidate", C.FHS]) == 2
-    with pytest.raises(SystemExit):
-        R.main(["--stage", "val2019", "--candidate", C.FHS])
-
-
-def test_val2019_gate_checks_candidate_and_early_stop(tmp_path):
-    d = _cv_summary(tmp_path, 0.004, 0.012)
-    with pytest.raises(R.StopRun, match="not the cv selection"):
-        R.run_val2019(d, C.FHS)
-    with pytest.raises(R.StopRun, match="gate passed"):
-        R.run_val2019(d, C.COMBO)  # qua phần chặn vẫn dừng ở bước này
-    _cv_summary(tmp_path, 0.004, 0.012, selected=C.FHS)
-    with pytest.raises(R.StopRun, match="does not follow section 4"):
-        R.run_val2019(d, C.FHS)
-    _cv_summary(tmp_path, -0.001, -0.002)
+        gate(tmp_path / "none", dm, C.FHS_DM)
+    with pytest.raises(R.StopRun, match="no cv-dm results"):
+        gate(cv, tmp_path / "none", C.FHS_DM)
+    for value in (0.0, -0.003):  # ≤ 0: dừng, không chạy 2019
+        _gate_dirs(tmp_path, dm=value)
+        with pytest.raises(R.StopRun, match="no 2019 run"):
+            gate(cv, dm, C.FHS_DM)
+    _gate_dirs(tmp_path, dm=0.002, proceed_to_2019=False)
+    with pytest.raises(R.StopRun, match="does not follow section 8"):
+        gate(cv, dm, C.FHS_DM)
+    _gate_dirs(tmp_path, cv_reference={"run_id": "k4-cv", "commit": "c" * 40})
+    with pytest.raises(R.StopRun, match="not run on this cv result"):
+        gate(cv, dm, C.FHS_DM)
+    _gate_dirs(tmp_path, fhs=0.004, combo=0.012)  # cv chọn combo: sửa đổi dm không áp dụng
+    with pytest.raises(R.StopRun, match="dm amendment applies"):
+        gate(cv, dm, C.FHS_DM)
+    _gate_dirs(tmp_path, fhs=-0.001, combo=-0.002)
     with pytest.raises(R.StopRun, match="early stop"):
-        R.run_val2019(d, C.FHS)
-    _cv_summary(tmp_path, 0.01, 0.0, stage="val2019")
-    with pytest.raises(R.StopRun, match="not a K4 cv result"):
-        R.run_val2019(d, C.FHS)
+        gate(cv, dm, C.FHS_DM)
+    _gate_dirs(tmp_path, cv_override={"selected": C.COMBO})
+    with pytest.raises(R.StopRun, match="does not follow section 4"):
+        gate(cv, dm, C.FHS_DM)
+    args = ["--stage", "val2019", "--cv-dir", str(cv), "--cv-dm-dir", str(dm)]
+    assert R.main([*args, "--candidate", C.FHS]) == 2
+    with pytest.raises(SystemExit):
+        R.main(["--stage", "val2019", "--cv-dir", str(cv), "--candidate", C.FHS_DM])
+
+
+# ---------- phần thân val2019 trên dữ liệu GIẢ ----------
+
+
+def test_val2019_body_on_fake_data_runs_once(tmp_path):
+    from tests.test_run_k3b import _fake_k3_dir
+
+    lake = _fake_lake(tmp_path / "lake", C.CLEAN_DT, end="2020-03-31")  # có cả 2020
+    (tmp_path / "k3").mkdir()
+    k3_dir = _fake_k3_dir(tmp_path / "k3")
+    cv, dm = _gate_dirs(tmp_path)
+    out = tmp_path / "out"
+    s = R.run_val2019(lake, out, "k4-val-fake", cv, dm, C.FHS_DM, k3_dir)
+    assert s["stage"] == "val2019" and s["candidate"] == C.FHS_DM
+    assert s["models"] == [C.FHS_DM, C.BASELINE, C.S1A]
+    assert (s["look_number"], s["total_configs_seen_on_2019"], s["cv_configs_seen"]) == (3, 12, 3)
+    assert s["common_origins"] == C.K3_COMMON_N
+    assert s["provenance"]["data_lineage"]["prices_view"]["max_date"] == "2019-12-31"
+    assert s["provenance"]["data_lineage"]["cutoff"] == "2019-12-31"
+    assert s["asset_passes"].keys() == set(C.ASSETS)
+    assert set(s["asset_passes"]["brent"]) == {"all", "excl_roll"}
+    assert set(s["asset_passes"]["gold"]) == {"all"}
+    assert all(f["months"] == 12 for f in s["fhs_fits"].values())
+    d = out / "eval" / "k4" / "k4-val-fake"
+    f = pd.read_parquet(d / "forecasts_val2019.parquet")
+    assert set(f.model) == set(C.VAL_MODELS) and f.base_date.max() <= pd.Timestamp("2019-12-31")
+    detail = pd.read_parquet(d / "detail.parquet")
+    used = detail[detail.common_mask_all.fillna(False).astype(bool)]
+    assert pd.to_datetime(used.target_date).max() <= pd.Timestamp("2019-12-31")
+    assert set(used.base_date.str[:4]) == {"2019"}
+    assert (d / "started.json").is_file() and (d / "summary.md").is_file()
+    assert R.runs_on_2019(out) == ["k4-val-fake"]
+    with pytest.raises(R.StopRun, match="already run"):  # kế hoạch: một lần
+        R.run_val2019(lake, out, "k4-val-again", cv, dm, C.FHS_DM, k3_dir)
 
 
 def test_config_and_requirements_pins():
@@ -284,6 +404,15 @@ def test_config_and_requirements_pins():
     assert (C.MCS_SIZE, C.MCS_REPS, C.MCS_BLOCK, C.MCS_SEED) == (0.10, 1000, 20, 7)
     assert (C.FHS_WINDOW, C.FHS_SCALE, C.FHS_PATHS, C.FHS_STEPS) == (1000, 100.0, 5000, 7)
     assert C.CV == ("2016-01-01", "2018-12-31") and C.CV_CUTOFF == "2018-12-31"
+    assert C.FHS_DM == "fhs-gjr-t-dm" and C.VAL2019_CANDIDATE == C.FHS_DM
+    assert C.FHS_DEMEAN == {C.FHS: False, C.FHS_DM: True} and C.CV_DM_PROCEED_ABOVE == 0.0
+    assert C.CV_CONFIGS_SEEN == 3 and C.VAL_MODELS == (C.FHS_DM, C.BASELINE, C.S1A)
+    assert C.VAL_CUTOFF == "2019-12-31" and C.K3_COMMON_N == {
+        "gold": 245,
+        "silver": 245,
+        "brent": 202,
+        "wti": 202,
+    }
     dev = (ROOT / "requirements-dev.txt").read_text(encoding="utf-8").splitlines()
     assert any(line.split("#")[0].strip() == f"arch=={C.ARCH_VERSION}" for line in dev)
     predict = (ROOT / "requirements-predict.txt").read_text(encoding="utf-8").splitlines()

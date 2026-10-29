@@ -1,6 +1,8 @@
 """K4 fhs_fit trên return GIẢ: fit arch khớp đệ quy NumPy, refit chỉ dùng return trước đầu tháng,
 dùng lại tháng trước khi fit lỗi, dừng khi lần refit đầu lỗi, không đổi khi nối thêm tương lai."""
 
+import dataclasses
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -114,6 +116,17 @@ def test_forecasts_follow_recursion_and_ignore_future(returns):
     q_cut, _, _ = FF.fhs_forecasts(returns[returns.index <= t], "gold", base[:26], fits)
     q_future, _, _ = FF.fhs_forecasts(future, "gold", base[:26], fits)
     assert np.array_equal(q_cut, q[:26]) and np.array_equal(q_future, q[:26])
+
+
+def test_demeaned_forecasts_reuse_fits_with_centred_residuals(returns):
+    fits, _ = FF.monthly_fits(returns, pd.DatetimeIndex(["2016-01-01"]), "gold")
+    base = calendars.sessions("NYSE", "2016-01-04", "2016-01-11")
+    q0, ok0, _ = FF.fhs_forecasts(returns, "gold", base, fits)
+    q1, ok1, _ = FF.fhs_forecasts(returns, "gold", base, fits, demean=True)
+    assert ok0.all() and ok1.all() and not np.array_equal(q0, q1)
+    centred = {m: dataclasses.replace(f, z=f.z - f.z.mean()) for m, f in fits.items()}
+    q2, _, _ = FF.fhs_forecasts(returns, "gold", base, centred)
+    assert np.array_equal(q1, q2)
 
 
 def test_month_without_model_is_invalid(returns):

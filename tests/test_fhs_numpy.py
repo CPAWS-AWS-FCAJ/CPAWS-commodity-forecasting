@@ -1,6 +1,7 @@
 """K4 fhs_numpy: phương trình GJR, khớp arch, mô phỏng tất định theo seed, không import arch/scipy/
 pandas. Chỉ dùng số giả."""
 
+import hashlib
 import subprocess
 import sys
 
@@ -92,6 +93,36 @@ def test_quantiles_deterministic_by_seed_and_monotone_after_normalize():
     assert np.array_equal(normalized, q1)
     width = q1[:, 5] - q1[:, 1]
     assert (np.diff(width) > 0).all()  # dải 80% rộng dần theo h
+
+
+# sha256 của fhs_quantiles (làm tròn 12 chữ số) tính ở commit d048bdc, trước khi có tùy chọn demean
+GOLDEN_BEFORE_DEMEAN = "0df59d31a0f8ebefdf257711cbcf68f0b2f7eb08b6f793a7cdfc93598befa4a0"
+
+
+def test_demean_false_reproduces_previous_output():
+    z = np.random.default_rng(5).standard_t(6, 1000) / 1.2 + 0.03
+    seed = F.seed_for("brent", "2017-06-01")
+    q = F.fhs_quantiles(1.3, z, PARAMS, seed=seed, scale=100.0)
+    assert np.array_equal(q, F.fhs_quantiles(1.3, z, PARAMS, seed=seed, scale=100.0, demean=False))
+    assert hashlib.sha256(np.round(q, 12).tobytes()).hexdigest() == GOLDEN_BEFORE_DEMEAN
+
+
+def test_demean_centres_bootstrap_draws_and_keeps_spread():
+    z = np.random.default_rng(9).standard_t(6, 1000) / 1.2 + 0.2
+    flat = F.GjrParams(omega=1.0, alpha=0.0, gamma=0.0, beta=0.0, nu=7.0)  # σ* = 1: ε* = z*
+    for demean, centre in ((False, z.mean()), (True, 0.0)):
+        rng = np.random.default_rng(1)
+        paths = F.simulate_cumulative(1.0, z, flat, rng, n_paths=5000, n_steps=7, demean=demean)
+        draws = np.diff(paths, axis=1, prepend=0.0)  # z* từng bước
+        assert abs(draws.mean() - centre) < 0.02
+        assert draws.std() == pytest.approx(z.std(), rel=0.03)
+    # cùng chỉ số rút: bản dm đúng bằng bản gốc chạy trên z − mean(z)
+    a = F.fhs_quantiles(1.1, z, PARAMS, seed=123, scale=100.0, demean=True)
+    b = F.fhs_quantiles(1.1, z - z.mean(), PARAMS, seed=123, scale=100.0)
+    assert np.array_equal(a, b)
+    assert np.isclose(np.std(z - z.mean()), np.std(z), rtol=1e-12)
+    # mean(z) > 0 ở đây: trừ trung bình kéo trung vị xuống ở mọi h
+    assert (a[:, 3] < F.fhs_quantiles(1.1, z, PARAMS, seed=123, scale=100.0)[:, 3]).all()
 
 
 def test_seed_matches_ceemdan_convention():
