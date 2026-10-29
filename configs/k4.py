@@ -24,6 +24,16 @@ BASELINE = "baseline-q252"
 S1A = "S1a"
 S1A_LAMBDA = K3B.S1_LAMBDA[S1A]  # 0,94 như K3b
 
+# Kế hoạch mục 8, sửa đổi 29/10 sau kiểm định chéo: bản bootstrap từ z − mean(z) của cửa sổ fit
+# (không đổi độ lệch chuẩn); chạy kiểm định chéo một lần, > 0 thì chạy 2019 một lần cho bản này.
+# Không chọn lại giữa FHS và combo.
+FHS_DM = "fhs-gjr-t-dm"
+FHS_DEMEAN = {FHS: False, FHS_DM: True}
+VAL2019_CANDIDATE = FHS_DM
+CV_DM_PROCEED_ABOVE = 0.0  # trung bình pinball_skill 28 nhóm của cv-dm phải > ngưỡng này
+CV_CONFIGS_SEEN = 3  # fhs-gjr-t, combo-eq3, rồi fhs-gjr-t-dm
+VAL_MODELS = (FHS_DM, BASELINE, S1A)  # mục 5: so với baseline-q252 và S1a
+
 # Kế hoạch mục 3, FHS: GJR-GARCH(1,1), nhiễu Student-t, trung bình 0, fit bằng arch (offline)
 ARCH_VERSION = "8.0.0"
 ARCH_SPEC = {"mean": "Zero", "vol": "GARCH", "p": 1, "o": 1, "q": 1, "dist": "t"}
