@@ -17,14 +17,15 @@ K3b mục 4 đã chốt: không đạt thì dừng dò mô hình chỉ dùng gi�
 1. Chọn ứng viên bằng kiểm định chéo theo thời gian trên 2016, 2017, 2018 (mục 4).
 2. Chỉ ứng viên được chọn chạy trên 2019, một lần.
 
-Số lần nhìn vào validation 2019: K3 lần 1 (8 cấu hình), K3b lần 2 (3 cấu hình), **K4 lần 3 (1 cấu hình)**.
-Tổng 12 cấu hình; báo cáo phải ghi con số này. Tập test 2020 → nay vẫn không chạy.
+Số lần nhìn vào validation 2019 ở cấp dự án (cập nhật 29/10, xem mục 8): DLinear MVP lần 1 (1 cấu hình), K3 lần 2
+(8 cấu hình), K3b lần 3 (3 cấu hình), **K4 lần 4 (1 cấu hình)**. Tổng 13 cấu hình; báo cáo phải ghi con số này. Tập test 2020 → nay vẫn không chạy.
 
 Căn cứ chọn hai ứng viên:
 - Kuester, Mittnik, Paolella (2006, Journal of Financial Econometrics): trong các phương pháp VaR,
   filtered historical simulation (FHS) đứng sát sau GARCH đuôi dày + EVT; CAViaR kém.
-- Nowotarski & Weron (2015): kết hợp dự báo phân vị mạnh trong dự báo giá năng lượng. K4 dùng trọng số
-  đều để không có tham số học.
+- Lichtendahl, Grushka-Cockayne, Winkler (2013): lấy trung bình phân vị là cách kết hợp trực tiếp cho dự báo
+  phân vị. K4 dùng trọng số đều để không có tham số học. Nowotarski & Weron (2015, Quantile Regression
+  Averaging) chỉ là bối cảnh.
 
 ## 1. Giả thuyết
 
@@ -74,7 +75,9 @@ Ký hiệu: Q_τ,h = phân vị `baseline-q252` tại t; S_τ,h = phân vị S1a
 
 ## 5. Tiêu chí trên 2019 (chốt, theo ADR-0009 mục 4)
 
-- Chỉ chạy ứng viên đã chọn ở mục 4.
+- Chỉ chạy ứng viên đã chọn ở mục 4, với ngoại lệ đã ghi ở mục 8 (29/10, sau kiểm định chéo): ứng viên chạy
+  2019 là `fhs-gjr-t-dm` thay cho `fhs-gjr-t`, và chỉ khi trung bình `pinball_skill` 28 nhóm của bản dm trên
+  kiểm định chéo > 0.
 - Tài sản đạt khi cận dưới CI 95% của `pinball_skill` trung bình 7 h > 0; block bootstrap (block 20,
   1000 lần, lịch hợp nhất NYSE/CME), áp chung cho 7 h. Báo cáo từng h, cả `all` và `excl_roll` cho dầu.
 - Đạt ở ít nhất một tài sản: viết ADR-0012 chốt mô hình và tham số; viết bản suy luận NumPy (tham số và
@@ -89,7 +92,7 @@ Ký hiệu: Q_τ,h = phân vị `baseline-q252` tại t; S_τ,h = phân vị S1a
   kiểm định chéo; ứng viên được chọn thêm 2019.
 - Độ ổn định tham số FHS theo từng lần refit (ω, α, γ, β, ν; số lần không hội tụ).
 - Thời gian chạy một lần dự báo (4 tài sản) để ước tính cho Lambda.
-- Ghi rõ: lần nhìn thứ 3 vào 2019, tổng 12 cấu hình; kiểm định chéo nằm trong giai đoạn train của K3.
+- Ghi rõ: lần nhìn thứ 4 vào 2019 ở cấp dự án, tổng 13 cấu hình; kiểm định chéo nằm trong giai đoạn train của K3.
 
 ## 7. Nguồn
 
@@ -99,8 +102,12 @@ Ký hiệu: Q_τ,h = phân vị `baseline-q252` tại t; S_τ,h = phân vị S1a
   derivative securities. Journal of Futures Markets 19(5).
 - Glosten, L., Jagannathan, R., Runkle, D. (1993). On the relation between the expected value and the
   volatility of the nominal excess return on stocks. Journal of Finance 48(5).
+- Lichtendahl, K. C., Grushka-Cockayne, Y., Winkler, R. L. (2013). Is It Better to Average Probabilities or
+  Quantiles? Management Science 59(7), 1594–1611.
 - Nowotarski, J., Weron, R. (2015). Computing electricity spot price prediction intervals using quantile
   regression and forecast averaging. Computational Statistics 30(3), 791–803.
+- White, H. (2000). A Reality Check for Data Snooping. Econometrica 68(5), 1097–1126.
+- Christoffersen, P. (1998). Evaluating Interval Forecasts. International Economic Review 39(4), 841–862.
 - Hansen, P., Lunde, A., Nason, J. (2011). The Model Confidence Set. Econometrica 79(2), 453–497.
 - Gilder, D., Tsiaras, L. (2020). Volatility forecasts embedded in the prices of crude-oil options.
   Journal of Futures Markets.
@@ -120,12 +127,12 @@ Ký hiệu: Q_τ,h = phân vị `baseline-q252` tại t; S_τ,h = phân vị S1a
 - Chẩn đoán trên k4-cv-clean: phần dư chuẩn hóa z dùng để bootstrap không được trừ trung bình (trung vị của mean(z) theo tài sản từ −0,017 đến −0,051), nên FHS mang một độ trôi âm; q50 âm ở khoảng 90% ngày gốc, trái với mục 3 ("trung bình 0, không dự báo hướng").
 - Sửa: ứng viên chạy 2019 là `fhs-gjr-t-dm`, giống `fhs-gjr-t` nhưng bootstrap từ z − mean(z) của cửa sổ fit (không đổi độ lệch chuẩn). Tham số GJR, cửa sổ, lịch refit, số đường và seed giữ nguyên.
 - Đây là sửa đổi sau khi đã xem kết quả kiểm định chéo của bản gốc. `fhs-gjr-t-dm` chạy kiểm định chéo một lần, chỉ để kiểm tra. Quy tắc chốt trước khi xem số: trung bình pinball_skill 28 nhóm của bản dm > 0 thì chạy 2019 cho bản dm một lần, theo tiêu chí mục 5; ≤ 0 thì dừng, không chạy 2019. Không chọn lại giữa FHS và combo.
-- Báo cáo cả `fhs-gjr-t` (kiểm định chéo) và `fhs-gjr-t-dm` (kiểm định chéo và 2019), ghi rõ thứ tự quyết định. Số cấu hình xem trên 2019 vẫn là 1 (tổng 12); kiểm định chéo thêm 1 cấu hình.
+- Báo cáo cả `fhs-gjr-t` (kiểm định chéo) và `fhs-gjr-t-dm` (kiểm định chéo và 2019), ghi rõ thứ tự quyết định. Số cấu hình xem trên 2019 vẫn là 1 (tổng 13, đếm cả DLinear MVP); kiểm định chéo thêm 1 cấu hình.
 
 ### 29/10/2026 tối, theo review của Long (#59), trước khi chạy 2019
 
 - Quan hệ với ADR-0010: K4 là ngoại lệ nghiên cứu có giới hạn đối với quyết định dừng dò mô hình chỉ dùng giá. Lý do: giả thuyết mới (biến động có điều kiện, phản ứng bất đối xứng, đuôi lấy từ phần dư) chưa được thử ở K3/K3b, và việc chọn dùng kiểm định chéo để 2019 chỉ còn vai trò xác nhận. Người duyệt: Khải (Research Lead), Long review. Không đạt mục 5 thì dừng dò mô hình chỉ dùng giá đến hết dự án, không có ngoại lệ thứ hai.
-- Đếm lại: tính cả DLinear MVP (ADR-0010), K4 là lần dùng validation 2019 thứ 4 ở cấp dự án; tổng số cấu hình đã xem trên 2019 = số cấu hình của DLinear MVP + 11 (K3, K3b) + 1 (K4). Báo cáo ghi rõ rủi ro data snooping (White 2000).
+- Đếm lại: tính cả DLinear MVP (ADR-0010), K4 là lần dùng validation 2019 thứ 4 ở cấp dự án; tổng số cấu hình đã xem trên 2019 = 1 (DLinear MVP) + 11 (K3, K3b) + 1 (K4) = 13. Báo cáo ghi rõ rủi ro data snooping (White 2000).
 - Phân loại: `fhs-gjr-t` và `combo-eq3` là ứng viên đăng ký trước; `fhs-gjr-t-dm` là sửa đổi hậu nghiệm. Báo cáo thêm chênh lệch pinball_skill của `fhs-gjr-t-dm` so với `fhs-gjr-t` trên cùng common mask. Lý do sửa là trung bình của z âm (độ trôi); q50 âm chỉ là hệ quả.
 - Nguồn cho `combo-eq3`: Lichtendahl, Grushka-Cockayne, Winkler (2013), Is It Better to Average Probabilities or Quantiles?, Management Science 59(7). Nowotarski & Weron (2015) là QRA, chỉ dùng làm bối cảnh.
 - Báo cáo bổ sung, không đổi quy tắc chọn hay tiêu chí mục 5: kết quả từng fold 2016/2017/2018 và số ngày hợp lệ theo tài sản × h; Holm qua 4 tài sản cho kiểm định mục 5; độ nhạy CI theo block length 10, 20, 40; độ nhạy FHS theo 2 seed khác và 10000 đường (chỉ để kiểm tra độ bền); coverage_80, width_80, interval score, hit rate và kiểm định độc lập các lần vượt khoảng (Christoffersen 1998).
@@ -136,3 +143,4 @@ Ký hiệu: Q_τ,h = phân vị `baseline-q252` tại t; S_τ,h = phân vị S1a
 - **Toàn vẹn kết quả kiểm định chéo:** phần chặn val2019 chỉ nhận kết quả cv và cv-dm chạy từ code đã commit (không dirty), khớp fingerprint config/code/data và checksum từng file.
 
 - **Sửa lại (29/10 khuya):** điều kiện persistence là α + γ/2 + β ≤ 1 (đúng ràng buộc của arch khi fit), không phải < 1. 11/142 lần fit trên kiểm định chéo nằm ở biên 1 (gần IGARCH); với kỳ hạn tối đa 7 phiên phương sai mô phỏng vẫn hữu hạn nên vẫn hợp lệ. Chỉ từ chối tham số có persistence > 1 + 1e-9 hoặc ν ≤ 2. Báo cáo liệt kê các lần fit nằm ở biên.
+- **Đồng bộ (29/10 khuya, theo review lần 2 của Long ở #59):** DLinear MVP tính 1 cấu hình (PR #26: 4 tài sản, chung một cấu hình), tổng 13; cập nhật các câu đếm cũ ở mục 0, 6, 8; nguồn trực tiếp cho `combo-eq3` là Lichtendahl et al. (2013), thêm White (2000) và Christoffersen (1998) vào mục 7; mục 5 ghi rõ ngoại lệ `fhs-gjr-t-dm`. Không đổi quy tắc chọn hay tiêu chí.
