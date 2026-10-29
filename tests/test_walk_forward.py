@@ -116,6 +116,58 @@ def test_reject_unsupported_configuration(changes):
         W.EvaluationConfig(**changes)
 
 
+CV_PERIOD = {
+    "evaluation_kind": "cross_validation",
+    "evaluation_start": "2016-01-01",
+    "evaluation_end": "2018-12-31",
+    "target_cutoff_date": "2018-12-31",
+}
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"evaluation_kind": "cross_validation"},  # 2019 dates with the CV kind
+        {**CV_PERIOD, "evaluation_kind": "validation"},
+        {**CV_PERIOD, "evaluation_start": "2015-01-01"},
+        {**CV_PERIOD, "target_cutoff_date": "2019-12-31"},
+        {**CV_PERIOD, "block_length": 10},
+    ],
+)
+def test_cross_validation_period_is_fixed(changes):
+    with pytest.raises(ValueError):
+        W.EvaluationConfig(evaluation_as_of_time="2026-10-22T00:00:00Z", **changes)
+
+
+def test_validation_2019_period_and_roll_window_unchanged():
+    """Pure calendar check (no price data): defaults and roll dates equal the former literals."""
+    cfg = W.EvaluationConfig(evaluation_as_of_time="2026-10-22T00:00:00Z")
+    assert (cfg.evaluation_kind, cfg.evaluation_start, cfg.evaluation_end) == (
+        "validation",
+        "2019-01-01",
+        "2019-12-31",
+    )
+    assert cfg.target_cutoff_date == "2019-12-31"
+    assert W.roll_window(cfg) == ("2018-12-01", "2020-02-01")
+    for asset, expiries in (("wti", calendars.cl_expiries), ("brent", calendars.bz_expiries)):
+        expiry, roll = W.roll_calendar(asset, cfg)
+        assert expiry.equals(expiries("2019-01-01", "2020-02-01"))
+        former = calendars.roll_days(
+            W.ASSETS[asset].roll_rule, calendars.sessions("CME", "2018-12-01", "2020-02-01")
+        )
+        assert roll.equals(former)
+
+
+def test_cross_validation_roll_window_covers_2016_2018():
+    cfg = W.EvaluationConfig(evaluation_as_of_time="2026-10-22T00:00:00Z", **CV_PERIOD)
+    assert W.roll_window(cfg) == ("2015-12-01", "2019-02-01")
+    for asset in ("wti", "brent"):
+        expiry, roll = W.roll_calendar(asset, cfg)
+        for year in (2016, 2017, 2018):
+            assert 11 <= int((roll.year == year).sum()) <= 13
+            assert 11 <= int((expiry.year == year).sum()) <= 13
+
+
 def test_expected_full_grid_and_schema(forecasts, cfg):
     assert len(forecasts) == sum(
         len(calendars.sessions(W.ASSETS[a].calendar, "2019-01-01", "2019-12-31")) * 7
