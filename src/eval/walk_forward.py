@@ -2,6 +2,10 @@
 
 Only local NumPy inference and evaluation. No training, cloud clients or imports
 from production predict. Dates are exchange sessions; timestamps are UTC.
+
+evaluation_kind "cross_validation" (2016-2018) is an internal K4 evaluation only
+(docs/experiments/k4-plan.md section 8): its results are written under eval/k4/ and
+never to the Accuracy table, docs/api/accuracy-schema.md or production.
 """
 
 from __future__ import annotations
@@ -63,7 +67,8 @@ REASONS = {
     "generation_error": {"model_exception", "invalid_model_output", "upstream_failure"},
 }
 # Fixed evaluation periods. "cross_validation" pools the K4 folds 2016-2018 (base dates inside,
-# one target cutoff), docs/experiments/k4-plan.md sections 2 and 8.
+# one target cutoff), docs/experiments/k4-plan.md sections 2 and 8. It is internal to K4: results
+# go to eval/k4/ only, never to the Accuracy table/schema or production.
 PERIODS = {
     "validation": ("2019-01-01", "2019-12-31", "2019-12-31"),
     "cross_validation": ("2016-01-01", "2018-12-31", "2018-12-31"),
