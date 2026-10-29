@@ -121,3 +121,16 @@ Ký hiệu: Q_τ,h = phân vị `baseline-q252` tại t; S_τ,h = phân vị S1a
 - Sửa: ứng viên chạy 2019 là `fhs-gjr-t-dm`, giống `fhs-gjr-t` nhưng bootstrap từ z − mean(z) của cửa sổ fit (không đổi độ lệch chuẩn). Tham số GJR, cửa sổ, lịch refit, số đường và seed giữ nguyên.
 - Đây là sửa đổi sau khi đã xem kết quả kiểm định chéo của bản gốc. `fhs-gjr-t-dm` chạy kiểm định chéo một lần, chỉ để kiểm tra. Quy tắc chốt trước khi xem số: trung bình pinball_skill 28 nhóm của bản dm > 0 thì chạy 2019 cho bản dm một lần, theo tiêu chí mục 5; ≤ 0 thì dừng, không chạy 2019. Không chọn lại giữa FHS và combo.
 - Báo cáo cả `fhs-gjr-t` (kiểm định chéo) và `fhs-gjr-t-dm` (kiểm định chéo và 2019), ghi rõ thứ tự quyết định. Số cấu hình xem trên 2019 vẫn là 1 (tổng 12); kiểm định chéo thêm 1 cấu hình.
+
+### 29/10/2026 tối, theo review của Long (#59), trước khi chạy 2019
+
+- Quan hệ với ADR-0010: K4 là ngoại lệ nghiên cứu có giới hạn đối với quyết định dừng dò mô hình chỉ dùng giá. Lý do: giả thuyết mới (biến động có điều kiện, phản ứng bất đối xứng, đuôi lấy từ phần dư) chưa được thử ở K3/K3b, và việc chọn dùng kiểm định chéo để 2019 chỉ còn vai trò xác nhận. Người duyệt: Khải (Research Lead), Long review. Không đạt mục 5 thì dừng dò mô hình chỉ dùng giá đến hết dự án, không có ngoại lệ thứ hai.
+- Đếm lại: tính cả DLinear MVP (ADR-0010), K4 là lần dùng validation 2019 thứ 4 ở cấp dự án; tổng số cấu hình đã xem trên 2019 = số cấu hình của DLinear MVP + 11 (K3, K3b) + 1 (K4). Báo cáo ghi rõ rủi ro data snooping (White 2000).
+- Phân loại: `fhs-gjr-t` và `combo-eq3` là ứng viên đăng ký trước; `fhs-gjr-t-dm` là sửa đổi hậu nghiệm. Báo cáo thêm chênh lệch pinball_skill của `fhs-gjr-t-dm` so với `fhs-gjr-t` trên cùng common mask. Lý do sửa là trung bình của z âm (độ trôi); q50 âm chỉ là hệ quả.
+- Nguồn cho `combo-eq3`: Lichtendahl, Grushka-Cockayne, Winkler (2013), Is It Better to Average Probabilities or Quantiles?, Management Science 59(7). Nowotarski & Weron (2015) là QRA, chỉ dùng làm bối cảnh.
+- Báo cáo bổ sung, không đổi quy tắc chọn hay tiêu chí mục 5: kết quả từng fold 2016/2017/2018 và số ngày hợp lệ theo tài sản × h; Holm qua 4 tài sản cho kiểm định mục 5; độ nhạy CI theo block length 10, 20, 40; độ nhạy FHS theo 2 seed khác và 10000 đường (chỉ để kiểm tra độ bền); coverage_80, width_80, interval score, hit rate và kiểm định độc lập các lần vượt khoảng (Christoffersen 1998).
+- Kiểm tra mô hình: tham số nạp vào phải có ν > 2 và α + γ/2 + β < 1; báo số tháng dùng lại tham số liên tiếp; phương sai và phân vị phải hữu hạn trước khi coi là hợp lệ.
+- Phạm vi `cross_validation`: loại đánh giá nội bộ của K4, chỉ ghi vào `eval/k4/`, không vào bảng Accuracy hay schema production.
+- Hạn chế ghi trong báo cáo: q252 và S1a có liên hệ trực tiếp nên `combo-eq3` không kết hợp ba nguồn độc lập; FHS lấy đuôi từ phần dư lịch sử nên có thể thiếu các cú sốc ngoài mẫu.
+- **Tiêu chí mục 5 cho dầu:** quyết định "đạt" theo sample `all`; `excl_roll` chỉ báo cáo. Nếu `all` đạt mà `excl_roll` không đạt thì ghi rõ trong ADR-0012.
+- **Toàn vẹn kết quả kiểm định chéo:** phần chặn val2019 chỉ nhận kết quả cv và cv-dm chạy từ code đã commit (không dirty), khớp fingerprint config/code/data và checksum từng file.
