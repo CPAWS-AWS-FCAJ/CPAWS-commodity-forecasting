@@ -137,10 +137,10 @@ def monthly_fits(r: pd.Series, months, asset: str = "") -> tuple[dict, list[dict
 
 
 def fhs_forecasts(
-    r: pd.Series, asset: str, base_dates, fits: dict
+    r: pd.Series, asset: str, base_dates, fits: dict, demean: bool = False
 ) -> tuple[np.ndarray, np.ndarray, float]:
     """Phân vị FHS [n, 7, 7] chưa normalize (NaN ở ngày gốc không có mô hình), mask hợp lệ và
-    số giây phần NumPy (đệ quy + mô phỏng)."""
+    số giây phần NumPy (đệ quy + mô phỏng). demean=True là fhs-gjr-t-dm (kế hoạch mục 8)."""
     base = pd.DatetimeIndex(pd.to_datetime(base_dates))
     q = np.full((len(base), C.FHS_STEPS, len(LEVELS)), np.nan)
     ok = np.zeros(len(base), dtype=bool)
@@ -168,6 +168,7 @@ def fhs_forecasts(
                 scale=C.FHS_SCALE,
                 n_paths=C.FHS_PATHS,
                 n_steps=C.FHS_STEPS,
+                demean=demean,
             )
             ok[i] = True
         seconds += time.perf_counter() - t0

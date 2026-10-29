@@ -9,6 +9,8 @@ chuẩn hóa đã lưu (fit hằng tháng offline bằng src/forecast/fhs_fit.py
 - fhs_quantiles(): z* lấy mẫu có hoàn lại từ phần dư chuẩn hóa của cửa sổ fit, ε* = σ*·z*, σ* theo
   phương trình trên; return h phiên = tổng ε* của h bước đầu, chia scale. Phân vị thực nghiệm
   (nội suy tuyến tính như np.quantile) [7 h, 7 τ], CHƯA qua normalize_quantiles().
+  demean=True (fhs-gjr-t-dm, kế hoạch mục 8): lấy mẫu từ z − mean(z), cùng các chỉ số rút, nên
+  độ lệch chuẩn không đổi; mặc định False giữ nguyên fhs-gjr-t.
 - seed_for(): seed cố định theo (asset, base_date), cùng quy ước với cache CEEMDAN (ADR-0007).
 """
 
@@ -85,11 +87,14 @@ def simulate_cumulative(
     rng: np.random.Generator,
     n_paths: int = N_PATHS,
     n_steps: int = N_STEPS,
+    demean: bool = False,
 ) -> np.ndarray:
     """[n_paths, n_steps]: tổng ε* của k bước đầu (thang return × scale)."""
     z = np.asarray(z, dtype=np.float64)
     if z.ndim != 1 or not len(z) or not np.isfinite(z).all():
         raise ValueError("z must be a finite, nonempty 1-D array")
+    if demean:
+        z = z - z.mean()
     if not np.isfinite(sigma2_next) or sigma2_next <= 0:
         raise ValueError("sigma2_next must be finite and positive")
     draws = rng.integers(0, len(z), size=(n_steps, n_paths))
@@ -114,10 +119,11 @@ def fhs_quantiles(
     n_paths: int = N_PATHS,
     n_steps: int = N_STEPS,
     levels=LEVELS,
+    demean: bool = False,
 ) -> np.ndarray:
     """Phân vị FHS của log return h = 1..n_steps phiên: [n_steps, len(levels)], chưa normalize."""
     rng = np.random.default_rng(seed)
-    paths = simulate_cumulative(sigma2_next, z, params, rng, n_paths, n_steps) / scale
+    paths = simulate_cumulative(sigma2_next, z, params, rng, n_paths, n_steps, demean) / scale
     return np.quantile(paths, levels, axis=0).T
 
 
