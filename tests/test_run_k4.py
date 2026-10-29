@@ -2,7 +2,6 @@
 cấu hình cross_validation, MCS, quy tắc chọn, mốc cắt 2018-12-31, chặn cache CEEMDAN, phần chặn
 val2019. Không chạy trên dữ liệu thật."""
 
-import hashlib
 import json
 from pathlib import Path
 
@@ -291,12 +290,114 @@ def test_scoring_inputs_and_direction_table(evaluated):
     assert t["q50<0"].between(0, 1).all() and t["sign_accuracy"].between(0, 1).all()
 
 
-# ---------- kết quả cv không đổi từng bit so với commit cfecd62 (dữ liệu tổng hợp) ----------
+# ---------- kết quả cv khớp commit trước trong sai số (dữ liệu tổng hợp) ----------
 
-# sha256 tính ở cfecd62, trước các thay đổi của mục 8 (29/10 tối), trên _fake_prices():
-# forecasts của build_cv (4 mô hình) và build_cv_dm, và MCS trên detail tổng hợp cố định.
-GOLDEN_CV = "42bfb58691b97f5618472643192983d913b12bdc60cf8e0b042b1ac4c176d42d"
-GOLDEN_CV_DM = "d13df2263f514710e0fb4cbce2f12436e56d40a33ed3a3f258c62248c47b9a87"
+# Forecasts của build_cv và build_cv_dm đi qua bước fit arch (bộ tối ưu của scipy), không tái lập
+# từng bit giữa các hệ điều hành (CI Linux khác Windows ở bit cuối); tái lập từng bit chỉ áp dụng
+# trên cùng nền tảng. Nên so giá trị chuẩn rút gọn trong sai số: một mẫu cố định các phần tử (mỗi
+# tài sản: ngày gốc đầu h1 q05, giữa h4 q50, cuối h7 q95), tổng trị tuyệt đối, tổng bình phương và
+# tổng có dấu theo từng mô hình. Giá trị chuẩn tính bằng code ở 850cbc5 trên Windows, trùng hash
+# của cfecd62 trên cùng máy. Phần NumPy-only có tham số cố định vẫn so hash từng bit
+# (tests/test_fhs_numpy.py).
+TOL = {"rtol": 1e-6, "atol": 1e-10}
+N_COMMON = [754, 754, 716, 755]
+REFERENCE = {
+    "baseline-q252": {
+        "sum": 150.24506882510224,
+        "abs_sum": 3008.362077957237,
+        "sumsq": 93.30176619419626,
+        "sample": [
+            -0.015372347695275464,
+            6.135559443404756e-05,
+            0.04575326709685627,
+            -0.02058172830264119,
+            0.0017403682296427444,
+            0.04184160792530466,
+            -0.01809050052788306,
+            -0.004719536691896953,
+            0.05331191940155231,
+            -0.022315921714155872,
+            0.0006695588811941777,
+            0.0681383794091988,
+        ],
+    },
+    "S1a": {
+        "sum": 140.4514496201212,
+        "abs_sum": 2821.945031994406,
+        "sumsq": 92.8814457455803,
+        "sample": [
+            -0.01307863742717126,
+            6.135559443404756e-05,
+            0.031519494023974325,
+            -0.018287130198793123,
+            0.0017403682296427444,
+            0.021711860309024056,
+            -0.022424568742190613,
+            -0.004719536691896953,
+            0.04715271513863061,
+            -0.020625969647751492,
+            0.0006695588811941777,
+            0.047199746950395874,
+        ],
+    },
+    "fhs-gjr-t": {
+        "sum": -141.29248284228171,
+        "abs_sum": 2938.4557687565202,
+        "sumsq": 96.58806671348827,
+        "sample": [
+            -0.01327488509747911,
+            -0.0008941171112575932,
+            0.037928647714852506,
+            -0.02015645506327512,
+            0.0003887194065851568,
+            0.02392452270906941,
+            -0.0224440593853761,
+            -0.002264424150266173,
+            0.039221241677650245,
+            -0.018835268031922994,
+            0.002304603877660701,
+            0.036131745829191056,
+        ],
+    },
+    "combo-eq3": {
+        "sum": 49.801345200980556,
+        "abs_sum": 2920.162731588858,
+        "sumsq": 90.05144300140093,
+        "sample": [
+            -0.013908623406641944,
+            -0.000257135307463166,
+            0.03840046961189437,
+            -0.019675104521569814,
+            0.001289818621956882,
+            0.029159330314466048,
+            -0.02098637621848326,
+            -0.0039011658446866924,
+            0.04656195873927773,
+            -0.02059238646461012,
+            0.0012145738800163521,
+            0.05048995739626191,
+        ],
+    },
+    "fhs-gjr-t-dm": {
+        "sum": -6.664751133586341,
+        "abs_sum": 2912.096421061552,
+        "sumsq": 95.73415278795025,
+        "sample": [
+            -0.012867444663159982,
+            0.0002617113436634349,
+            0.038674653667314575,
+            -0.01945475719283682,
+            0.00040132760356886735,
+            0.02427261136056729,
+            -0.02196060300920806,
+            -0.0002602568739348409,
+            0.04381264445166926,
+            -0.019255894372345223,
+            0.0009941182169919817,
+            0.033826197241150144,
+        ],
+    },
+}
 GOLDEN_MCS_P = {"baseline-q252": 1.0, "fhs-gjr-t": 0.0, "combo-eq3": 0.0}
 GOLDEN_MCS_MEAN = {
     "gold": [0.0021369839897171844, 0.0021583538296143564, 0.0021797236695115284],
@@ -304,17 +405,20 @@ GOLDEN_MCS_MEAN = {
 }
 
 
-def _digest(forecasts, models):
-    h = hashlib.sha256()
-    for m in models:
-        for a in C.ASSETS:
-            base, q, crossed = forecasts[m][a]
-            h.update(m.encode())
-            h.update(a.encode())
-            h.update(np.asarray(R._ns(base).asi8).tobytes())
-            h.update(np.round(q, 12).tobytes())
-            h.update(np.asarray(crossed, bool).tobytes())
-    return h.hexdigest()
+def _assert_matches_reference(forecasts, model):
+    ref = REFERENCE[model]
+    qs = [forecasts[model][a][1] for a in C.ASSETS]
+    assert [len(q) for q in qs] == N_COMMON
+    assert not any(np.asarray(forecasts[model][a][2]).any() for a in C.ASSETS)
+    sample = [x for q in qs for x in (q[0, 0, 0], q[len(q) // 2, 3, 3], q[-1, 6, 6])]
+    allq = np.concatenate([q.ravel() for q in qs])
+    np.testing.assert_allclose(sample, ref["sample"], **TOL)
+    np.testing.assert_allclose(
+        [np.abs(allq).sum(), (allq**2).sum()], [ref["abs_sum"], ref["sumsq"]], **TOL
+    )
+    # tổng có dấu triệt tiêu nhau (bản dm: −6,7 trên tổng trị tuyệt đối 2912) nên so theo thang
+    # của tổng trị tuyệt đối, không theo chính nó
+    np.testing.assert_allclose(allq.sum(), ref["sum"], rtol=0, atol=TOL["rtol"] * ref["abs_sum"])
 
 
 def _synthetic_mcs_named(drop=0):
@@ -344,14 +448,18 @@ def _synthetic_mcs_named(drop=0):
     return named
 
 
-def test_cv_and_cv_dm_forecasts_bit_identical_to_previous_commit(built):
+def test_cv_and_cv_dm_forecasts_match_previous_commit_within_tolerance(built):
+    """Forecasts cv (4 mô hình) và cv-dm khớp giá trị chuẩn của commit trước trong sai số
+    rtol 1e-6, atol 1e-10: bước fit arch không tái lập từng bit giữa các hệ điều hành, nên tái
+    lập từng bit chỉ áp dụng trên cùng nền tảng (lần chạy thật so file parquet trên cùng máy)."""
     cut, out, expected, _ = built
-    assert _digest(out["forecasts"], R.MODELS) == GOLDEN_CV
+    for model in R.MODELS:
+        _assert_matches_reference(out["forecasts"], model)
     ref = {"forecasts": out["forecasts"], "fits": pd.DataFrame(out["fits"])}
     with pytest.MonkeyPatch.context() as mp:
         mp.setattr(C, "CV_EXPECTED_N", expected)
         dm = R.build_cv_dm(cut, {a: [] for a in C.ASSETS}, ref)
-    assert _digest(dm["forecasts"], [C.FHS_DM]) == GOLDEN_CV_DM
+    _assert_matches_reference(dm["forecasts"], C.FHS_DM)
     for asset in C.ASSETS:
         assert out["validity"][asset]["fhs_invalid"]["invalid_variance"] == 0
         assert dm["validity"][asset]["fhs_dm_invalid"]["nonfinite_quantiles"] == 0
@@ -360,7 +468,8 @@ def test_cv_and_cv_dm_forecasts_bit_identical_to_previous_commit(built):
 def test_mcs_unchanged_and_uses_origins_full_in_every_model():
     res = R.run_mcs(_synthetic_mcs_named())
     for asset, means in GOLDEN_MCS_MEAN.items():
-        assert [res[asset]["mean_loss"][m] for m in C.MCS_MODELS] == means
+        got = [res[asset]["mean_loss"][m] for m in C.MCS_MODELS]
+        np.testing.assert_allclose(got, means, **TOL)
     assert all(res[a]["pvalue"] == GOLDEN_MCS_P for a in C.ASSETS)
     assert all(res[a]["n_obs"] == 120 and not res[a]["origins_changed"] for a in C.ASSETS)
     narrowed = R.run_mcs(_synthetic_mcs_named(drop=5))
