@@ -1,0 +1,158 @@
+{
+  "benchmark": "CPAWS News Labeling Real Fed/EIA Test Set",
+  "config": "configs.labeling_benchmark_v3",
+  "cases_version": "real-1",
+  "cases_status": "locked",
+  "prompt_version": "labeling-v3",
+  "model_id": "global.amazon.nova-2-lite-v1:0",
+  "region": "ap-southeast-1",
+  "max_tokens": 1200,
+  "temperature": 0,
+  "dry_run": false,
+  "started_at": "2026-10-29T06:57:26+00:00",
+  "sha256": {
+    "cases": "4b39bd028612bdd9e6a049848be2f6176383c66beb9eaca9c4ac89a2a36e7714",
+    "prompt": "8f6d1a97327a6b6a2f0defd54388261fd5174aa3d95ec7387dcac222d7f59ea7",
+    "schema": "5981dc3cbf0eda532267f15ba636441c0127926bd440d68106a879d5a83f9ce3"
+  },
+  "metrics": {
+    "valid_output": {
+      "hit": 52,
+      "n": 52,
+      "rate": 1.0
+    },
+    "relevant_accuracy": {
+      "hit": 49,
+      "n": 52,
+      "rate": 0.9423
+    },
+    "event_type_accuracy": {
+      "hit": 46,
+      "n": 52,
+      "rate": 0.8846
+    },
+    "direction_accuracy": {
+      "hit": 43,
+      "n": 82,
+      "rate": 0.5244
+    },
+    "impact_abs_err_le1": {
+      "hit": 206,
+      "n": 208,
+      "rate": 0.9904
+    },
+    "confidence_match": {
+      "hit": 56,
+      "n": 208,
+      "rate": 0.2692
+    },
+    "direction_gold_silver_rates": {
+      "hit": 20,
+      "n": 40,
+      "rate": 0.5
+    }
+  },
+  "thresholds": {
+    "relevant_accuracy": 0.9,
+    "event_type_accuracy": 0.9,
+    "direction_accuracy": 0.8,
+    "impact_abs_err_le1": 0.9
+  },
+  "checks": {
+    "valid_output_all": true,
+    "relevant_accuracy": true,
+    "event_type_accuracy": false,
+    "direction_accuracy": false,
+    "impact_abs_err_le1": true,
+    "group_a_all_pass": false,
+    "special_cases_all_pass": false
+  },
+  "passed": false,
+  "group_a_failures": {
+    "F07": [
+      "brent: impact 0 so với 1 (0/khác 0)",
+      "wti: impact 0 so với 1 (0/khác 0)"
+    ],
+    "E28": [
+      "event_type: kỳ vọng macro_data, nhận geopolitics"
+    ],
+    "E32": [
+      "event_type: kỳ vọng macro_data, nhận other"
+    ]
+  },
+  "case_30_failures": [],
+  "special_case_failures": {
+    "X01": [
+      "brent: impact 0 so với 1 (0/khác 0)",
+      "wti: impact 0 so với 1 (0/khác 0)"
+    ]
+  },
+  "evidence_issues": {},
+  "manual_review_sample": [
+    {
+      "case_id": "E09",
+      "asset": "brent"
+    },
+    {
+      "case_id": "E23",
+      "asset": "brent"
+    },
+    {
+      "case_id": "F06",
+      "asset": "gold"
+    },
+    {
+      "case_id": "F07",
+      "asset": "silver"
+    },
+    {
+      "case_id": "F09",
+      "asset": "gold"
+    },
+    {
+      "case_id": "F12",
+      "asset": "wti"
+    },
+    {
+      "case_id": "F23",
+      "asset": "silver"
+    },
+    {
+      "case_id": "F24",
+      "asset": "brent"
+    },
+    {
+      "case_id": "F25",
+      "asset": "brent"
+    },
+    {
+      "case_id": "X02",
+      "asset": "wti"
+    }
+  ],
+  "manual_review_note": "Duyệt tay: evidence bám nội dung (mẫu trên); notes của case chỉ dẫn nhúng (case 30 ở v2, case variant=injection ở v3).",
+  "manual_review": {
+    "sample_size": 10,
+    "seed": 7,
+    "pool": "ô có impact_score do model gán ≥ 1",
+    "pass_min": 8,
+    "reviewer": "Khải",
+    "criteria": [
+      "Đúng nội dung: evidence chỉ nêu điều có trong tiêu đề hoặc tóm tắt",
+      "Khớp hướng: evidence ủng hộ đúng direction đã gán",
+      "Không thêm dữ kiện: không có con số, nguyên nhân hay cơ chế mà bài không nêu"
+    ]
+  },
+  "status_counts": {
+    "valid": 52,
+    "invalid": 0,
+    "api_error": 0
+  },
+  "usage": {
+    "input_tokens": 300844,
+    "output_tokens": 14264,
+    "calls": 54,
+    "estimated_cost_usd": 0.1259,
+    "latency_ms_median": 1513
+  }
+}
