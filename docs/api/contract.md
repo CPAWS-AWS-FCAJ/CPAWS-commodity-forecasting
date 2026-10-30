@@ -165,7 +165,7 @@ Hỏi đáp tiếng Việt về dự báo vàng, bạc, Brent, WTI. Lambda nhậ
 | `complex` | Claude Haiku 4.5 | `get_forecast` v2, `get_news`, tối đa 3 vòng | 1500 | `chatbot-haiku-v2` |
 
 - Router không chắc thì chọn `complex`. Router theo luật chưa xong; nếu chưa kịp cho demo 8/11 thì mọi câu đi `complex` (mục 9 ở cuối phần này).
-- Prompt v2 đang chờ Khải duyệt bản cuối và khóa SHA-256 ngày 3/11 (`docs/experiments/chatbot-benchmark-v2-proposal.md` mục 10). Lambda dùng đúng bản prompt đã khóa.
+- Prompt v2 bản dev3 đã được Khải duyệt (review approve PR #38, 27/10) và khóa SHA-256 ngày 29/10 (`docs/experiments/chatbot-benchmark-v2-proposal.md` mục 11). Lambda dùng đúng bản prompt đã khóa.
 
 **Nguồn dữ liệu của tool `get_forecast` (Khải chốt 26/10)**
 
