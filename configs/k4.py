@@ -61,6 +61,9 @@ FILTER_PARITY_RTOL = 1e-8  # đệ quy NumPy so với conditional_volatility c�
 NU_MIN_EXCLUSIVE = 2.0
 PERSISTENCE_MAX = 1.0
 PERSISTENCE_TOL = 1e-9
+# Mục 8 (30/10): các ràng buộc không âm của arch (α ≥ 0, β ≥ 0, α + γ ≥ 0) cũng nhận với dung sai
+# số này; lần val2019 thứ nhất dừng vì silver 2019-01 có α + γ âm cỡ sai số làm tròn
+NONNEG_TOL = 1e-9
 
 # Kế hoạch mục 2 và 8: kiểm định chéo, ba fold gộp, một mốc cắt ngày đích
 CV_FOLDS = (2016, 2017, 2018)

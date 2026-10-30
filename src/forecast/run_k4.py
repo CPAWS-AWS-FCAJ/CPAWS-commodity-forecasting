@@ -346,6 +346,12 @@ def fit_summary(logs: list[dict]) -> dict:
                 for row in ok.itertuples()
                 if C.PERSISTENCE_MAX - row.persistence <= C.PERSISTENCE_TOL
             ],
+            # mục 8 (30/10): α + γ ở biên 0 (cú sốc âm không làm tăng phương sai), vẫn hợp lệ
+            "at_alpha_gamma_bound": [
+                {"month": str(row.month.date()), "alpha_plus_gamma": float(row.alpha + row.gamma)}
+                for row in ok.itertuples()
+                if row.alpha + row.gamma <= C.NONNEG_TOL
+            ],
         }
     return out
 
@@ -1535,6 +1541,7 @@ def fits_section(fhs_fits: dict) -> list[str]:
             "dùng tham số tháng trước": len(f["fallback_months"]),
             "liên tiếp lớn nhất": f["max_consecutive_reuse"],
             "ở biên persistence": len(f["at_persistence_bound"]),
+            "ở biên α + γ": len(f.get("at_alpha_gamma_bound", [])),
         }
         for p in PARAMS:
             row[p] = f"{f[p]['min']:.3f} / {f[p]['median']:.3f} / {f[p]['max']:.3f}"

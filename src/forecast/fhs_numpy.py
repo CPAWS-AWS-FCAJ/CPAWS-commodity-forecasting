@@ -26,13 +26,15 @@ N_STEPS = 7
 NU_MIN_EXCLUSIVE = 2.0
 PERSISTENCE_MAX = 1.0
 PERSISTENCE_TOL = 1e-9
+# Mục 8 (30/10): α ≥ 0, β ≥ 0, α + γ ≥ 0 của arch thỏa trong sai số số học của bộ tối ưu
+NONNEG_TOL = 1e-9
 
 
 @dataclass(frozen=True)
 class GjrParams:
     """Tham số GJR-GARCH(1,1) trên thang return × scale; ν chỉ dùng lúc fit (FHS lấy z thực
-    nghiệm), giữ lại để báo cáo. Từ chối ν ≤ 2 và α + γ/2 + β > 1 + 1e-9; nghiệm ở biên
-    (persistence trong [1, 1 + 1e-9]) vẫn nhận."""
+    nghiệm), giữ lại để báo cáo. Từ chối ν ≤ 2, α + γ/2 + β > 1 + 1e-9 và α, β, α + γ < −1e-9;
+    nghiệm ở biên ràng buộc của arch (trong dung sai 1e-9) vẫn nhận."""
 
     omega: float
     alpha: float
@@ -44,7 +46,12 @@ class GjrParams:
         values = (self.omega, self.alpha, self.gamma, self.beta, self.nu)
         if not np.isfinite(values).all():
             raise ValueError("GJR parameters must be finite")
-        if self.omega <= 0 or self.alpha < 0 or self.beta < 0 or self.alpha + self.gamma < 0:
+        if (
+            self.omega <= 0
+            or self.alpha < -NONNEG_TOL
+            or self.beta < -NONNEG_TOL
+            or self.alpha + self.gamma < -NONNEG_TOL
+        ):
             raise ValueError("GJR parameters give a non-positive variance")
         if self.nu <= NU_MIN_EXCLUSIVE:
             raise ValueError("Student-t nu must be > 2")

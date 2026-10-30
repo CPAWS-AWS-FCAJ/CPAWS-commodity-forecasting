@@ -513,6 +513,10 @@ def test_fit_summary_reports_reuse_streak_and_persistence_bound():
     bound = f["at_persistence_bound"]
     assert [b["month"] for b in bound] == ["2016-04-01"]  # chỉ tính các lần fit ok
     assert bound[0]["gap"] == pytest.approx(5e-10)
+    assert f["at_alpha_gamma_bound"] == []  # α + γ = 0,05 ở mọi tháng
+    logs[0].update(alpha=0.0261682, gamma=-0.0261682 - 3e-18)
+    edge = R.fit_summary(logs)["brent"]["at_alpha_gamma_bound"]
+    assert [b["month"] for b in edge] == ["2016-01-01"]
 
 
 def test_roll_calendar_checks(evaluated, monkeypatch):
@@ -885,6 +889,7 @@ def test_config_and_requirements_pins():
     assert (C.MCS_SIZE, C.MCS_REPS, C.MCS_BLOCK, C.MCS_SEED) == (0.10, 1000, 20, 7)
     assert (C.FHS_WINDOW, C.FHS_SCALE, C.FHS_PATHS, C.FHS_STEPS) == (1000, 100.0, 5000, 7)
     assert (C.NU_MIN_EXCLUSIVE, C.PERSISTENCE_MAX, C.PERSISTENCE_TOL) == (2.0, 1.0, 1e-9)
+    assert C.NONNEG_TOL == 1e-9
     assert C.CV == ("2016-01-01", "2018-12-31") and C.CV_CUTOFF == "2018-12-31"
     assert C.FHS_DM == "fhs-gjr-t-dm" and C.VAL2019_CANDIDATE == C.FHS_DM
     assert C.FHS_DEMEAN == {C.FHS: False, C.FHS_DM: True} and C.CV_DM_PROCEED_ABOVE == 0.0

@@ -165,6 +165,23 @@ def test_params_accept_arch_boundary_solutions():
     )
 
 
+def test_params_accept_nonnegativity_bounds_within_tolerance():
+    """Mục 8 (30/10): silver 2019-01 có γ = −α (α + γ âm cỡ làm tròn) nên lần val2019 thứ nhất
+    dừng; α, β, α + γ trong [−1e-9, 0) vẫn nhận, dưới −1e-9 vẫn từ chối."""
+    base = {"omega": 0.0170691, "alpha": 0.0261682, "beta": 0.976574, "nu": 4.87348}
+    for gap in (0.0, 3e-18, 5e-10):
+        p = F.GjrParams(**base, gamma=-0.0261682 - gap)
+        assert p.alpha + p.gamma >= -F.NONNEG_TOL
+    F.GjrParams(omega=0.02, alpha=-5e-10, gamma=0.08, beta=0.9, nu=7.0)
+    F.GjrParams(omega=0.02, alpha=0.03, gamma=0.08, beta=-5e-10, nu=7.0)
+    for bad in ({"gamma": -0.0261682 - 2e-9}, {"alpha": -2e-9, "gamma": 0.03}):
+        with pytest.raises(ValueError):
+            F.GjrParams(**{**base, "gamma": -0.02, **bad})
+    with pytest.raises(ValueError):
+        F.GjrParams(omega=0.02, alpha=0.03, gamma=0.08, beta=-2e-9, nu=7.0)
+    assert F.NONNEG_TOL == C.NONNEG_TOL == 1e-9
+
+
 def test_inputs_are_validated():
     with pytest.raises(ValueError):
         F.variance_path([0.1, np.nan], PARAMS, 1.0)
