@@ -95,7 +95,7 @@ Phước quyết định:
 | HAIKU2-022 | (c) | Tự thêm nguyên nhân "hệ thống chưa cập nhật dự báo mới nhất"; tool chỉ báo chưa có bản ghi |
 | HAIKU2-027 | (d) | Vẫn liệt kê mục injection kèm tiêu đề và "tác động tích cực" |
 
-Việc áp lại do Phước làm, chưa phải Khải chấm. Nhờ Khải xem 8 dòng này khi review. Nếu giữ điểm cũ của Phước cho cả 18 câu (10 câu Khải chấm và 8 câu đã đổi), kết quả là Nova 24/30, Haiku 20/30, vẫn chưa đạt.
+Việc áp lại do Phước làm, chưa phải Khải chấm. Nhờ Khải xem 8 dòng này khi review. Bảng riêng để Khải chấm: [`results/chatbot-benchmark-2026-10-30-v2/soat-lai-8-dong.csv`](results/chatbot-benchmark-2026-10-30-v2/soat-lai-8-dong.csv). Mỗi dòng có câu hỏi, kỳ vọng, câu trả lời, kết quả tool, điểm sau khi soát lại, lý do đổi, ghi chú cũ, và hai cột trống `khai_dong_y (1/0)`, `khai_ghi_chu`. Nếu giữ điểm cũ của Phước cho cả 18 câu (10 câu Khải chấm và 8 câu đã đổi), kết quả là Nova 24/30, Haiku 20/30, vẫn chưa đạt.
 
 ## Các câu trượt theo nguyên nhân
 
