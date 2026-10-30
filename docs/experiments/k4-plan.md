@@ -15,7 +15,7 @@
 K3b mục 4 đã chốt: không đạt thì dừng dò mô hình chỉ dùng giá. K4 mở lại có chủ đích, với hai thay đổi
 để không dùng 2019 vào việc chọn:
 1. Chọn ứng viên bằng kiểm định chéo theo thời gian trên 2016, 2017, 2018 (mục 4).
-2. Chỉ ứng viên được chọn chạy trên 2019, một lần.
+2. Chỉ một mô hình chạy trên 2019, một lần: `fhs-gjr-t-dm`, khi phần chặn cv-dm đạt (mục 8).
 
 Số lần nhìn vào validation 2019 ở cấp dự án (cập nhật 29/10, xem mục 8): DLinear MVP lần 1 (1 cấu hình), K3 lần 2
 (8 cấu hình), K3b lần 3 (3 cấu hình), **K4 lần 4 (1 cấu hình)**. Tổng 13 cấu hình; báo cáo phải ghi con số này. Tập test 2020 → nay vẫn không chạy.
@@ -89,7 +89,8 @@ Ký hiệu: Q_τ,h = phân vị `baseline-q252` tại t; S_τ,h = phân vị S1a
 ## 6. Báo cáo
 
 - Mọi chỉ số ADR-0008 mục 5 theo tài sản × h, cho `baseline-q252`, S1a, `fhs-gjr-t`, `combo-eq3` trên
-  kiểm định chéo; ứng viên được chọn thêm 2019.
+  kiểm định chéo; trên 2019 chỉ `fhs-gjr-t-dm` (khi phần chặn cv-dm đạt, mục 8), so với `baseline-q252`
+  và S1a. `fhs-gjr-t` và `combo-eq3` không chạy 2019.
 - Độ ổn định tham số FHS theo từng lần refit (ω, α, γ, β, ν; số lần không hội tụ).
 - Thời gian chạy một lần dự báo (4 tài sản) để ước tính cho Lambda.
 - Ghi rõ: lần nhìn thứ 4 vào 2019 ở cấp dự án, tổng 13 cấu hình; kiểm định chéo nằm trong giai đoạn train của K3.
@@ -136,7 +137,7 @@ Ký hiệu: Q_τ,h = phân vị `baseline-q252` tại t; S_τ,h = phân vị S1a
 - Phân loại: `fhs-gjr-t` và `combo-eq3` là ứng viên đăng ký trước; `fhs-gjr-t-dm` là sửa đổi hậu nghiệm. Báo cáo thêm chênh lệch pinball_skill của `fhs-gjr-t-dm` so với `fhs-gjr-t` trên cùng common mask. Lý do sửa là trung bình của z âm (độ trôi); q50 âm chỉ là hệ quả.
 - Nguồn cho `combo-eq3`: Lichtendahl, Grushka-Cockayne, Winkler (2013), Is It Better to Average Probabilities or Quantiles?, Management Science 59(7). Nowotarski & Weron (2015) là QRA, chỉ dùng làm bối cảnh.
 - Báo cáo bổ sung, không đổi quy tắc chọn hay tiêu chí mục 5: kết quả từng fold 2016/2017/2018 và số ngày hợp lệ theo tài sản × h; Holm qua 4 tài sản cho kiểm định mục 5; độ nhạy CI theo block length 10, 20, 40; độ nhạy FHS theo 2 seed khác và 10000 đường (chỉ để kiểm tra độ bền); coverage_80, width_80, interval score, hit rate và kiểm định độc lập các lần vượt khoảng (Christoffersen 1998).
-- Kiểm tra mô hình: tham số nạp vào phải có ν > 2 và α + γ/2 + β < 1; báo số tháng dùng lại tham số liên tiếp; phương sai và phân vị phải hữu hạn trước khi coi là hợp lệ.
+- Kiểm tra mô hình: tham số nạp vào phải có ν > 2 và α + γ/2 + β ≤ 1 + 1e-9 (xem mục "Sửa lại" bên dưới); báo số tháng dùng lại tham số liên tiếp; phương sai và phân vị phải hữu hạn trước khi coi là hợp lệ.
 - Phạm vi `cross_validation`: loại đánh giá nội bộ của K4, chỉ ghi vào `eval/k4/`, không vào bảng Accuracy hay schema production.
 - Hạn chế ghi trong báo cáo: q252 và S1a có liên hệ trực tiếp nên `combo-eq3` không kết hợp ba nguồn độc lập; FHS lấy đuôi từ phần dư lịch sử nên có thể thiếu các cú sốc ngoài mẫu.
 - **Tiêu chí mục 5 cho dầu:** quyết định "đạt" theo sample `all`; `excl_roll` chỉ báo cáo. Nếu `all` đạt mà `excl_roll` không đạt thì ghi rõ trong ADR-0012.
@@ -144,3 +145,13 @@ Ký hiệu: Q_τ,h = phân vị `baseline-q252` tại t; S_τ,h = phân vị S1a
 
 - **Sửa lại (29/10 khuya):** điều kiện persistence là α + γ/2 + β ≤ 1 (đúng ràng buộc của arch khi fit), không phải < 1. 11/142 lần fit trên kiểm định chéo nằm ở biên 1 (gần IGARCH); với kỳ hạn tối đa 7 phiên phương sai mô phỏng vẫn hữu hạn nên vẫn hợp lệ. Chỉ từ chối tham số có persistence > 1 + 1e-9 hoặc ν ≤ 2. Báo cáo liệt kê các lần fit nằm ở biên.
 - **Đồng bộ (29/10 khuya, theo review lần 2 của Long ở #59):** DLinear MVP tính 1 cấu hình (PR #26: 4 tài sản, chung một cấu hình), tổng 13; cập nhật các câu đếm cũ ở mục 0, 6, 8; nguồn trực tiếp cho `combo-eq3` là Lichtendahl et al. (2013), thêm White (2000) và Christoffersen (1998) vào mục 7; mục 5 ghi rõ ngoại lệ `fhs-gjr-t-dm`. Không đổi quy tắc chọn hay tiêu chí.
+
+### 30/10/2026, theo review lần 3 của Long (#59, #60), trước khi chạy 2019
+
+- **Một quy tắc persistence:** ν > 2 và α + γ/2 + β ≤ 1 + 1e-9, áp dụng khi nạp tham số (`GjrParams`); không còn điều kiện < 1 ở bất kỳ mục nào. Lần fit "ở biên" là lần có 1 − (α + γ/2 + β) ≤ 1e-9. Trên `k4-cv-clean2` có 11/142 lần fit ở biên. Giới hạn: các tháng này gần IGARCH, cú sốc gần như không tắt dần trong 7 phiên, nên khoảng dự báo có thể rộng hơn thực tế; ADR-0012 liệt kê các tháng này và so pinball_skill của chúng với các tháng còn lại.
+- **Ứng viên 2019:** chỉ `fhs-gjr-t-dm`, và chỉ khi phần chặn cv-dm đạt (trung bình 28 nhóm > 0 trên `k4-cv-dm-clean`). Mục 0 và mục 6 đã sửa theo.
+- **Bộ kết quả chuẩn (canonical):** `k4-cv-clean2` và `k4-cv-dm-clean` (commit `850cbc5`, không dirty). `k4-cv-clean` chỉ để đối chiếu, không qua phần chặn mới vì chưa có `file_sha256`. Các commit sau `850cbc5` chỉ đổi `tests/`, nên fingerprint config/code không đổi.
+- **Tái lập giữa hệ điều hành:** đo trên Linux (Python 3.11, numpy 2.4.6, scipy 1.17.0, arch 8.0.0, như CI) so với giá trị chuẩn trên Windows: mốc và S1a lệch ~1e-16; `fhs-gjr-t` và `fhs-gjr-t-dm` lệch tuyệt đối tối đa 2,0e-7 log return; `combo-eq3` 6,7e-8. Nguyên nhân là bước tối ưu của scipy khi fit arch. Test dùng `TOL_FIT` (atol 2e-6) cho ba mô hình này; đây là dung sai kiểm thử, không đổi thuật toán hay tiêu chí. Kết quả thật chỉ so trên cùng máy và cùng môi trường: cv, cv-dm và 2019 chạy trên cùng máy Windows, cùng venv.
+- **Phiên bản scipy:** `environment_versions()` chưa ghi scipy. Không sửa code trước khi chạy 2019, vì sửa sẽ đổi fingerprint và phải chạy lại cv. Thay vào đó ghi `pip freeze` của venv ngay trước lần chạy 2019 vào `eval/k4/k4-val2019/env.txt` (kèm SHA-256); thêm scipy vào `environment_versions()` ở PR sau.
+- **`fhs_fits.parquet` khác SHA-256 giữa `k4-cv-clean` và `k4-cv-clean2`:** cột `seconds` (thời gian fit, đo bằng đồng hồ) đổi mỗi lần chạy. Đối chiếu tham số (ω, α, γ, β, ν), trạng thái, tháng dùng lại và số lần ở biên trên các cột còn lại; kết quả ghi vào comment #60.
+- **Chạy một lần:** trước khi chạy, ghi `claim.json` (commit, thời điểm, người chạy) lên `s3://cpaws-dev-lake/eval/k4/k4-val2019/claim.json` bằng ghi có điều kiện (`If-None-Match: *`); đã có file thì không chạy. Chạy xong tải cả thư mục và SHA-256 lên S3, báo ở #60. Lần chạy hỏng giữa chừng không tự chạy lại; ghi lý do vào ADR-0012 và cả nhóm quyết định.
