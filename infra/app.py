@@ -9,7 +9,7 @@ from stacks.cpaws_auth_stack import CpawsAuthStack
 from stacks.cpaws_data_stack import CpawsDataStack
 from stacks.cpaws_ops_stack import CpawsOpsStack
 from stacks.cpaws_serving_stack import CpawsServingStack
-from stacks.shared import ingest_function_name, predict_function_name
+from stacks.shared import chat_api_function_name, ingest_function_name, predict_function_name
 
 # Tag image của Lambda ingest trong ECR = SHA ngắn của commit merge PR #43 trên developer
 # (gồm #36: đọc EIA key từ SSM, và #43: cờ INGEST_STALE). Không dùng 6956620/3d391dd:
@@ -62,13 +62,14 @@ CpawsDataStack(
     env=aws_env,
 )
 
-# Monitoring và cảnh báo cho Lambda ingest và predict
+# Monitoring và cảnh báo cho Lambda ingest, predict và /chat
 CpawsOpsStack(
     app,
     "CpawsOps",
     env_name=env_name,
     ingest_function_name=ingest_function_name(env_name),
     predict_function_name=predict_function_name(env_name),
+    chat_function_name=chat_api_function_name(env_name),
     alarm_email=alarm_email,
     env=aws_env,
 )
@@ -89,7 +90,8 @@ auth_stack = CpawsAuthStack(
     env=aws_env,
 )
 
-# REST API phục vụ dữ liệu dự báo, tích hợp DynamoDB và Cognito
+# REST API: dữ liệu dự báo và POST /chat (Bedrock), xác thực Cognito.
+# Deploy CpawsServing (bảng chat-usage) trước CpawsApi: Lambda /chat dựng ARN bảng theo tên.
 CpawsApiStack(
     app,
     "CpawsApi",

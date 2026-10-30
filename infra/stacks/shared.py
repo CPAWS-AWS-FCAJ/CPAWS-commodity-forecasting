@@ -63,3 +63,82 @@ def news_labels_write_statement(stack: Stack, env_name: str) -> iam.PolicyStatem
         actions=["dynamodb:PutItem"],
         resources=[_news_labels_table_arn(stack, env_name)],
     )
+
+
+# ---------- Lambda POST /chat (contract POST /chat, mục "Tài nguyên và quyền IAM") ----------
+
+
+def chat_api_function_name(env_name: str) -> str:
+    """Tên Lambda /chat. CpawsApi đặt function_name theo tên này, CpawsOps dùng nó cho dimension
+    của alarm (giống ingest_function_name)."""
+    return f"cpaws-{env_name}-chat-api"
+
+
+def chat_usage_table_name(env_name: str) -> str:
+    """Tên bảng đếm lượt hỏi chat-usage. Phải KHỚP table_name trong cpaws_serving_stack.py
+    (tests/test_infra_chat_api.py kiểm tra). Lambda /chat dựng ARN từ tên này, không export chéo
+    stack, nên phải deploy CpawsServing trước CpawsApi."""
+    return f"cpaws-{env_name}-chat-usage"
+
+
+# Metric từ log lỗi không lường trước của Lambda /chat. Handler bắt mọi exception và trả 500, nên
+# metric Errors của Lambda chỉ đếm timeout/crash; metric này đếm phần còn lại. CpawsApi tạo
+# metric filter, CpawsOps tạo alarm theo đúng namespace + tên này.
+CHAT_METRIC_NAMESPACE = "CPAWS"
+CHAT_INTERNAL_ERRORS_METRIC = "ChatInternalErrors"
+# Hai câu log của infra/lambda/chat_api/handler.py khi lỗi không lường trước (logger.exception)
+CHAT_INTERNAL_ERROR_LOG_TERMS = (
+    "chat: unexpected error",
+    "chat: cannot initialise dependencies",
+)
+
+# Model gọi qua global cross-Region inference profile. Phải KHỚP MODEL_IDS trong
+# src/chatbot/chat.py bỏ tiền tố "global." (tests/test_infra_chat_api.py kiểm tra).
+CHAT_BEDROCK_MODELS = {
+    "Nova": "amazon.nova-2-lite-v1:0",
+    "Haiku": "anthropic.claude-haiku-4-5-20251001-v1:0",
+}
+
+
+def bedrock_global_invoke_statements(stack: Stack) -> list[iam.PolicyStatement]:
+    """bedrock:InvokeModel cho mỗi model trong CHAT_BEDROCK_MODELS, đủ 3 statement theo tài liệu
+    "Global cross-Region inference" (mục IAM policy requirements); thiếu một là AccessDenied:
+    1. inference profile global trong Region gọi;
+    2. foundation model trong Region gọi, chỉ khi gọi qua profile đó;
+    3. foundation model global (ARN không Region, không Account), RequestedRegion = unspecified.
+    Converse chỉ cần bedrock:InvokeModel; không cấp InvokeModelWithResponseStream."""
+    region, account = stack.region, stack.account
+    statements = []
+    for key, model in CHAT_BEDROCK_MODELS.items():
+        profile_arn = f"arn:aws:bedrock:{region}:{account}:inference-profile/global.{model}"
+        statements += [
+            iam.PolicyStatement(
+                sid=f"Bedrock{key}InferenceProfile",
+                actions=["bedrock:InvokeModel"],
+                resources=[profile_arn],
+                conditions={"StringEquals": {"aws:RequestedRegion": region}},
+            ),
+            iam.PolicyStatement(
+                sid=f"Bedrock{key}RegionalModel",
+                actions=["bedrock:InvokeModel"],
+                resources=[f"arn:aws:bedrock:{region}::foundation-model/{model}"],
+                conditions={
+                    "StringEquals": {
+                        "aws:RequestedRegion": region,
+                        "bedrock:InferenceProfileArn": profile_arn,
+                    }
+                },
+            ),
+            iam.PolicyStatement(
+                sid=f"Bedrock{key}GlobalModel",
+                actions=["bedrock:InvokeModel"],
+                resources=[f"arn:aws:bedrock:::foundation-model/{model}"],
+                conditions={
+                    "StringEquals": {
+                        "aws:RequestedRegion": "unspecified",
+                        "bedrock:InferenceProfileArn": profile_arn,
+                    }
+                },
+            ),
+        ]
+    return statements

@@ -1,4 +1,4 @@
-"""CDK stack for the CPAWS serving DynamoDB tables (Forecasts, NewsLabels)."""
+"""CDK stack for the CPAWS serving DynamoDB tables (Forecasts, NewsLabels, ChatUsage)."""
 
 from typing import Any
 
@@ -12,11 +12,12 @@ from aws_cdk import (
 )
 from constructs import Construct
 
-from .shared import news_labels_table_name
+from .shared import chat_usage_table_name, news_labels_table_name
 
 
 class CpawsServingStack(Stack):
-    """Create the Forecasts table (prediction pipeline) and the NewsLabels table (chatbot news)."""
+    """Create the Forecasts table (prediction pipeline), the NewsLabels table (chatbot news) and
+    the ChatUsage table (chatbot daily quota)."""
 
     def __init__(
         self,
@@ -82,4 +83,32 @@ class CpawsServingStack(Stack):
             self,
             "NewsLabelsTableName",
             value=self.news_labels_table.table_name,
+        )
+
+        # Bộ đếm lượt hỏi chatbot (contract POST /chat, mục giới hạn lượt hỏi):
+        # PK pk = "user#<sub>" hoặc "global", SK sk = "day#YYYY-MM-DD" (giờ VN).
+        # TTL trên expires_at chỉ để dọn dữ liệu cũ; reset theo ngày dựa vào sk.
+        # Không lưu câu hỏi/câu trả lời. DESTROY: chỉ là bộ đếm, mất cũng không sao
+        # (khác Forecasts, NewsLabels).
+        self.chat_usage_table = dynamodb.Table(
+            self,
+            "ChatUsageTable",
+            table_name=chat_usage_table_name(env_name),
+            partition_key=dynamodb.Attribute(
+                name="pk",
+                type=dynamodb.AttributeType.STRING,
+            ),
+            sort_key=dynamodb.Attribute(
+                name="sk",
+                type=dynamodb.AttributeType.STRING,
+            ),
+            billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
+            time_to_live_attribute="expires_at",
+            removal_policy=RemovalPolicy.DESTROY,
+        )
+
+        CfnOutput(
+            self,
+            "ChatUsageTableName",
+            value=self.chat_usage_table.table_name,
         )

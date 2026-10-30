@@ -1,6 +1,6 @@
 """Lambda `POST /chat` (hợp đồng: `docs/api/contract.md`, mục `POST /chat`, PR #41).
 
-Đóng gói asset Lambda (đề xuất, chờ Tiến chốt ở PR #41 mục 2, 4):
+Đóng gói asset Lambda (infra/stacks/chat_asset.py; tests/test_infra_chat_api.py kiểm đủ file):
     handler.py
     forecast_format.py           ← infra/lambda/forecast_api/forecast_format.py
     chatbot/__init__.py, tools.py, news.py, chat.py, quota.py   ← src/chatbot/
