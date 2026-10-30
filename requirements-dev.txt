@@ -7,7 +7,7 @@ ruff==0.16.10            # same version as CI, so format/lint results match
 pre-commit>=3.7
 matplotlib>=3.8          # scripts/eda_prices.py, report and slide figures
 scipy>=1.11              # scripts/eda_prices.py (descriptive statistics)
-moto[s3,dynamodb]>=5.0   # S3/DynamoDB tests without calling AWS (test_lambda_ingest, test_predict)
+moto[s3,dynamodb]>=5.0.15  # S3/DynamoDB tests without AWS; >=5.0.15 returns 412 for IfNoneMatch
 psutil>=5.9              # scripts/measure_ingest.py (peak memory)
 jsonschema==4.26.0       # validate news labeling output against docs/prompts/news-labeling-schema.json
 arch==8.0.0              # K4: GJR-GARCH fit and Model Confidence Set, offline only (not in predict)

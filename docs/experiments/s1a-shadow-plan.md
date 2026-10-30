@@ -128,3 +128,10 @@ Nếu PR chống ghi đè dự báo được merge trước, gộp vào cùng m�
    - `created_at` giống champion vì cả hai tính trong cùng một lần gọi Lambda. Bằng chứng độc lập là `LastModified` của object S3 (do S3 đặt, code không sửa được) kết hợp `IfNoneMatch="*"` (không ghi đè). Job `rolling_8w` kiểm cả hai mốc theo cùng quy tắc D18: `created_at` và `LastModified` đều phải sớm hơn `target_date` 13:30 UTC.
 2. **Cùng một tập chấm.** Champion và S1a chỉ được so trên đúng cùng tập `(asset, base_date, h)` có cả hai dự báo và target hợp lệ. Chỉ số của champion dùng để so được tính lại trên tập này, không lấy số `/accuracy/{asset}` đã công bố.
 3. **Tách khỏi API.** `/accuracy/{asset}` và `LATEST_COMPLETED` chỉ dành cho champion. Kết quả so sánh champion–S1a lưu Parquet tại `eval/shadow_eval/run_id=<run_id>/`, không ghi DynamoDB, không qua API, đúng ADR-0011 mục 3 (chỉ để báo cáo).
+
+## 15. Cập nhật 28/10 khi viết code
+
+1. **Cấu hình shadow sai không làm hỏng champion** (thay quy định ở mục 6 và test 10.9). `SHADOW_MODELS` có giá trị lạ, hoặc bật shadow khi `MODEL_VERSION` khác `baseline-q252`, thì không raise `PredictConfigError`. Lambda log ERROR `PREDICT_SHADOW_CONFIG_INVALID reason=<unknown_model|champion_not_baseline> value=…`, tắt shadow cho cả lần chạy, champion chạy bình thường; `PREDICT_DONE` có `"shadow": {"disabled_reason": "<reason>"}`.
+2. **Shadow chỉ chạy khi champion là `baseline-q252`**, vì S1a co giãn phân vị của mốc 252 phiên (mục 2). Champion khác thì shadow tắt theo điểm 1 (`champion_not_baseline`).
+3. **Backfill `--base-date` chỉ tính, không ghi S3**, log WARNING `PREDICT_SHADOW_BACKFILL_NOT_WRITTEN`. `dt=` trong key là ngày chạy (mục 4), nên bản backfill sẽ chiếm key của lần chạy thật cùng ngày và `IfNoneMatch` sẽ chặn bản thật.
+4. **moto ghim trong `requirements-dev.txt`** (`moto[s3,dynamodb]>=5.0.15`, bản cũ hơn không trả 412 cho `IfNoneMatch`), không trong `requirements.txt`: thư viện test vốn nằm ở file dev.

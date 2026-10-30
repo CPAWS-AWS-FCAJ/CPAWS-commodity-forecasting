@@ -56,8 +56,11 @@ class S3Storage:
     def _k(self, key: str) -> str:
         return f"{self.root}{key}"
 
-    def write_bytes(self, key: str, data: bytes) -> str:
-        self.s3.put_object(Bucket=self.bucket, Key=self._k(key), Body=data)
+    def write_bytes(self, key: str, data: bytes, if_none_match: bool = False) -> str:
+        """if_none_match: chỉ ghi khi key chưa có (IfNoneMatch="*"); có rồi thì S3 trả 412
+        PreconditionFailed (ClientError). Mặc định ghi đè như cũ (ingest)."""
+        extra = {"IfNoneMatch": "*"} if if_none_match else {}
+        self.s3.put_object(Bucket=self.bucket, Key=self._k(key), Body=data, **extra)
         return f"s3://{self.bucket}/{self._k(key)}"
 
     def read_bytes(self, key: str) -> bytes:

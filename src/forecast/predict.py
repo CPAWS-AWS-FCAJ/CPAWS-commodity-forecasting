@@ -17,6 +17,13 @@ xem src/forecast/lambda_predict.py; hạ tầng do Tiến cấu hình). Với m�
   5. last_price, tỷ giá, stale_sources, roll_in_horizon → to_forecast_record → ghi. DynamoDB không
      ghi đè dự báo đã phát hành cùng (asset, base_date), chỉ thay bản mẫu (is_sample = true);
      log PREDICT_ALREADY_PUBLISHED, tài sản vẫn tính là xong.
+  6. Shadow (SHADOW_MODELS=s1a-l094, docs/experiments/s1a-shadow-plan.md): chỉ khi champion
+     của tài sản đó là baseline-q252 và ok, S1a co giãn chính `raw` của champion theo k_t
+     (src/forecast/vol_scale_core.py) → eval/shadow/s1a-l094/dt=<ngày chạy UTC>/<asset>.json (S3:
+     không ghi đè). Lỗi shadow chỉ log PREDICT_SHADOW_FAILED, không đổi kết quả champion.
+
+Champion có thể khác nhau giữa tài sản (MODEL_VERSIONS của Lambda, RFC #45 D10): run_predict nhận
+model_version là một version cho mọi tài sản, hoặc mapping tài sản → version.
 
 Phiên mong đợi: chạy thường = phiên cuối của lịch tài sản đứng trước ngày dt của snapshot (ingest
 chạy 12:15 UTC nên phiên của ngày dt chưa chốt); với --base-date D = phiên cuối <= D.
@@ -51,8 +58,9 @@ import logging
 import os
 import re
 import tempfile
-from collections.abc import Callable, Iterable
-from dataclasses import dataclass
+import time
+from collections.abc import Callable, Iterable, Mapping
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -64,6 +72,7 @@ import pandas as pd
 from src.data import calendars, clean, quality, storage
 from src.data.config import ASSETS, PUBLISHED_AT_RULES
 from src.features.build import build_feature_frame, latest_base_date, make_windows
+from src.forecast import vol_scale_core as V
 from src.forecast.baselines import Quantile252Model
 from src.forecast.forecast_record import HORIZONS, OIL_ASSETS, target_dates, to_forecast_record
 from src.forecast.returns import QUANTILE_LEVELS, normalize_quantiles
@@ -92,6 +101,17 @@ REASON_MODEL_ARTIFACT = "model_artifact"
 REASON_EXCEPTION = "exception"
 
 STATUS_OK, STATUS_SKIPPED, STATUS_ERROR = "ok", "skipped", "error"
+
+# Chạy song song (shadow), docs/experiments/s1a-shadow-plan.md: S1a co giãn chính đầu ra của
+# champion baseline-q252, ghi eval/shadow/<model_version>/dt=<ngày chạy UTC>/<asset>.json
+SHADOW_S1A = "s1a-l094"
+SHADOW_MODELS_ACCEPTED: tuple[str, ...] = (SHADOW_S1A,)
+SHADOW_PREFIX = "eval/shadow"
+SHADOW_OK, SHADOW_ALREADY_PUBLISHED = "ok", "already_published"
+SHADOW_SKIPPED, SHADOW_FAILED = "skipped", "failed"
+REASON_INVALID_K = "invalid_k"
+REASON_UNKNOWN_MODEL = "unknown_model"
+REASON_CHAMPION_NOT_BASELINE = "champion_not_baseline"
 
 _MODEL_VERSION_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 
@@ -276,10 +296,96 @@ class AssetResult:
     written_to: str | None = None
     already_published: bool = False  # khóa đã có dự báo phát hành, bản cũ giữ nguyên
     detail: str = ""
+    # Nhánh shadow: "" = không chạy; SHADOW_OK, SHADOW_ALREADY_PUBLISHED, SHADOW_SKIPPED, SHADOW_FAILED
+    shadow_status: str = ""
+    shadow_record: dict | None = None
+    shadow_written_to: str | None = None
 
 
 def _day(ts: pd.Timestamp | None) -> str | None:
     return None if ts is None else str(ts.date())
+
+
+def _versions_text(model_version: str | Mapping[str, str]) -> str:
+    if isinstance(model_version, str):
+        return model_version
+    return ",".join(f"{a}:{v}" for a, v in model_version.items())
+
+
+def resolve_shadow_models(
+    value: str | Iterable[str] | None, model_version: str | Mapping[str, str]
+) -> tuple[tuple[str, ...], str | None]:
+    """SHADOW_MODELS (chuỗi cách nhau bằng dấu phẩy, hoặc danh sách) → (mô hình shadow, lý do tắt).
+
+    model_version: champion của mọi tài sản, hoặc mapping tài sản → champion (các tài sản chạy).
+    Rỗng hoặc None → ((), None). Cấu hình sai không bao giờ làm hỏng champion (kế hoạch mục 5,
+    15): log ERROR PREDICT_SHADOW_CONFIG_INVALID, tắt shadow cho cả lần chạy, trả ((), reason):
+    - REASON_UNKNOWN_MODEL: có tên ngoài SHADOW_MODELS_ACCEPTED;
+    - REASON_CHAMPION_NOT_BASELINE: S1a co giãn mốc 252 phiên, cần champion baseline-q252; với
+      mapping chỉ khi không tài sản nào có champion baseline-q252 (tài sản lẻ: run_predict)."""
+    raw = value if value is None or isinstance(value, str) else ",".join(value)
+    names = tuple(dict.fromkeys(x.strip() for x in (raw or "").split(",") if x.strip()))
+    versions = [model_version] if isinstance(model_version, str) else model_version.values()
+    reason = None
+    if any(n not in SHADOW_MODELS_ACCEPTED for n in names):
+        reason = REASON_UNKNOWN_MODEL
+    elif names and BASELINE_MODEL_VERSION not in versions:
+        reason = REASON_CHAMPION_NOT_BASELINE
+    if reason is None:
+        return names, None
+    log.error(
+        "PREDICT_SHADOW_CONFIG_INVALID reason=%s value=%r model_version=%s accepted=%s",
+        reason,
+        raw,
+        _versions_text(model_version),
+        ",".join(SHADOW_MODELS_ACCEPTED),
+    )
+    return (), reason
+
+
+def _shadow_s1a(
+    res: AssetResult,
+    snap: Snapshot,
+    base: pd.Timestamp,
+    invalid,
+    raw: np.ndarray,
+    last_price: float,
+    record_args: dict,
+    champion_model_version: str,
+) -> None:
+    """Nhánh S1a của một tài sản (kế hoạch mục 3.2): k_t trên giá <= base_date với cùng ngày bị
+    loại, co giãn `raw` của champion (trước normalize), normalize_quantiles() đúng một lần. Không
+    bao giờ raise: lỗi → SHADOW_FAILED, k_t NaN → SHADOW_SKIPPED; champion không bị ảnh hưởng."""
+    t0 = time.perf_counter()
+    try:
+        k, sigma_short, sigma_long = V.k_at(_upto(snap.prices, base), res.asset, base, invalid)
+        if not np.isfinite(k):
+            log.warning(
+                "PREDICT_SHADOW_SKIPPED asset=%s base_date=%s reason=%s",
+                res.asset,
+                base.date(),
+                REASON_INVALID_K,
+            )
+            res.shadow_status = SHADOW_SKIPPED
+            return
+        q, _ = normalize_quantiles(V.scale_quantiles(raw, [k]))  # đúng một lần cho S1a
+        record = to_forecast_record(
+            res.asset, base, last_price, q[0], model_version=SHADOW_S1A, **record_args
+        )
+        record["input_snapshot_dt"] = snap.dt
+        record["shadow"] = {
+            "k": k,
+            "sigma_short": sigma_short,
+            "sigma_long": sigma_long,
+            "champion_model_version": champion_model_version,
+        }
+        res.shadow_record, res.shadow_status = record, SHADOW_OK
+    except Exception as e:  # nhánh shadow lỗi không chặn champion
+        log.exception("PREDICT_SHADOW_FAILED asset=%s error=%s", res.asset, type(e).__name__)
+        res.shadow_record, res.shadow_status = None, SHADOW_FAILED
+    finally:
+        ms = (time.perf_counter() - t0) * 1000
+        log.info("PREDICT_SHADOW_MS asset=%s ms=%.1f", res.asset, ms)
 
 
 def predict_asset(
@@ -289,9 +395,11 @@ def predict_asset(
     *,
     model_version: str,
     created_at: datetime | None = None,
+    shadow_models: tuple[str, ...] = (),
 ) -> AssetResult:
     """Một bản ghi Forecasts cho asset, hoặc kết quả skipped kèm lý do (không ghi gì).
-    created_at: thời điểm chạy (mặc định now, UTC), cũng là as_of khi chạy thường."""
+    created_at: thời điểm chạy (mặc định now, UTC), cũng là as_of khi chạy thường.
+    shadow_models (đã qua resolve_shadow_models): chỉ khi champion ok, tính thêm shadow_record."""
     base: pd.Timestamp | None = None
     created_at = created_at or datetime.now(UTC)
     try:
@@ -333,24 +441,25 @@ def predict_asset(
         last_price = last_price_display(snap, asset, base)
         fx_rate, fx_date = fx_at(snap.prices, base)
         stale = [] if snap.base_date is not None else stale_sources_for(snap.quality, asset)
+        record_args = {
+            "fx_usd_vnd": fx_rate,
+            "fx_date": fx_date,
+            "stale_sources": stale,
+            "roll_in_horizon": roll_in_horizon(asset, base),
+            "is_sample": False,
+            "created_at": created_at,
+        }
         record = to_forecast_record(
-            asset,
-            base,
-            last_price,
-            q[0],
-            fx_usd_vnd=fx_rate,
-            fx_date=fx_date,
-            stale_sources=stale,
-            roll_in_horizon=roll_in_horizon(asset, base),
-            model_version=model_version,
-            is_sample=False,
-            created_at=created_at,
+            asset, base, last_price, q[0], model_version=model_version, **record_args
         )
         # Ngày dt= của snapshot clean đã dùng; rolling_8w loại bản ghi thiếu trường này (RFC #45 mục 7)
         record["input_snapshot_dt"] = snap.dt
-        return AssetResult(
+        res = AssetResult(
             asset, STATUS_OK, base_date=_day(base), n_crossed=n_crossed, record=record
         )
+        if SHADOW_S1A in shadow_models:
+            _shadow_s1a(res, snap, base, invalid, raw, last_price, record_args, model_version)
+        return res
     except _Skip as s:
         log.warning(
             "PREDICT_SKIPPED asset=%s base_date=%s reason=%s %s",
@@ -423,9 +532,50 @@ def load_model_dir(
 
 
 def _check_model_version(model_version: str) -> str:
-    if not model_version or not _MODEL_VERSION_RE.fullmatch(model_version):
+    if not isinstance(model_version, str) or not _MODEL_VERSION_RE.fullmatch(model_version):
         raise ValueError(f"invalid model_version {model_version!r}")
     return model_version
+
+
+def _unique_keys(pairs: list[tuple[str, object]]) -> dict:
+    keys = [k for k, _ in pairs]
+    if len(set(keys)) != len(keys):
+        raise ValueError(f"duplicate keys {keys}")
+    return dict(pairs)
+
+
+def parse_model_versions(text: str) -> dict[str, str]:
+    """MODEL_VERSIONS: JSON object đúng 4 khóa PREDICT_ASSETS (không thiếu, không thừa, không
+    trùng), mỗi giá trị qua _check_model_version → {asset: version}. Không phải object →
+    TypeError; sai khác → ValueError."""
+    try:
+        obj = json.loads(text, object_pairs_hook=_unique_keys)
+    except ValueError as e:  # gồm json.JSONDecodeError
+        raise ValueError(f"MODEL_VERSIONS is not valid JSON: {e}") from e
+    if not isinstance(obj, dict):
+        raise TypeError(f"MODEL_VERSIONS must be a JSON object, got {type(obj).__name__}")
+    missing = [a for a in PREDICT_ASSETS if a not in obj]
+    unknown = sorted(k for k in obj if k not in PREDICT_ASSETS)
+    if missing or unknown:
+        raise ValueError(f"MODEL_VERSIONS keys: missing {missing}, unknown {unknown}")
+    try:
+        return {a: _check_model_version(obj[a]) for a in PREDICT_ASSETS}
+    except ValueError as e:
+        raise ValueError(f"MODEL_VERSIONS: {e}") from e
+
+
+def resolve_model_versions(
+    model_version: str | Mapping[str, str], assets: Iterable[str]
+) -> dict[str, str]:
+    """{asset: version} cho các tài sản chạy: một version cho mọi tài sản (MODEL_VERSION), hoặc
+    mapping (MODEL_VERSIONS, có thể thừa tài sản không chạy). Thiếu tài sản hoặc version sai →
+    ValueError."""
+    if isinstance(model_version, str):
+        return dict.fromkeys(assets, _check_model_version(model_version))
+    missing = [a for a in assets if a not in model_version]
+    if missing:
+        raise ValueError(f"no model_version for assets {missing}")
+    return {a: _check_model_version(model_version[a]) for a in assets}
 
 
 def _download_model(st, asset: str, model_version: str, cache_root: Path) -> Path:
@@ -472,7 +622,20 @@ def make_model_loader(
     return load
 
 
+def make_asset_loader(versions: Mapping[str, str], **kwargs) -> Callable[[str], LoadedModel]:
+    """loader(asset) dùng make_model_loader(versions[asset], **kwargs); mỗi version tạo một lần."""
+    loaders = {v: make_model_loader(v, **kwargs) for v in dict.fromkeys(versions.values())}
+    return lambda asset: loaders[versions[asset]](asset)
+
+
 # ---------- nơi ghi ----------
+
+
+def _aws_error_code(e: Exception) -> str | None:
+    """Mã lỗi của ClientError, đọc từ e.response thay vì import botocore.exceptions:
+    requirements-predict.txt chỉ khai báo boto3 (như src/data/secret_store.py)."""
+    response = getattr(e, "response", None)
+    return response.get("Error", {}).get("Code") if isinstance(response, dict) else None
 
 
 class DynamoSink:
@@ -501,11 +664,7 @@ class DynamoSink:
                 ExpressionAttributeValues={":t": True},
             )
         except Exception as e:
-            # Nhận ClientError qua mã lỗi thay vì import botocore.exceptions: requirements-predict.txt
-            # chỉ khai báo boto3 (như src/data/secret_store.py); lỗi khác raise nguyên vẹn
-            response = getattr(e, "response", None)
-            code = response.get("Error", {}).get("Code") if isinstance(response, dict) else None
-            if code != "ConditionalCheckFailedException":
+            if _aws_error_code(e) != "ConditionalCheckFailedException":
                 raise
             log.warning(
                 "PREDICT_ALREADY_PUBLISHED asset=%s base_date=%s",
@@ -536,16 +695,51 @@ class LocalJsonSink:
         return str(p)
 
 
+class ShadowSink:
+    """Ghi bản ghi shadow vào eval/shadow/<model_version>/dt=<ngày chạy UTC>/<asset>.json của
+    storage st (dt lấy từ created_at, không bao giờ từ base_date).
+
+    S3Storage: put_object kèm IfNoneMatch="*" (không ghi đè); object đã có (412
+    PreconditionFailed) → WARNING PREDICT_SHADOW_ALREADY_PUBLISHED, trả None (tính là xong). Lỗi
+    khác raise. LocalStorage: ghi đè (chỉ để xem thử)."""
+
+    def __init__(self, st):
+        self.st = st
+
+    @staticmethod
+    def key(record: dict, dt: str) -> str:
+        return f"{SHADOW_PREFIX}/{record['model_version']}/dt={dt}/{record['asset']}.json"
+
+    def put(self, record: dict) -> str | None:
+        dt = str(pd.Timestamp(record["created_at"]).tz_convert("UTC").date())
+        key = self.key(record, dt)
+        data = json.dumps(record, indent=2, ensure_ascii=False, default=_json_default).encode()
+        if not isinstance(self.st, storage.S3Storage):
+            return self.st.write_bytes(key, data)
+        try:
+            return self.st.write_bytes(key, data, if_none_match=True)
+        except Exception as e:
+            if _aws_error_code(e) != "PreconditionFailed":
+                raise
+            log.warning("PREDICT_SHADOW_ALREADY_PUBLISHED asset=%s dt=%s", record["asset"], dt)
+            return None
+
+
 # ---------- chạy ----------
 
 
 @dataclass
 class PredictRun:
     snapshot_dt: str
-    model_version: str
+    model_version: str | None  # None khi champion khác nhau giữa các tài sản (xem model_versions)
     base_date: str | None
     dry_run: bool
     results: list[AssetResult]
+    shadow_models: tuple[str, ...] = ()
+    shadow_disabled_reason: str | None = None  # cấu hình shadow sai (resolve_shadow_models)
+    model_versions: dict[str, str] = field(default_factory=dict)  # tài sản chạy → champion
+    # Tài sản không chạy shadow vì champion không phải baseline-q252 (khi tài sản khác vẫn chạy)
+    shadow_disabled_assets: dict[str, str] = field(default_factory=dict)
 
     @property
     def ok(self) -> bool:
@@ -570,15 +764,38 @@ class PredictRun:
                 a["already_published"] = True
             if r.detail:
                 a["detail"] = r.detail
+            if r.shadow_status:
+                s = {"status": r.shadow_status}
+                if r.shadow_record is not None:
+                    s["k"] = r.shadow_record["shadow"]["k"]
+                if r.shadow_written_to:
+                    s["written_to"] = r.shadow_written_to
+                a["shadow"] = s
             assets[r.asset] = a
+        shadow = None
+        if self.shadow_disabled_reason:
+            shadow = {"disabled_reason": self.shadow_disabled_reason}
+        elif self.shadow_models:
+            statuses = [r.shadow_status for r in self.results]
+            shadow = {
+                "model_version": ",".join(self.shadow_models),
+                "written": sum(1 for r in self.results if r.shadow_written_to),
+                "already_published": statuses.count(SHADOW_ALREADY_PUBLISHED),
+                "skipped": statuses.count(SHADOW_SKIPPED),
+                "failed": statuses.count(SHADOW_FAILED),
+            }
+            if self.shadow_disabled_assets:
+                shadow["disabled_assets"] = dict(self.shadow_disabled_assets)
         return {
             "snapshot_dt": self.snapshot_dt,
             "model_version": self.model_version,
+            "model_versions": dict(self.model_versions),
             "base_date_override": self.base_date,
             "dry_run": self.dry_run,
             "ok": self.ok,
             "written": sum(1 for r in self.results if r.written_to),
             "already_published": sum(1 for r in self.results if r.already_published),
+            "shadow": shadow,
             "assets": assets,
         }
 
@@ -598,15 +815,41 @@ def run_predict(
     sink,
     *,
     load_model: Callable[[str], LoadedModel],
-    model_version: str,
+    model_version: str | Mapping[str, str],
     assets: Iterable[str] = PREDICT_ASSETS,
     base_date=None,
     now: datetime | None = None,
+    shadow_models: str | Iterable[str] | None = (),
+    shadow_sink=None,
 ) -> PredictRun:
     """Dự báo từng tài sản; sink=None là dry run (tính nhưng không ghi). Một tài sản lỗi hoặc bị
-    bỏ qua không chặn các tài sản khác; người gọi xem PredictRun.ok."""
+    bỏ qua không chặn các tài sản khác; người gọi xem PredictRun.ok.
+
+    model_version: champion của mọi tài sản, hoặc mapping tài sản → champion (MODEL_VERSIONS; phải
+    có mọi tài sản chạy); load_model(asset) phải nạp đúng version của tài sản đó.
+    shadow_models: giá trị SHADOW_MODELS (chuỗi) hoặc danh sách, qua resolve_shadow_models; sai thì
+    shadow tắt cả lần chạy (summary có shadow.disabled_reason), champion chạy bình thường. Tài sản
+    có champion khác baseline-q252 không chạy shadow (WARNING PREDICT_SHADOW_ASSET_SKIPPED, summary
+    shadow.disabled_assets), tài sản khác vẫn chạy. Bản shadow ghi qua shadow_sink
+    (ShadowSink) sau bản ghi champion; shadow_sink=None thì chỉ tính.
+    Shadow không bao giờ đổi status/ok của champion."""
     assets = check_assets(assets)
-    _check_model_version(model_version)
+    versions = resolve_model_versions(model_version, assets)
+    shadow_models, shadow_disabled = resolve_shadow_models(shadow_models, versions)
+    shadow_off = {}
+    if shadow_models:
+        shadow_off = {
+            a: REASON_CHAMPION_NOT_BASELINE
+            for a, v in versions.items()
+            if v != BASELINE_MODEL_VERSION
+        }
+        for a in shadow_off:
+            log.warning(  # không phải lỗi cấu hình: CDK gắn alarm cho PREDICT_SHADOW_CONFIG_INVALID
+                "PREDICT_SHADOW_ASSET_SKIPPED reason=%s asset=%s model_version=%s",
+                REASON_CHAMPION_NOT_BASELINE,
+                a,
+                versions[a],
+            )
     snap = load_snapshot(st)
     created_at = now or datetime.now(UTC)
     if base_date is not None:
@@ -617,6 +860,10 @@ def run_predict(
             snap.base_date.date(),
             snap.dt,
         )
+        if shadow_models and shadow_sink is not None:
+            # dt= của key là ngày chạy: bản backfill sẽ chiếm chỗ bản của lần chạy thật hôm nay
+            log.warning("PREDICT_SHADOW_BACKFILL_NOT_WRITTEN base_date=%s", snap.base_date.date())
+            shadow_sink = None
     else:
         today = str(created_at.astimezone(UTC).date())
         if snap.dt != today:
@@ -624,19 +871,25 @@ def run_predict(
             log.warning("PREDICT_SNAPSHOT_STALE snapshot_dt=%s today=%s", snap.dt, today)
     results: list[AssetResult] = []
     for asset in assets:
+        mv = versions[asset]
         try:
             loaded = load_model(asset)
             res = predict_asset(
-                snap, asset, loaded, model_version=model_version, created_at=created_at
+                snap,
+                asset,
+                loaded,
+                model_version=mv,
+                created_at=created_at,
+                shadow_models=() if asset in shadow_off else shadow_models,
             )
             if res.status == STATUS_OK and sink is not None:
                 # None: dự báo đã phát hành cho khóa này (DynamoSink), vẫn tính là xong
                 res.written_to = sink.put(res.record)
                 res.already_published = res.written_to is None
+            if res.shadow_status == SHADOW_OK and shadow_sink is not None:
+                _write_shadow(res, shadow_sink)
         except ModelArtifactError as e:
-            log.error(
-                "PREDICT_MODEL_MISSING asset=%s model_version=%s error=%s", asset, model_version, e
-            )
+            log.error("PREDICT_MODEL_MISSING asset=%s model_version=%s error=%s", asset, mv, e)
             res = AssetResult(asset, STATUS_ERROR, REASON_MODEL_ARTIFACT, detail=str(e))
         except Exception as e:  # một tài sản lỗi không chặn các tài sản khác
             log.exception("PREDICT_FAILED asset=%s", asset)
@@ -645,7 +898,29 @@ def run_predict(
             )
         results.append(res)
     base = None if snap.base_date is None else str(snap.base_date.date())
-    return PredictRun(snap.dt, model_version, base, sink is None, results)
+    single = set(versions.values())
+    return PredictRun(
+        snap.dt,
+        single.pop() if len(single) == 1 else None,
+        base,
+        sink is None,
+        results,
+        shadow_models,
+        shadow_disabled,
+        versions,
+        shadow_off,
+    )
+
+
+def _write_shadow(res: AssetResult, shadow_sink) -> None:
+    """Ghi bản shadow; lỗi chỉ log PREDICT_SHADOW_FAILED (champion đã ghi, không đổi)."""
+    try:
+        res.shadow_written_to = shadow_sink.put(res.shadow_record)
+        if res.shadow_written_to is None:
+            res.shadow_status = SHADOW_ALREADY_PUBLISHED
+    except Exception as e:
+        log.exception("PREDICT_SHADOW_FAILED asset=%s error=%s", res.asset, type(e).__name__)
+        res.shadow_status = SHADOW_FAILED
 
 
 def make_storage(source: str, lake_dir: str = "data/lake"):
@@ -691,6 +966,12 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="cho phép artifact có integration_eligible khác true (chỉ để thử, ghi WARNING)",
     )
+    ap.add_argument(
+        "--shadow-models",
+        default=os.getenv("SHADOW_MODELS"),
+        help=f"mặc định SHADOW_MODELS; rỗng = tắt, chỉ nhận {','.join(SHADOW_MODELS_ACCEPTED)} "
+        "(giá trị sai: log PREDICT_SHADOW_CONFIG_INVALID, tắt shadow, champion vẫn chạy)",
+    )
     args = ap.parse_args(argv)
     if not args.model_version:
         ap.error("--model-version (or MODEL_VERSION) is required")
@@ -706,6 +987,12 @@ def main(argv: list[str] | None = None) -> int:
         allow_experimental=args.allow_experimental,
     )
     sink = LocalJsonSink(args.out_dir) if args.dest == "local" else DynamoSink(args.table)
+    shadow_sink = None
+    if (
+        args.shadow_models or ""
+    ).strip():  # local: <lake-dir>/eval/shadow/... (ghi đè); dynamodb: S3
+        shadow_st = storage.LocalStorage(args.lake_dir) if args.dest == "local" else None
+        shadow_sink = ShadowSink(shadow_st or make_storage("s3"))
     run = run_predict(
         st,
         sink,
@@ -713,6 +1000,8 @@ def main(argv: list[str] | None = None) -> int:
         model_version=args.model_version,
         assets=args.assets,
         base_date=args.base_date,
+        shadow_models=args.shadow_models,
+        shadow_sink=shadow_sink,
     )
     print(json.dumps(run.summary(), indent=2, ensure_ascii=False))
     return 0 if run.ok else 1
@@ -722,6 +1011,8 @@ __all__ = [
     "BASELINE_MODEL_VERSION",
     "FACTOR_MAX_LAG_SESSIONS",
     "PREDICT_ASSETS",
+    "SHADOW_MODELS_ACCEPTED",
+    "SHADOW_S1A",
     "AssetResult",
     "DynamoSink",
     "ForecastModel",
@@ -729,6 +1020,7 @@ __all__ = [
     "LocalJsonSink",
     "ModelArtifactError",
     "PredictRun",
+    "ShadowSink",
     "Snapshot",
     "SnapshotMissing",
     "check_assets",
@@ -738,10 +1030,14 @@ __all__ = [
     "last_price_display",
     "load_model_dir",
     "load_snapshot",
+    "make_asset_loader",
     "make_model_loader",
     "make_storage",
+    "parse_model_versions",
     "predict_asset",
     "publication_as_of",
+    "resolve_model_versions",
+    "resolve_shadow_models",
     "roll_in_horizon",
     "run_predict",
     "stale_sources_for",
