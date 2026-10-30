@@ -1,10 +1,10 @@
 # RFC — Thiết kế Rolling Accuracy và API lịch sử dự báo (CPAWS)
 
-> **Trạng thái:** **RFC v4.5 — FINAL PROPOSED DESIGN để nhóm chốt ngày 30/10/2026**; chưa có hiệu lực contract trước khi Khải, Tuấn, Tiến thống nhất và PR contract được merge.  
-> **Ngày cập nhật:** 2026-10-30 (v4.5: giữ nguyên kiến trúc v4.3 được Khải xác nhận, hợp nhất v4.4 và comment cuối của Khải: chính sách legacy 27/10, champion theo asset để hỗ trợ K4, tiêu chí 20 ngày có nhãn và owner/Scheduler; các quyết định chưa xác nhận được đánh dấu *chờ chốt*).  
+> **Trạng thái:** **RFC v4.6 — DECISIONS LOCKED theo kết luận họp 30/10/2026 (Khải xác nhận trên PR #45); REVIEW-ONLY, chưa có hiệu lực contract trước PR contract được review/merge. Không đồng nghĩa đã có approving review GitHub từ tất cả thành viên hoặc đã deploy.**  
+> **Ngày cập nhật:** 2026-10-30 (v4.6: đồng bộ comment của Tiến và kết luận họp do Khải đăng ngày 30/10: `width_80_pct`, gating mọi metric overall, job TUE–SAT 13:45 UTC, legacy có bằng chứng, cutover, CDK mappings/owners; giữ nguyên kiến trúc v4.5).  
 > **Người đề xuất:** Long — nhóm CPAWS  
 > **Người review:** Khải (đánh giá/hiển thị), Tuấn (API, DynamoDB, IAM), Tiến (Predict, Web)  
-> **Mục tiêu:** Chốt thiết kế MVP trước khi cập nhật `docs/api/contract.md` bằng PR riêng; nếu thay đổi quy tắc Walk-forward/Accuracy Schema thì cập nhật tài liệu tương ứng theo review.  
+> **Mục tiêu:** Ghi lại quyết định thiết kế đã chốt để chuyển sang PR riêng cập nhật `docs/api/contract.md` và ngoại lệ `rolling_8w` trong `docs/eval/walk-forward-contract.md` §7; không sửa ngầm Accuracy Schema/ADR ngoài phạm vi được duyệt.  
 > **Tham chiếu:** `docs/api/contract.md`, `docs/api/accuracy-schema.md`, `docs/eval/walk-forward-contract.md`, ADR-0008, ADR-0009, ADR-0010, **ADR-0011 (PR #46)**; kế hoạch S1a Shadow (PR #49); source tại commit `a5f770c` theo review của Khải; *Spec dashboard dự báo và độ tin cậy* (27/10/2026); [Issue #23](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/issues/23).
 
 > **Quy trình PR #45:** PR tài liệu này chỉ dùng để review và approve, **KHÔNG MERGE vào `developer`**. Sau khi chốt, chuyển các quyết định được duyệt sang `docs/api/contract.md` và các contract liên quan bằng PR riêng, rồi đóng PR RFC với trạng thái *Closed — Not Merged*.
@@ -14,16 +14,16 @@
 RFC đề xuất hai chức năng phục vụ Dashboard CPAWS:
 
 1. Job `rolling_8w` chấm forecast **champion production** đã phát hành thật, có nhãn hợp lệ; lưu Accuracy chính thức trong DynamoDB cho Dashboard.
-2. **Theo ADR-0011**, cùng job hằng tuần có nhánh **so sánh champion với challenger S1a (`s1a-l094`)** trên các cặp forecast–actual giao nhau; chỉ lưu báo cáo **shadow nội bộ**, không thay đổi champion và không công khai S1a qua Accuracy API.
+2. **Theo ADR-0011**, cùng job chạy hằng ngày sau predict có nhánh **so sánh champion với challenger S1a (`s1a-l094`)** trên các cặp forecast–actual giao nhau; chỉ lưu báo cáo **shadow nội bộ**, không thay đổi champion và không công khai S1a qua Accuracy API.
 3. `GET /accuracy/{asset}` trả chỉ số champion tổng hợp và theo 7 horizons; `GET /forecast-history/{asset}` là endpoint riêng cho biểu đồ “dự báo cũ so với thực tế” giai đoạn sau.
 
 **Các quy tắc giữ nguyên:** bốn asset `gold/silver/brent/wti`; horizons `h=1..7` theo **phiên giao dịch của tài sản**; nhãn và các phân vị dự báo là **log return**; không tạo ngược forecast cho dữ liệu test 2020–2026; `validation/test` lưu S3 Parquet `eval/`, `rolling_8w` lưu DynamoDB; `overall.coverage_80` gộp theo số cặp hợp lệ, không lấy trung bình ngang các tỷ lệ của 7 horizons; `sign_accuracy` luôn hiển thị cùng `up_rate`.
 
-**Chính sách MVP trình chốt 30/10:** cửa sổ 56 ngày UTC theo `base_date`; `created_at >= 2026-10-27T12:00:00Z`; forecast sau cutover PR #48 phải có conditional-write provenance và `input_snapshot_dt`. **Khải đề xuất chấp nhận legacy theo lượt chạy có lịch** trước cutover, miễn `input_snapshot_dt` nếu được kiểm tra/duyệt ở từng record; đây là *LEGACY_ACCEPT_WITH_EVIDENCE*, không phải chấp nhận mọi timestamp trong khung giờ. Nếu chưa duyệt hoặc thiếu bằng chứng, fallback *POST_CUTOVER_ONLY*. Không backfill. Calendar + TUE–SAT chỉ đếm expected/missing; không có CloudWatch/manifest gate với `COMPLETED`. **Champion authoritative là `MODEL_VERSIONS[asset]` trong CDK (mapping bốn tài sản, hiện đều baseline-q252)**, không phải `STATE`; thay đổi từng tài sản bằng ADR/deploy, theo mốc hiệu lực. `STATE` chỉ là con trỏ `LATEST_COMPLETED`. `prob_up` lệch >`1e-6` chỉ log; Dashboard hiển thị 4 metrics với ngưỡng 20 `base_date` **đã có nhãn hợp lệ**, không phải 20 phiên lịch. Khải nhận thêm `input_snapshot_dt` cho champion ở PR #48; PR #53 đã có trường này cho shadow. Shadow JSON vào `eval/shadow/`, paired report **Parquet `eval/shadow_eval/`**, không public API.
+**Chính sách MVP đã được Khải chốt theo họp 30/10:** cửa sổ 56 ngày UTC theo `base_date`; `created_at >= 2026-10-27T12:00:00Z`; nhận *legacy trước PR #48* **chỉ khi xác minh từng record** (lịch chạy, `model_version`, `is_sample=false`, không overwrite, input-as-of), còn lại loại khỏi `n_obs`. Tiến sẽ xuất bằng chứng CloudWatch `PREDICT_DONE`/Invocations và `created_at` cho base 26–29/10 (cộng 30/10 nếu trước cutover) **trước 02/11**; bằng chứng này là audit ngoại lệ legacy, **không** trở thành CloudWatch/manifest gate cho mỗi run Rolling. Có `input_snapshot_dt` → ứng viên hậu cutover, vẫn cần kiểm provenance và thời gian deploy; thiếu trường → ứng viên legacy, **không tự được chấm** nếu không nằm trong danh sách đã duyệt. Cutover production thật dự kiến lượt predict 19:15 giờ Việt Nam ngày 31/10 (12:15 UTC), **chưa được coi là đã deploy** cho đến khi xác nhận CloudFormation/smoke test; `dry_run` không ghi DynamoDB. Job hằng ngày theo `cron(45 13 ? * TUE-SAT *)` UTC (20:45 Việt Nam), không promote khi snapshot/actual chưa ready. `MODEL_VERSIONS` và `CHAMPION_EFFECTIVE_BASE_DATES` per-asset cùng định nghĩa tại `infra/app.py`, truyền qua môi trường cho Predict/Rolling/API; Predict giữ fallback `MODEL_VERSION` ở giai đoạn chuyển đổi. `STATE` chỉ là con trỏ `LATEST_COMPLETED`. Dashboard có 4 metric nền (`coverage_80`, `width_80`, `sign_accuracy`, `up_rate`) **và** derived `width_80_pct`; tất cả metric overall có `display_value`/`display_status` theo ≥20 distinct `base_date` có cặp được chấm. **Web chỉ hiển thị `width_80_pct`**, tuyệt đối không tự `exp` hay lấy `100×width_80`. `width_80_pct` tính từng cặp `100×(exp(q90)−exp(q10))` rồi lấy trung bình. Không tăng số item 28 METRIC. Không cam kết `ready` trước 22/11; DM gap được hoãn sau 22/11, **không sửa DM-HAC/fingerprint K4**.
 
-**Cập nhật bằng chứng 29/10 (Tiến):** kiểm tra `cpaws-dev-forecasts` trên cả 4 tài sản cho thấy `base_date=2026-10-26` có `created_at=2026-10-27T12:15:31Z` và `base_date=2026-10-27` có `created_at=2026-10-28T12:16:03Z`, cùng `model_version=baseline-q252`, `is_sample=false`. Theo Tiến, đây là hai lượt chạy theo lịch, không có lần chạy tay hay ghi đè được phát hiện. Điều này **ủng hộ `LEGACY_ACCEPT_WITH_EVIDENCE`**, nhưng timestamp đơn lẻ không chứng minh tuyệt đối tính bất biến trước PR #48; chấp nhận từng record legacy và miễn `input_snapshot_dt` vẫn chờ nhóm phê duyệt 30/10.
+**Bằng chứng vận hành sẵn có ngày 29/10 (Tiến):** kiểm tra `cpaws-dev-forecasts` trên cả 4 tài sản cho thấy `base_date=2026-10-26` có `created_at=2026-10-27T12:15:31Z` và `base_date=2026-10-27` có `created_at=2026-10-28T12:16:03Z`, cùng `model_version=baseline-q252`, `is_sample=false`. Theo Tiến, đây là hai lượt chạy theo lịch, không có lần chạy tay hay ghi đè được phát hiện. Điều này **ủng hộ `LEGACY_ACCEPT_WITH_EVIDENCE`**, nhưng timestamp đơn lẻ không chứng minh tuyệt đối tính bất biến trước PR #48; chính sách legacy đã được Khải chốt *có điều kiện*, nhưng **các record cụ thể chưa được mặc nhiên duyệt**; danh sách chứng cứ sẽ được Tiến xuất trước 02/11 và cần ghi rõ bản ghi được chấp nhận trước khi chấm.
 
-**Kiến trúc đề xuất v4.5:** một bảng `cpaws-<env>-accuracy`, item `STATE` theo asset **chỉ giữ** `latest_run_pk`/`latest_run_id`/`latest_run_order` (gọi chung là **`LATEST_COMPLETED`**); partition `RUN#asset#model#run_id` chứa `META` và 28 item `METRIC`; **không GSI, không Scan**. Champion lấy từ **`MODEL_VERSIONS[asset]` do CDK triển khai**, thay đổi theo tài sản bằng ADR/deploy, **không lưu champion hoặc generation trong `STATE`**. Writer ghi `METRIC` bất biến bằng conditional `PutItem`, chỉ promote pointer sau khi run đủ 28 metrics, snapshot/forecast eligibility hợp lệ; **không** phụ thuộc đầy đủ nhật ký lịch phát hành. IAM chỉ tách Rolling writer và API reader cho bảng Accuracy; Predict không đọc Accuracy; không có champion release operator MVP. Shadow đọc JSON tại `eval/shadow/s1a-l094/`, tính paired mask và lưu **Parquet nội bộ `eval/shadow_eval/run_id=<run_id>/`**. Các quyết định mới chỉ thành contract sau PR contract riêng được merge.
+**Kiến trúc giữ nguyên từ v4.5:** một bảng `cpaws-<env>-accuracy`, item `STATE` theo asset **chỉ giữ** `latest_run_pk`/`latest_run_id`/`latest_run_order` (gọi chung là **`LATEST_COMPLETED`**); partition `RUN#asset#model#run_id` chứa `META` và 28 item `METRIC`; **không GSI, không Scan**. Champion lấy từ **`MODEL_VERSIONS[asset]` do CDK triển khai**, thay đổi theo tài sản bằng ADR/deploy, **không lưu champion hoặc generation trong `STATE`**. Writer ghi `METRIC` bất biến bằng conditional `PutItem`, chỉ promote pointer sau khi run đủ 28 metrics, snapshot/forecast eligibility hợp lệ; **không** phụ thuộc đầy đủ nhật ký lịch phát hành. IAM chỉ tách Rolling writer và API reader cho bảng Accuracy; Predict không đọc Accuracy; không có champion release operator MVP. Shadow đọc JSON tại `eval/shadow/s1a-l094/`, tính paired mask và lưu **Parquet nội bộ `eval/shadow_eval/run_id=<run_id>/`**. Các quyết định cuộc họp sẽ thành contract chính thức **chỉ sau khi PR contract riêng được review và merge**.
 
 ---
 
@@ -76,17 +76,17 @@ Mỗi cặp đánh giá dựa trên `(asset, base_date, h, model_version)` và `
 - `target_date` phải là phiên thứ `h` sau `base_date`, đã có giá hợp lệ tại lúc job chạy và `target_date <= target_cutoff_date` riêng từng asset.
 - Metric cần baseline tuân theo common mask và điều kiện mẫu của Accuracy Schema; không tự thay đổi mask.
 
-### 2.3. Forecast đủ điều kiện đánh giá [D02/D10/D18 — legacy là quyết định chờ chốt]
+### 2.3. Forecast đủ điều kiện đánh giá [D02/D10/D18 — legacy được chốt có điều kiện]
 
 1. `is_sample=false`, asset/target/horizon hợp lệ; mỗi horizon đủ 7 phân vị hữu hạn, có thứ tự và `prob_up` trong miền cho phép. `model_version` phải khớp **`MODEL_VERSIONS[asset]`** đang có hiệu lực cho asset/base_date; không trộn model giữa các tài sản hoặc các đời champion của cùng asset.
 2. `created_at` UTC **`>= 2026-10-27T12:00:00Z`**. Không buộc `base_date>=27/10`, vì lượt phát hành đầu 27/10 có thể có `base_date=26/10`. Loại mọi sample và record trước mốc dù `is_sample=false`.
 3. `created_at < target_date T13:30:00Z` ở từng h, so UTC timestamp; xác nhận target h phiên, dữ liệu input chỉ đến `base_date`, `publication_as_of` và target endpoint/cutoff riêng asset. **Timestamp không tự chứng minh không leakage.**
-4. **Record từ cutover PR #48 trở đi:** Forecasts production phải được ghi bằng conditional `PutItem` và mang `input_snapshot_dt=YYYY-MM-DD` lấy từ `snap.dt` của clean snapshot đã thực sự dùng; trường này phải được validate với snapshot/input-as-of, không chỉ kiểm chuỗi. Khải phụ trách code champion và Forecasts contract trong PR #48; **cutover là thời điểm triển khai thực tế có xác nhận**, không lấy ngày dự kiến 31/10 thay thế. Việc PR được approve/merge không tự chứng minh Lambda đã deploy.
-5. **Record trước cutover — đề xuất chốt `LEGACY_ACCEPT_WITH_EVIDENCE`:** chỉ chấp nhận từng `(asset, base_date, model_version, created_at)` được Khải/Tiến kiểm chứng là lượt chạy lịch **12:15–13:30 UTC**, không chạy tay, không ghi đè/reissue, có cơ sở xác nhận input-as-of; được nhóm duyệt rõ ràng. **Miễn `input_snapshot_dt` chỉ cho những legacy được duyệt**; không bịa trường snapshot hoặc gắn nhãn `immutable_verified` như record sau PR #48. Danh sách/chứng cứ record được chấp nhận phải có tham chiếu có thể kiểm toán và fingerprint trong `META`/run provenance (không xây bảng manifest riêng). Khi bằng chứng không đủ, đánh dấu `legacy_unverified` và không chấm.
-6. **Fallback `POST_CUTOVER_ONLY`:** nếu nhóm chưa phê duyệt ngoại lệ legacy ở cuộc họp 30/10, hoặc một record legacy không vượt checklist, chỉ chấm từ những record sau cutover đạt điểm 4. Không thay đổi dữ liệu phát hành cũ hoặc backfill. `first_eligible_base_date` là ngày gốc **có ít nhất một cặp thực sự được chấm**, không hardcode ngày 27/10.
-7. Theo ADR/release, khi champion của một asset đổi thì job chỉ chấm forecast của **model mới từ `champion_effective_base_date[asset]`** (ngày hiệu lực ghi trong release/ADR), 56 ngày window vẫn giữ nguyên; asset khác không bị reset. Challenger S1a được xét riêng mục 3.5.
+4. **Record hậu cutover PR #48 (xác minh theo bản ghi và sự kiện deploy):** Forecasts production phải được ghi bằng conditional `PutItem` và mang `input_snapshot_dt=YYYY-MM-DD` lấy từ `snap.dt` của clean snapshot đã thực sự dùng; trường này phải được validate với snapshot/input-as-of, không chỉ kiểm chuỗi. Khải phụ trách code champion và Forecasts contract trong PR #48; **cutover phải được ghi theo sự kiện CloudFormation, kết quả predict production và smoke test (dự kiến lượt 31/10/2026 12:15 UTC; dry_run không ghi bảng), không chỉ thời điểm build/approve**, không lấy ngày dự kiến 31/10 thay thế. Việc PR được approve/merge không tự chứng minh Lambda đã deploy.
+5. **Record thiếu `input_snapshot_dt`/trước cutover — đã chốt chính sách `LEGACY_ACCEPT_WITH_EVIDENCE` nhưng phải xác minh từng record:** chỉ chấp nhận từng `(asset, base_date, model_version, created_at)` được Khải/Tiến kiểm chứng là lượt chạy lịch **12:15–13:30 UTC**, không chạy tay, không ghi đè/reissue, có cơ sở xác nhận input-as-of; được nhóm duyệt rõ ràng. **Miễn `input_snapshot_dt` chỉ cho những legacy được duyệt**; không bịa trường snapshot hoặc gắn nhãn `immutable_verified` như record sau PR #48. Danh sách/chứng cứ record được chấp nhận phải có tham chiếu có thể kiểm toán và fingerprint trong `META`/run provenance (không xây bảng manifest riêng). Khi bằng chứng không đủ, đánh dấu `legacy_unverified` và không chấm.
+6. **Fail-closed trên từng record:** chính sách legacy đã chốt, nhưng record nào không vượt checklist/không có trong danh sách đã duyệt thì **loại khỏi `n_obs`**, tương đương `POST_CUTOVER_ONLY` đối với record đó; chỉ các record hậu cutover đạt điểm 4 được chấm bình thường. Không thay đổi dữ liệu phát hành cũ hoặc backfill. `first_eligible_base_date` là ngày gốc **có ít nhất một cặp thực sự được chấm**, không hardcode ngày 27/10.
+7. Theo ADR/release, khi champion của một asset đổi thì job chỉ chấm forecast của **model mới từ `CHAMPION_EFFECTIVE_BASE_DATES[asset]`** (map authoritative tại `infra/app.py`, gắn với ADR/release), 56 ngày window vẫn giữ nguyên; asset khác không bị reset. Challenger S1a được xét riêng mục 3.5.
 
-**Checklist phê duyệt legacy trước khi tính `n_obs`:** phạm vi các asset/base_date, `created_at` và lịch, bằng chứng không có manual/rewrite đã kiểm, nguồn kiểm `publication_as_of`/input-as-of, người xác nhận, thời điểm phê duyệt và fingerprint/run reference. Đây là *ngoại lệ nghiên cứu/vận hành có kiểm soát*, không được suy ngầm từ việc nhìn thấy timestamp đúng lịch. Không cần tái dựng CloudWatch 56 ngày để complete một run MVP.
+**Checklist audit legacy trước khi tính `n_obs` (evidence xuất trước 02/11):** phạm vi các asset/base_date, `created_at` và lịch, bằng chứng không có manual/rewrite đã kiểm, nguồn kiểm `publication_as_of`/input-as-of, người xác nhận, thời điểm phê duyệt và fingerprint/run reference. Đây là *ngoại lệ nghiên cứu/vận hành có kiểm soát*, không được suy ngầm từ việc nhìn thấy timestamp đúng lịch. Không cần tái dựng CloudWatch 56 ngày để complete một run MVP.
 
 #### Bằng chứng cập nhật — Kiểm tra Forecasts ngày 29/10/2026 (Tiến)
 
@@ -103,7 +103,7 @@ Theo xác nhận của Tiến, hai lượt `base_date=26/10` và `27/10` đượ
 
 **Theo dõi:** Tiến sẽ kiểm tra tiếp lượt phát hành cho `base_date=2026-10-28` sau 19:15 ngày 29/10 (giờ Việt Nam) và kiểm tra lại trước cutover/deploy PR #48 dự kiến 31/10. Chỉ cập nhật kết luận khi có kết quả thực tế; không xem các lượt chưa kiểm là đã xác minh.
 
-**Điểm phải chốt 30/10:** Khải đề xuất nhận legacy theo `LEGACY_ACCEPT_WITH_EVIDENCE` trên cơ sở Tiến kiểm tra ngày 29/10; **chưa phải nhóm đã phê duyệt**. Fallback `POST_CUTOVER_ONLY` dùng cho record không được duyệt/không đủ evidence. Trong comment cuối Khải gọi đề xuất nhận legacy là “phương án B”, còn RFC v4.4 từng gọi cùng nội dung là “phương án A”; từ v4.5 **bỏ ký hiệu A/B** để tránh chốt nhầm. `first_eligible_base_date` xuất phát từ record/horizon đủ điều kiện, có thể `null`. Theo Khải, **20/11** là mốc đạt 20 base_date *theo lịch* nếu chấp nhận legacy, **27/11** là dự kiến nếu chỉ sau cutover 31/10; **không phải ngày Dashboard chắc chắn `ready`** vì còn target maturity, cutoff, lần chạy job và dữ liệu thực tế. Không tự nâng evidence của legacy thành bằng chứng bất biến tuyệt đối.
+**Quyết định 30/10:** Khải chốt `LEGACY_ACCEPT_WITH_EVIDENCE` **chỉ đối với từng record có bằng chứng được duyệt**; không có bằng chứng thì loại khỏi scoring. Không suy ra rằng mọi record 27/10+ đã được duyệt. Fallback `POST_CUTOVER_ONLY` áp dụng cho record không xác minh được. Trong comment cuối Khải gọi đề xuất nhận legacy là “phương án B”, còn RFC v4.4 từng gọi cùng nội dung là “phương án A”; từ v4.5 **bỏ ký hiệu A/B** để tránh chốt nhầm. `first_eligible_base_date` xuất phát từ record/horizon đủ điều kiện, có thể `null`. Theo Khải, **20/11** là mốc đạt 20 base_date *theo lịch* nếu chấp nhận legacy, **27/11** là dự kiến nếu chỉ sau cutover 31/10; **không phải ngày Dashboard chắc chắn `ready`** vì còn target maturity, cutoff, lần chạy job và dữ liệu thực tế. Không tự nâng evidence của legacy thành bằng chứng bất biến tuyệt đối.
 
 ### 2.4. Bảo vệ bản forecast đã phát hành [D04 — đồng bộ PR #48]
 
@@ -171,7 +171,7 @@ Theo phạm vi Khải mô tả, forecast rolling production do Lambda CPAWS phá
 | `window_start/window_end` | `[run_utc_date − 55d, run_utc_date]` |
 | `issued_at_min` | `2026-10-27T12:00:00Z` |
 | `target_cutoff_date` | Ngày target giá hợp lệ và đã công bố cuối cùng, tính riêng từng asset |
-| Tần suất | Chạy hàng tuần sau ingest/snapshot hoàn tất; mỗi asset một evaluation run riêng |
+| Tần suất | Chạy sau predict mỗi TUE–SAT lúc **13:45 UTC** (`cron(45 13 ? * TUE-SAT *)`), mỗi asset một evaluation run khi input READY; missing snapshot/actual → log và thoát, không promote |
 
 **Quy ước cuối:** `evaluation_start=window_start=job_utc_date−55 ngày`, `evaluation_end=window_end=job_utc_date` (hai biên inclusive), **không** co hẹp theo ngày đầu/cuối thật sự có forecast. Metadata riêng `first_eligible_base_date`, `last_eligible_base_date` nếu có; `target_cutoff_date` riêng từng asset và có thể sớm hơn `evaluation_end`.
 
@@ -179,12 +179,12 @@ Ví dụ job **05/11/2026**: cửa sổ lý thuyết là **11/09–05/11/2026**;
 
 ### 3.2. Luồng job `rolling_8w`
 
-1. Khóa clean price snapshot/quality; xác định `target_cutoff_date` theo asset. Nhận cấu hình **`MODEL_VERSIONS[asset]`** từ một mapping authoritative trong `infra/app.py` CDK (Predict, Rolling và Accuracy API nhận **cùng mapping**); dùng `champion_effective_base_date[asset]` từ ADR/release để không trộn lịch sử khi đổi riêng một tài sản.
-2. Dựng expected schedule từ trading calendar + TUE–SAT để **đếm** expected/missing, không gọi CloudWatch cho luồng MVP. Nếu nhóm duyệt `LEGACY_ACCEPT_WITH_EVIDENCE`, kiểm chứng **từng record** theo §2.3 trước khi nhận vào `n_obs`; không gọi tất cả legacy là verified chỉ vì `created_at` hợp lịch. Chỉ chọn bản ghi `Forecasts` production thực có, hợp lệ theo mục 2.3–2.5; không tạo forecast thay thế.
+1. Đọc/khóa clean price snapshot/quality và actual đã công bố; nếu snapshot hoặc nguồn truth chưa sẵn sàng, log rồi **thoát không promote** (lần chạy sau thử lại), không ghi `COMPLETED` dựa trên snapshot dở dang. Xác định `target_cutoff_date` theo asset. Nhận cấu hình **`MODEL_VERSIONS[asset]` và `CHAMPION_EFFECTIVE_BASE_DATES[asset]`** từ `infra/app.py` CDK (Predict, Rolling và Accuracy API nhận **cùng hai mapping** qua biến môi trường); dùng effective base date gắn ADR/release để không trộn lịch sử khi đổi riêng một tài sản.
+2. Dựng expected schedule từ trading calendar + TUE–SAT để **đếm** expected/missing, không gọi CloudWatch cho luồng MVP. Với chính sách `LEGACY_ACCEPT_WITH_EVIDENCE` đã chốt, chỉ nhận **từng record có audit/approval** theo §2.3 trước khi nhận vào `n_obs`; không gọi tất cả legacy là verified chỉ vì `created_at` hợp lịch. Chỉ chọn bản ghi `Forecasts` production thực có, hợp lệ theo mục 2.3–2.5; không tạo forecast thay thế.
 3. Ghép forecast với actual, tính đúng log return và 7 horizons; kiểm `created_at`, `is_sample`, model per-asset đang deploy, ngày hiệu lực theo asset, cutoff, `input_snapshot_dt` bắt buộc sau cutover, và bằng chứng conditional-write (hoặc legacy review được duyệt). **Đọc S1a từ S3 độc lập**, không dùng sự có mặt của S1a để quyết định champion eligibility.
 4. Lưu counts expected/published/missing và lý do loại forecast/horizon quan sát được. Missing row không có log thì reason chỉ là `missing_record_unclassified`; không gán skip/upstream đã xác minh.
-5. Kiểm shape 7 q và `prob_up` (mismatch >`1e-6` chỉ audit), calendar/valid endpoints; không sửa nguồn. Common mask theo Accuracy Schema; tính 4 metrics và `n_obs`, `n_base_dates` từng h/overall; tính `first_eligible_base_date` từ **base_date eligible đầu tiên** của model đang hiệu lực.
-6. Ghi `METRIC` qua conditional PutItem, chốt `META` status/28 row hashes/`run_id`, snapshot/version, cutoff, `MODEL_VERSIONS[asset]` và effective date, eligible-pair evidence, counts và `undefined_reason` khi không có nhãn. Không yêu cầu log ref hay trạng thái full-schedule verified.
+5. Kiểm shape 7 q và `prob_up` (mismatch >`1e-6` chỉ audit), calendar/valid endpoints; không sửa nguồn. Common mask theo Accuracy Schema; tính 4 METRIC gốc và **derived `width_80_pct` trên từng cặp q10/q90** cùng mask của `width_80`, rồi gộp đúng trọng số `n_obs` cho horizon/overall; tính `n_obs`, `n_base_dates` từng h/overall; tính `first_eligible_base_date` từ **base_date eligible đầu tiên** của model đang hiệu lực.
+6. Ghi **28 `METRIC` gốc** qua conditional PutItem; đóng băng `derived_metrics.width_80_pct` (overall/by-horizon, cùng input fingerprint) trong run `META` để API trả trực tiếp mà không thêm hàng `METRIC`/h=0; chốt `META` status/28 row hashes/`run_id`, snapshot/version, cutoff, `MODEL_VERSIONS[asset]` và effective date, eligible-pair evidence, counts và `undefined_reason` khi không có nhãn. Không yêu cầu log ref hay trạng thái full-schedule verified.
 7. Chuyển `META` sang `COMPLETED` chỉ sau khi validation nội dung thành công. Sau đó conditional `UpdateItem` **`STATE`/`LATEST_COMPLETED`** theo `latest_run_order` tăng, tuyệt đối không công bố run dở.
 8. **Nhánh ADR-0011:** chấm champion–S1a trên paired common mask và ghi **Parquet nội bộ `eval/shadow_eval/`** theo mục 4.6; shadow thiếu/lỗi không chặn champion `COMPLETED`, không cập nhật `STATE` và không xuất public API.
 
@@ -195,16 +195,17 @@ Ví dụ job **05/11/2026**: cửa sổ lý thuyết là **11/09–05/11/2026**;
 | Metric | Định nghĩa | Ghi chú |
 |---|---|---|
 | `coverage_80` | `mean(q10 <= y <= q90)` trên cặp return hợp lệ | Đếm số hit/tổng số cặp; mục tiêu danh nghĩa 80% |
-| `width_80` | `mean(q90 − q10)` | Lưu log return; nếu hiển thị dạng %, ghi đúng đơn vị chuyển đổi |
+| `width_80` | `mean(q90 − q10)` | Một trong 4 metric gốc, lưu `log_return`, không dùng giá trị này để tính simple-return width từ trung bình |
+| `width_80_pct` (derived) | `mean_i[100 × (exp(q90_i) − exp(q10_i))]` trên **cùng tập cặp của `width_80`** | `unit=percent` (`4.2` nghĩa 4,2%); tính **trước khi tổng hợp**; ghi dữ liệu dẫn xuất vào run `META`, không thêm hàng `METRIC` thứ 29 hoặc sửa Accuracy Schema; Web dùng trường này |
 | `sign_accuracy` | Dấu của q50 đúng dấu y, loại trường hợp dấu bằng 0 theo schema | Chỉ hiển thị cùng `up_rate` |
 | `up_rate` | `mean(y>0)` trên common mask | Có thể có `n_obs` khác sign accuracy |
 | Các metric khác | Theo Accuracy Schema | Lưu khi có đủ dữ liệu; không bắt buộc hiển thị trên web MVP |
 
 `overall.coverage_80` = tổng số hit ở tất cả h / tổng số cặp đủ điều kiện. Không lấy trung bình không trọng số của 7 tỷ lệ và không tạo hàng `h=0` trong Accuracy. Các horizons có thể cùng `base_date`, nên `n_obs` cặp không phải số ngày quan sát độc lập.
 
-**Ngưỡng hiển thị đã được Khải đồng ý (D06/D11):** tối thiểu **20 `base_date` khác nhau có ít nhất một cặp đã có nhãn và được tính cho `overall.coverage_80`**. Trước ngưỡng: giữ metric nội bộ nếu tính được, API `display_value=null`, `display_status=insufficient_data`, web hiển thị X/Y và “từ N ngày dự báo” thay cho phần trăm. Từng h chỉ hiển thị X/Y, không hiện tỷ lệ %. Trường hợp `n_obs=0` có `status=undefined` và giá trị null.
+**Ngưỡng hiển thị cuối cùng đã được Khải chốt (D06/D07/D11):** tối thiểu **20 `base_date` khác nhau có ít nhất một cặp đã có nhãn và được tính cho `overall.coverage_80`**. Trước ngưỡng: **mọi metric ở `overall`** (`coverage_80`, `width_80`, `width_80_pct`, `sign_accuracy`, `up_rate`) vẫn có `value` nội bộ khi tính được, nhưng **`display_value=null`, `display_status=insufficient_data`**. Khi đủ ngưỡng, metric có `status=ok` nhận `display_value` và `display_status=ready`; metric không tính được vẫn `display_value=null` và `display_status=undefined`. `not_ready` áp dụng khi không có completed run đúng champion. **Web chỉ đọc `display_value` và `display_status`**, không dùng `value` để vượt ngưỡng; riêng độ rộng chỉ chọn `width_80_pct`. `n_base_dates` để quyết định ngưỡng là số distinct base_date chung đã có cặp chấm coverage hợp lệ, **không lấy riêng số ngày/mẫu của mỗi metric**. Từng h chỉ hiển thị X/Y, các `display_value` theo h để null với `display_status=counts_only`, không công bố tỷ lệ %. `n_obs=0` có `status=undefined`, `value=null`.
 
-Ước tính cũ (05/11 có 7 base_date/28 cặp; 22/11 có 19 base_date) chỉ là phép đếm phụ thuộc chấp nhận legacy. Khải tính bằng lịch NYSE/CME: **20/11** có thể đạt 20 phiên/base_date trên lịch nếu nhận legacy, hoặc khoảng **27/11** nếu chỉ chấm sau deploy PR #48 dự kiến 31/10. **Không suy ra `ready` ngay ngày 20/11/27/11:** một `base_date` chỉ được đếm khi forecast đó đã được phát hành/duyệt, có ít nhất một horizon đã có target thực tế hợp lệ trước `target_cutoff_date` và **job tuần đã đánh giá**. Số 20 không là 20 quan sát thống kê độc lập; API trả `n_obs` và `n_base_dates` để diễn giải.
+Ước tính cũ (05/11 có 7 base_date/28 cặp; 22/11 có 19 base_date) chỉ là phép đếm phụ thuộc chấp nhận legacy. Khải tính bằng lịch NYSE/CME: **20/11** có thể đạt 20 phiên/base_date trên lịch nếu nhận legacy, hoặc khoảng **27/11** nếu chỉ chấm sau deploy PR #48 dự kiến 31/10. **Không suy ra `ready` ngay ngày 20/11/27/11:** một `base_date` chỉ được đếm khi forecast đó đã được phát hành/duyệt, có ít nhất một horizon đã có target thực tế hợp lệ trước `target_cutoff_date` và **job hằng ngày đã đánh giá**. Số 20 không là 20 quan sát thống kê độc lập; API trả `n_obs` và `n_base_dates` để diễn giải.
 
 ### 3.4. Champion **theo từng asset** trong CDK, đổi bằng ADR [D10]
 
@@ -219,9 +220,22 @@ MODEL_VERSIONS = {
 }
 ```
 
-Predict, Rolling và Accuracy API phải nhận **cùng mapping và cùng release config**, có CDK test xác nhận từng asset và không thiếu asset. Với asset `a`, champion là `MODEL_VERSIONS[a]`; ADR/deploy có thể đổi **chỉ một asset** nếu K4 đạt ở asset đó, không kéo theo ba asset còn lại. Mốc `champion_effective_base_date[a]` được lưu trong ADR/release configuration và áp dụng từ phiên base_date đầu tiên có hiệu lực; không suy diễn từ Accuracy `STATE`. Trong giai đoạn tất cả cùng baseline, mapping có cùng giá trị nhưng contract vẫn dùng hình thức per-asset.
+Mốc hiệu lực **cũng khai báo tại `infra/app.py`** theo từng asset (giá trị cụ thể phụ thuộc ADR/deploy, ví dụ dưới đây không phải mốc production đã duyệt):
 
-**Predict không đọc Accuracy**, không có `champion_release_operator` hoặc `champion_generation` trong `STATE`. Item `STATE` **chỉ** trỏ `LATEST_COMPLETED` (`latest_run_pk`, `latest_run_id`, `latest_run_order`). API cho `/accuracy/{asset}` chỉ đọc run `META.model_version == MODEL_VERSIONS[asset]` và `base_date >= champion_effective_base_date[asset]` đối với các cặp đã chấm của run. Nếu pointer còn trỏ run model cũ, **trả `not_ready`**, không công bố kết quả sai asset/model; job mới bắt đầu thống kê từ effective date của **asset đó**, không backfill model mới từ các forecast cũ. `evaluation_start/end` vẫn là cửa sổ 56 ngày, không tự co theo effective date.
+```python
+CHAMPION_EFFECTIVE_BASE_DATES = {
+    "gold": "<approved-effective-base-date>",
+    "silver": "<approved-effective-base-date>",
+    "brent": "<approved-effective-base-date>",
+    "wti": "<approved-effective-base-date>",
+}
+```
+
+CDK truyền cả hai dưới dạng JSON env vars cho Predict, Rolling job và `/accuracy` Lambda. Predict ưu tiên `MODEL_VERSIONS[asset]`, chỉ fallback sang `MODEL_VERSION` cũ nếu env mới chưa được cấu hình trong giai đoạn chuyển đổi; **không** dùng fallback để lén đổi champion. Khải thực hiện Predict mapping trong PR #53, Tiến phụ trách CDK env mapping và test đồng bộ 4 asset (bao gồm effective dates).
+
+Predict, Rolling và Accuracy API phải nhận **cùng hai mapping `MODEL_VERSIONS` / `CHAMPION_EFFECTIVE_BASE_DATES` và release config**, có CDK test xác nhận từng asset và không thiếu asset. Với asset `a`, champion là `MODEL_VERSIONS[a]`; ADR/deploy có thể đổi **chỉ một asset** nếu K4 đạt ở asset đó, không kéo theo ba asset còn lại. Mốc `CHAMPION_EFFECTIVE_BASE_DATES[a]` được khai báo tại `infra/app.py`, đối chiếu ADR/release và áp dụng từ phiên base_date đầu tiên có hiệu lực; không suy diễn từ Accuracy `STATE`. Trong giai đoạn tất cả cùng baseline, mapping có cùng giá trị nhưng contract vẫn dùng hình thức per-asset.
+
+**Predict không đọc Accuracy**, không có `champion_release_operator` hoặc `champion_generation` trong `STATE`. Item `STATE` **chỉ** trỏ `LATEST_COMPLETED` (`latest_run_pk`, `latest_run_id`, `latest_run_order`). API cho `/accuracy/{asset}` chỉ đọc run `META.model_version == MODEL_VERSIONS[asset]` và `base_date >= CHAMPION_EFFECTIVE_BASE_DATES[asset]` đối với các cặp đã chấm của run. Nếu pointer còn trỏ run model cũ, **trả `not_ready`**, không công bố kết quả sai asset/model; job mới bắt đầu thống kê từ effective date của **asset đó**, không backfill model mới từ các forecast cũ. `evaluation_start/end` vẫn là cửa sổ 56 ngày, không tự co theo effective date.
 
 **Đổi model và concurrent rollout:** `latest_run_order` ngăn rollback theo thời gian nhưng không tự giải quyết writer đời cũ chạy sau cùng với order mới hơn. Release phải đồng bộ CDK mapping ở Predict/Rolling/API, drain writer cũ theo asset trước khi publish mới, và kiểm thử fail-closed nếu các Lambda chưa đồng bộ. Condition của pointer phải bảo vệ chính run/order đã `COMPLETED`; không tuyên bố chỉ IAM/condition đủ làm release đồng bộ. Khi chuyển một asset, API ba asset còn lại vẫn có thể trả Accuracy của champion riêng mà không bị reset.
 
@@ -229,7 +243,7 @@ Predict, Rolling và Accuracy API phải nhận **cùng mapping và cùng releas
 
 ### 3.5. Chấm champion–challenger trên cùng tập quan sát [ADR-0011]
 
-**Hai luồng tách biệt, chung lịch chạy:** (A) **Accuracy production** chấm *mọi* forecast champion đủ điều kiện theo mục 2–3 và ghi DynamoDB cho `/accuracy/{asset}`; (B) **shadow paired comparison** chỉ chấm phần giao champion–S1a cho báo cáo nội bộ. S1a không tham gia `STATE`, không cập nhật champion pointer, không ảnh hưởng ngưỡng 20 ngày của Dashboard. Khi ADR đổi champion tương lai được duyệt, phát hành production vẫn phải tuân theo contract Predict/Forecasts; không tự nâng bản shadow S3 thành forecast production.
+**Hai luồng tách biệt, chung lịch Rolling TUE–SAT:** (A) **Accuracy production** chấm *mọi* forecast champion đủ điều kiện theo mục 2–3 và ghi DynamoDB cho `/accuracy/{asset}`; (B) **shadow paired comparison** chỉ chấm phần giao champion–S1a cho báo cáo nội bộ. S1a không tham gia `STATE`, không cập nhật champion pointer, không ảnh hưởng ngưỡng 20 ngày của Dashboard. Khi ADR đổi champion tương lai được duyệt, phát hành production vẫn phải tuân theo contract Predict/Forecasts; không tự nâng bản shadow S3 thành forecast production.
 
 **Khóa ghép chính xác:** một cặp có cùng `(asset, base_date, h, target_date, target_series)` và source/version/cutoff của nhãn; `model_version` khác là điều **mong muốn** (`baseline-q252` và `s1a-l094`). Chỉ chấm khi **cả hai** dự báo có provenance phát hành hợp lệ *trước nhãn*, mỗi bên đủ 7 phân vị, có actual log return hợp lệ và thỏa cùng `target_cutoff_date`/calendar. `paired_mask = champion_eligible & shadow_eligible & actual_valid & same_target_definition`; không nén hoặc thay thế những cặp còn thiếu shadow. `paired_n_obs` và số `base_date` ghép được ghi **riêng** với `n_obs` của Accuracy production.
 
@@ -252,12 +266,12 @@ Predict, Rolling và Accuracy API phải nhận **cùng mapping và cùng releas
 | Item | `PK` | `SK` | Nội dung chính |
 |---|---|---|---|
 | `STATE` (= **`LATEST_COMPLETED`**) | `ASSET#<asset>` | `STATE` | **Chỉ** con trỏ `latest_run_pk`, `latest_run_id`, `latest_run_order`; không có champion version/generation hoặc quyền release operator |
-| `META` | `RUN#<asset>#<model_version>#<run_id>` | `META` | Run status, model version của **run** (không nguồn champion), fingerprints, window/cutoff, snapshot/evidence của các cặp được chấm, 28 expected metric keys, aggregate/counts |
+| `META` | `RUN#<asset>#<model_version>#<run_id>` | `META` | Run status, model version của **run** (không nguồn champion), fingerprints, window/cutoff, snapshot/evidence của các cặp được chấm, 28 expected metric keys, aggregate/counts và **derived `width_80_pct`** (không phải hàng METRIC) |
 | `METRIC` | **Cùng PK với META** | `METRIC#<sample>#<evaluation_kind>#<evaluation_start>#<evaluation_end>#<target_cutoff_date>#H<h>#<metric>` | Một item theo h/metric và khóa logic; có `payload_hash` |
 
 **Thuật ngữ thống nhất:** `latest_run_pk`, `latest_run_id`, `latest_run_order` trong `STATE` **chính là cơ chế `LATEST_COMPLETED` của MVP**. Không có item `SK=LATEST`, partition champion riêng, hay bảng champion khác. `STATE` là tên kỹ thuật của item; `LATEST_COMPLETED` là vai trò của ba trường pointer.
 
-`run_id` định danh evaluation run, không phải forecast run: `run_id = <job_utc_date>-<sha256(canonical(asset, MODEL_VERSIONS[asset], champion_effective_base_date[asset], job_date, revision, config_hash, immutable_snapshot_identity, target_cutoff_date, eligible_record_fingerprint))[:20]>`. Fingerprint lưu đầy đủ trong META để tránh phụ thuộc hash rút gọn. `run_order=<YYYYMMDD>#<revision_4_digits>`; correction sau run completed dùng revision tăng có audit và `run_id` mới; retry cùng run/input giữ nguyên revision. Cùng `run_order` khác run là **conflict**, không promote.
+`run_id` định danh evaluation run, không phải forecast run: `run_id = <job_utc_date>-<sha256(canonical(asset, MODEL_VERSIONS[asset], CHAMPION_EFFECTIVE_BASE_DATES[asset], job_date, revision, config_hash, immutable_snapshot_identity, target_cutoff_date, eligible_record_fingerprint))[:20]>`. Fingerprint và derived-metric payload/hash lưu đầy đủ trong META để tránh phụ thuộc hash rút gọn. `run_order=<YYYYMMDD>#<revision_4_digits>`; correction sau run completed dùng revision tăng có audit và `run_id` mới; retry cùng run/input giữ nguyên revision. Cùng `run_order` khác run là **conflict**, không promote.
 
 **Access patterns:**
 
@@ -292,10 +306,10 @@ Bốn điều kiện bắt buộc để `META.status=COMPLETED`:
 
 1. `META` có fingerprint, model version bằng `MODEL_VERSIONS[asset]` của job khi tính, window/cutoff theo asset, `sample=all`, `evaluation_kind=rolling_8w`, snapshot và `input_snapshot_dt` (khi contract áp dụng) nhất quán. Không đếm forecast sample/backfill, record trước 27/10 12:00Z; record trước cutover PR #48 chỉ được đếm nếu **phương án legacy đã được duyệt và từng record có evidence tương đương**.
 2. **Mọi cặp dùng trong `n_obs`** có bản ghi `Forecasts` production hợp lệ, `created_at` trong thời gian cho phép và conditional-write provenance theo PR #48 hoặc legacy verification đã được chốt, target/actual theo calendar & cutoff, q hợp lệ. Ngày expected **không có record** → chỉ tăng `missing_count`, không chặn completed; thiếu logs không biến lịch thành `verified`, cũng không làm cặp hợp lệ bị loại.
-3. Đủ **28 item METRIC** = 7 horizons × (`coverage_80`, `width_80`, `sign_accuracy`, `up_rate`); mỗi item có count/hash và `status=ok` hoặc `undefined/not_applicable` có reason hợp lệ. Chỉ chấm quan sát đủ điều kiện, `n_obs`, `n_base_dates`, overall pooled hit/count và expected/published/missing counters nhất quán. `overall` trong META, không có `h=0`.
+3. Đủ **28 item METRIC** = 7 horizons × (`coverage_80`, `width_80`, `sign_accuracy`, `up_rate`); mỗi item có count/hash và `status=ok` hoặc `undefined/not_applicable` có reason hợp lệ. Chỉ chấm quan sát đủ điều kiện, `n_obs`, `n_base_dates`, overall pooled hit/count, **`width_80_pct` derived theo cặp trên cùng mask và hash đã đóng băng**, expected/published/missing counters nhất quán. `overall` trong META, không có `h=0`.
 4. Không còn lỗi đọc snapshot, tính toán, conflict hoặc ghi metric chưa xử lý; strong read xác nhận 28 keys/hashes đúng trước khi complete.
 
-**`COMPLETED` không yêu cầu `n_obs>=1` hoặc `n_base_dates>=20`.** Run với `n_obs=0` được `COMPLETED` nếu đã ghi 28 metric rows `undefined` và đúng số đếm, không bịa nhãn. `display_status=insufficient_data` khi chưa đủ 20 `base_date` có cặp hợp lệ; `ready` là UX, không phải run status. `issuance_evidence_status=verified_eligible_rows` chỉ áp dụng khi có **các cặp đã chấm**; nếu `n_obs=0`, dùng `no_eligible_rows`, không gắn nhãn verified cho dữ liệu không tồn tại; `schedule_evidence_status=not_audited_mvp` không có nghĩa kỳ phát hành nào cũng được xác minh.
+**`COMPLETED` không yêu cầu `n_obs>=1` hoặc `n_base_dates>=20`.** Run với `n_obs=0` được `COMPLETED` nếu đã ghi 28 metric rows `undefined` và đúng số đếm, không bịa nhãn. `display_status=insufficient_data` trên **toàn bộ overall** khi chưa đủ 20 `base_date` có cặp hợp lệ; `ready` là UX, không phải run status. `issuance_evidence_status=verified_eligible_rows` chỉ áp dụng khi có **các cặp đã chấm**; nếu `n_obs=0`, dùng `no_eligible_rows`, không gắn nhãn verified cho dữ liệu không tồn tại; `schedule_evidence_status=not_audited_mvp` không có nghĩa kỳ phát hành nào cũng được xác minh.
 
 **Conditional writes minh họa:**
 
@@ -349,7 +363,7 @@ state_promote_condition = (
 
 **Không thay Accuracy Schema:** champion `rolling_8w` chính thức vẫn ở DynamoDB; Parquet shadow là artifact so sánh nội bộ, không phải `evaluation_kind=rolling_8w` ghi trên S3 theo nhánh champion, không thêm enum `sample`/`evaluation_kind`, không public endpoint. IAM mới của Rolling writer phải được review trước deploy; không tự cấp quyền Predict vào shadow_eval.
 
-## 5. API `GET /accuracy/{asset}` [ĐỀ XUẤT]
+## 5. API `GET /accuracy/{asset}` [QUYẾT ĐỊNH THIẾT KẾ, CHỜ CONTRACT]
 
 ### 5.1. Request
 
@@ -357,19 +371,19 @@ state_promote_condition = (
 
 ### 5.2. JSON mẫu cho Tiến/Web (trước 02/11)
 
-> **Fixtures minh họa giao diện, KHÔNG phải số liệu production.** Bản chính thức phải được duyệt trong PR contract. `by_horizon` có đủ h=1..7 và **bốn metrics/horizon**, được thu gọn mỗi horizon thành một dòng JSON để Tiến có thể copy làm fixture. Mỗi metric có `n_obs`, `status`; `coverage_80` theo horizon chỉ trả counts, không công bố tỷ lệ %. Các con số giả định chỉ để kiểm thử trạng thái, không suy ra rollout/mốc 20 ngày thực tế.
+> **Fixtures minh họa giao diện, KHÔNG phải số liệu production.** Bản chính thức phải được duyệt trong PR contract. `by_horizon` đủ h=1..7 với **4 metric gốc + `width_80_pct` dẫn xuất**; mỗi metric có `n_obs`, `status`, các giá trị hiển thị phải qua `display_value`/`display_status`. Từng horizon chỉ dùng counts cho Web, không hiện tỷ lệ. Ba JSON dưới đây là **đề xuất cập nhật đồng bộ cho PR #62**; giá trị `width_80_pct` synthetic được dựng từ q10/q90 giả định theo cặp, không tính bằng `100×width_80` có sẵn.
 
 **Ví dụ `not_ready`**
 
 ```json
 {
-  "asset": "wti",
-  "model_version": "baseline-q252",
-  "evaluation_kind": "rolling_8w",
-  "sample": "all",
-  "run_id": null,
-  "evaluated_at": null,
-  "window": {
+    "asset": "wti",
+    "model_version": "baseline-q252",
+    "evaluation_kind": "rolling_8w",
+    "sample": "all",
+    "run_id": null,
+    "evaluated_at": null,
+    "window": {
     "basis": "base_date",
     "days": 56,
     "window_start": null,
@@ -377,7 +391,7 @@ state_promote_condition = (
     "target_cutoff_date": null,
     "first_eligible_base_date": null
   },
-  "evaluation_evidence": {
+    "evaluation_evidence": {
     "schedule_basis": "trading_calendar_and_predict_schedule",
     "schedule_evidence_status": "not_audited_mvp",
     "issuance_evidence_status": "no_completed_run",
@@ -385,7 +399,7 @@ state_promote_condition = (
     "published_count": null,
     "missing_count": null
   },
-  "overall": {
+    "overall": {
     "coverage_80": {
       "covered_count": 0,
       "n_obs": 0,
@@ -399,30 +413,44 @@ state_promote_condition = (
       "value": null,
       "n_obs": 0,
       "unit": "log_return",
-      "status": "undefined"
+      "status": "undefined",
+      "display_status": "not_ready",
+      "display_value": null
+    },
+    "width_80_pct": {
+      "value": null,
+      "n_obs": 0,
+      "unit": "percent",
+      "status": "undefined",
+      "display_status": "not_ready",
+      "display_value": null
     },
     "sign_accuracy": {
       "value": null,
       "n_obs": 0,
-      "status": "undefined"
+      "status": "undefined",
+      "display_status": "not_ready",
+      "display_value": null
     },
     "up_rate": {
       "value": null,
       "n_obs": 0,
-      "status": "undefined"
+      "status": "undefined",
+      "display_status": "not_ready",
+      "display_value": null
     }
   },
   "by_horizon": [
-    {"h": 1, "coverage_80": {"covered_count": 0, "n_obs": 0, "display_value": null, "display_status": "counts_only", "n_base_dates": 0, "status": "undefined"}, "width_80": {"value": null, "n_obs": 0, "unit": "log_return", "status": "undefined"}, "sign_accuracy": {"value": null, "n_obs": 0, "status": "undefined"}, "up_rate": {"value": null, "n_obs": 0, "status": "undefined"}},
-    {"h": 2, "coverage_80": {"covered_count": 0, "n_obs": 0, "display_value": null, "display_status": "counts_only", "n_base_dates": 0, "status": "undefined"}, "width_80": {"value": null, "n_obs": 0, "unit": "log_return", "status": "undefined"}, "sign_accuracy": {"value": null, "n_obs": 0, "status": "undefined"}, "up_rate": {"value": null, "n_obs": 0, "status": "undefined"}},
-    {"h": 3, "coverage_80": {"covered_count": 0, "n_obs": 0, "display_value": null, "display_status": "counts_only", "n_base_dates": 0, "status": "undefined"}, "width_80": {"value": null, "n_obs": 0, "unit": "log_return", "status": "undefined"}, "sign_accuracy": {"value": null, "n_obs": 0, "status": "undefined"}, "up_rate": {"value": null, "n_obs": 0, "status": "undefined"}},
-    {"h": 4, "coverage_80": {"covered_count": 0, "n_obs": 0, "display_value": null, "display_status": "counts_only", "n_base_dates": 0, "status": "undefined"}, "width_80": {"value": null, "n_obs": 0, "unit": "log_return", "status": "undefined"}, "sign_accuracy": {"value": null, "n_obs": 0, "status": "undefined"}, "up_rate": {"value": null, "n_obs": 0, "status": "undefined"}},
-    {"h": 5, "coverage_80": {"covered_count": 0, "n_obs": 0, "display_value": null, "display_status": "counts_only", "n_base_dates": 0, "status": "undefined"}, "width_80": {"value": null, "n_obs": 0, "unit": "log_return", "status": "undefined"}, "sign_accuracy": {"value": null, "n_obs": 0, "status": "undefined"}, "up_rate": {"value": null, "n_obs": 0, "status": "undefined"}},
-    {"h": 6, "coverage_80": {"covered_count": 0, "n_obs": 0, "display_value": null, "display_status": "counts_only", "n_base_dates": 0, "status": "undefined"}, "width_80": {"value": null, "n_obs": 0, "unit": "log_return", "status": "undefined"}, "sign_accuracy": {"value": null, "n_obs": 0, "status": "undefined"}, "up_rate": {"value": null, "n_obs": 0, "status": "undefined"}},
-    {"h": 7, "coverage_80": {"covered_count": 0, "n_obs": 0, "display_value": null, "display_status": "counts_only", "n_base_dates": 0, "status": "undefined"}, "width_80": {"value": null, "n_obs": 0, "unit": "log_return", "status": "undefined"}, "sign_accuracy": {"value": null, "n_obs": 0, "status": "undefined"}, "up_rate": {"value": null, "n_obs": 0, "status": "undefined"}}
+    {"h": 1,"coverage_80": {"covered_count": 0,"n_obs": 0,"display_value": null,"display_status": "counts_only","n_base_dates": 0,"status": "undefined"},"width_80": {"value": null,"n_obs": 0,"unit": "log_return","status": "undefined","display_value": null,"display_status": "counts_only"},"width_80_pct": {"value": null,"n_obs": 0,"unit": "percent","status": "undefined","display_value": null,"display_status": "counts_only"},"sign_accuracy": {"value": null,"n_obs": 0,"status": "undefined","display_value": null,"display_status": "counts_only"},"up_rate": {"value": null,"n_obs": 0,"status": "undefined","display_value": null,"display_status": "counts_only"}},
+    {"h": 2,"coverage_80": {"covered_count": 0,"n_obs": 0,"display_value": null,"display_status": "counts_only","n_base_dates": 0,"status": "undefined"},"width_80": {"value": null,"n_obs": 0,"unit": "log_return","status": "undefined","display_value": null,"display_status": "counts_only"},"width_80_pct": {"value": null,"n_obs": 0,"unit": "percent","status": "undefined","display_value": null,"display_status": "counts_only"},"sign_accuracy": {"value": null,"n_obs": 0,"status": "undefined","display_value": null,"display_status": "counts_only"},"up_rate": {"value": null,"n_obs": 0,"status": "undefined","display_value": null,"display_status": "counts_only"}},
+    {"h": 3,"coverage_80": {"covered_count": 0,"n_obs": 0,"display_value": null,"display_status": "counts_only","n_base_dates": 0,"status": "undefined"},"width_80": {"value": null,"n_obs": 0,"unit": "log_return","status": "undefined","display_value": null,"display_status": "counts_only"},"width_80_pct": {"value": null,"n_obs": 0,"unit": "percent","status": "undefined","display_value": null,"display_status": "counts_only"},"sign_accuracy": {"value": null,"n_obs": 0,"status": "undefined","display_value": null,"display_status": "counts_only"},"up_rate": {"value": null,"n_obs": 0,"status": "undefined","display_value": null,"display_status": "counts_only"}},
+    {"h": 4,"coverage_80": {"covered_count": 0,"n_obs": 0,"display_value": null,"display_status": "counts_only","n_base_dates": 0,"status": "undefined"},"width_80": {"value": null,"n_obs": 0,"unit": "log_return","status": "undefined","display_value": null,"display_status": "counts_only"},"width_80_pct": {"value": null,"n_obs": 0,"unit": "percent","status": "undefined","display_value": null,"display_status": "counts_only"},"sign_accuracy": {"value": null,"n_obs": 0,"status": "undefined","display_value": null,"display_status": "counts_only"},"up_rate": {"value": null,"n_obs": 0,"status": "undefined","display_value": null,"display_status": "counts_only"}},
+    {"h": 5,"coverage_80": {"covered_count": 0,"n_obs": 0,"display_value": null,"display_status": "counts_only","n_base_dates": 0,"status": "undefined"},"width_80": {"value": null,"n_obs": 0,"unit": "log_return","status": "undefined","display_value": null,"display_status": "counts_only"},"width_80_pct": {"value": null,"n_obs": 0,"unit": "percent","status": "undefined","display_value": null,"display_status": "counts_only"},"sign_accuracy": {"value": null,"n_obs": 0,"status": "undefined","display_value": null,"display_status": "counts_only"},"up_rate": {"value": null,"n_obs": 0,"status": "undefined","display_value": null,"display_status": "counts_only"}},
+    {"h": 6,"coverage_80": {"covered_count": 0,"n_obs": 0,"display_value": null,"display_status": "counts_only","n_base_dates": 0,"status": "undefined"},"width_80": {"value": null,"n_obs": 0,"unit": "log_return","status": "undefined","display_value": null,"display_status": "counts_only"},"width_80_pct": {"value": null,"n_obs": 0,"unit": "percent","status": "undefined","display_value": null,"display_status": "counts_only"},"sign_accuracy": {"value": null,"n_obs": 0,"status": "undefined","display_value": null,"display_status": "counts_only"},"up_rate": {"value": null,"n_obs": 0,"status": "undefined","display_value": null,"display_status": "counts_only"}},
+    {"h": 7,"coverage_80": {"covered_count": 0,"n_obs": 0,"display_value": null,"display_status": "counts_only","n_base_dates": 0,"status": "undefined"},"width_80": {"value": null,"n_obs": 0,"unit": "log_return","status": "undefined","display_value": null,"display_status": "counts_only"},"width_80_pct": {"value": null,"n_obs": 0,"unit": "percent","status": "undefined","display_value": null,"display_status": "counts_only"},"sign_accuracy": {"value": null,"n_obs": 0,"status": "undefined","display_value": null,"display_status": "counts_only"},"up_rate": {"value": null,"n_obs": 0,"status": "undefined","display_value": null,"display_status": "counts_only"}}
   ],
-  "data_status": "not_ready",
-  "disclaimer": "Dự báo chỉ mang tính tham khảo, không phải lời khuyên đầu tư."
+    "data_status": "not_ready",
+    "disclaimer": "Dự báo chỉ mang tính tham khảo, không phải lời khuyên đầu tư."
 }
 ```
 
@@ -430,13 +458,13 @@ state_promote_condition = (
 
 ```json
 {
-  "asset": "wti",
-  "model_version": "baseline-q252",
-  "evaluation_kind": "rolling_8w",
-  "sample": "all",
-  "run_id": "example-rolling-2026-11-05-wti",
-  "evaluated_at": "2026-11-05T18:00:00Z",
-  "window": {
+    "asset": "wti",
+    "model_version": "baseline-q252",
+    "evaluation_kind": "rolling_8w",
+    "sample": "all",
+    "run_id": "example-rolling-2026-11-05-wti",
+    "evaluated_at": "2026-11-05T18:00:00Z",
+    "window": {
     "basis": "base_date",
     "days": 56,
     "window_start": "2026-09-11",
@@ -444,7 +472,7 @@ state_promote_condition = (
     "target_cutoff_date": "2026-11-04",
     "first_eligible_base_date": "2026-10-30"
   },
-  "evaluation_evidence": {
+    "evaluation_evidence": {
     "schedule_basis": "trading_calendar_and_predict_schedule",
     "schedule_evidence_status": "not_audited_mvp",
     "issuance_evidence_status": "verified_eligible_rows",
@@ -452,7 +480,7 @@ state_promote_condition = (
     "published_count": 4,
     "missing_count": 4
   },
-  "overall": {
+    "overall": {
     "coverage_80": {
       "covered_count": 10,
       "n_obs": 14,
@@ -466,30 +494,44 @@ state_promote_condition = (
       "value": 0.025,
       "n_obs": 14,
       "unit": "log_return",
-      "status": "ok"
+      "status": "ok",
+      "display_status": "insufficient_data",
+      "display_value": null
+    },
+    "width_80_pct": {
+      "value": 2.49382275,
+      "n_obs": 14,
+      "unit": "percent",
+      "status": "ok",
+      "display_status": "insufficient_data",
+      "display_value": null
     },
     "sign_accuracy": {
       "value": 0.375,
       "n_obs": 8,
-      "status": "ok"
+      "status": "ok",
+      "display_status": "insufficient_data",
+      "display_value": null
     },
     "up_rate": {
       "value": 0.357143,
       "n_obs": 14,
-      "status": "ok"
+      "status": "ok",
+      "display_status": "insufficient_data",
+      "display_value": null
     }
   },
   "by_horizon": [
-    {"h": 1, "coverage_80": {"covered_count": 3, "n_obs": 4, "display_value": null, "display_status": "counts_only", "n_base_dates": 4, "status": "ok"}, "width_80": {"value": 0.025, "n_obs": 4, "unit": "log_return", "status": "ok"}, "sign_accuracy": {"value": 0.333333, "n_obs": 3, "status": "ok"}, "up_rate": {"value": 0.5, "n_obs": 4, "status": "ok"}},
-    {"h": 2, "coverage_80": {"covered_count": 2, "n_obs": 3, "display_value": null, "display_status": "counts_only", "n_base_dates": 3, "status": "ok"}, "width_80": {"value": 0.025, "n_obs": 3, "unit": "log_return", "status": "ok"}, "sign_accuracy": {"value": 0.5, "n_obs": 2, "status": "ok"}, "up_rate": {"value": 0.333333, "n_obs": 3, "status": "ok"}},
-    {"h": 3, "coverage_80": {"covered_count": 2, "n_obs": 3, "display_value": null, "display_status": "counts_only", "n_base_dates": 3, "status": "ok"}, "width_80": {"value": 0.025, "n_obs": 3, "unit": "log_return", "status": "ok"}, "sign_accuracy": {"value": 0.5, "n_obs": 2, "status": "ok"}, "up_rate": {"value": 0.333333, "n_obs": 3, "status": "ok"}},
-    {"h": 4, "coverage_80": {"covered_count": 1, "n_obs": 2, "display_value": null, "display_status": "counts_only", "n_base_dates": 2, "status": "ok"}, "width_80": {"value": 0.025, "n_obs": 2, "unit": "log_return", "status": "ok"}, "sign_accuracy": {"value": 0.0, "n_obs": 1, "status": "ok"}, "up_rate": {"value": 0.5, "n_obs": 2, "status": "ok"}},
-    {"h": 5, "coverage_80": {"covered_count": 1, "n_obs": 1, "display_value": null, "display_status": "counts_only", "n_base_dates": 1, "status": "ok"}, "width_80": {"value": 0.025, "n_obs": 1, "unit": "log_return", "status": "ok"}, "sign_accuracy": {"value": null, "n_obs": 0, "status": "undefined"}, "up_rate": {"value": 0.0, "n_obs": 1, "status": "ok"}},
-    {"h": 6, "coverage_80": {"covered_count": 1, "n_obs": 1, "display_value": null, "display_status": "counts_only", "n_base_dates": 1, "status": "ok"}, "width_80": {"value": 0.025, "n_obs": 1, "unit": "log_return", "status": "ok"}, "sign_accuracy": {"value": null, "n_obs": 0, "status": "undefined"}, "up_rate": {"value": 0.0, "n_obs": 1, "status": "ok"}},
-    {"h": 7, "coverage_80": {"covered_count": 0, "n_obs": 0, "display_value": null, "display_status": "counts_only", "n_base_dates": 0, "status": "undefined"}, "width_80": {"value": null, "n_obs": 0, "unit": "log_return", "status": "undefined"}, "sign_accuracy": {"value": null, "n_obs": 0, "status": "undefined"}, "up_rate": {"value": null, "n_obs": 0, "status": "undefined"}}
+    {"h": 1,"coverage_80": {"covered_count": 3,"n_obs": 4,"display_value": null,"display_status": "counts_only","n_base_dates": 4,"status": "ok"},"width_80": {"value": 0.025,"n_obs": 4,"unit": "log_return","status": "ok","display_value": null,"display_status": "counts_only"},"width_80_pct": {"value": 2.49382275,"n_obs": 4,"unit": "percent","status": "ok","display_value": null,"display_status": "counts_only"},"sign_accuracy": {"value": 0.333333,"n_obs": 3,"status": "ok","display_value": null,"display_status": "counts_only"},"up_rate": {"value": 0.5,"n_obs": 4,"status": "ok","display_value": null,"display_status": "counts_only"}},
+    {"h": 2,"coverage_80": {"covered_count": 2,"n_obs": 3,"display_value": null,"display_status": "counts_only","n_base_dates": 3,"status": "ok"},"width_80": {"value": 0.025,"n_obs": 3,"unit": "log_return","status": "ok","display_value": null,"display_status": "counts_only"},"width_80_pct": {"value": 2.49382275,"n_obs": 3,"unit": "percent","status": "ok","display_value": null,"display_status": "counts_only"},"sign_accuracy": {"value": 0.5,"n_obs": 2,"status": "ok","display_value": null,"display_status": "counts_only"},"up_rate": {"value": 0.333333,"n_obs": 3,"status": "ok","display_value": null,"display_status": "counts_only"}},
+    {"h": 3,"coverage_80": {"covered_count": 2,"n_obs": 3,"display_value": null,"display_status": "counts_only","n_base_dates": 3,"status": "ok"},"width_80": {"value": 0.025,"n_obs": 3,"unit": "log_return","status": "ok","display_value": null,"display_status": "counts_only"},"width_80_pct": {"value": 2.49382275,"n_obs": 3,"unit": "percent","status": "ok","display_value": null,"display_status": "counts_only"},"sign_accuracy": {"value": 0.5,"n_obs": 2,"status": "ok","display_value": null,"display_status": "counts_only"},"up_rate": {"value": 0.333333,"n_obs": 3,"status": "ok","display_value": null,"display_status": "counts_only"}},
+    {"h": 4,"coverage_80": {"covered_count": 1,"n_obs": 2,"display_value": null,"display_status": "counts_only","n_base_dates": 2,"status": "ok"},"width_80": {"value": 0.025,"n_obs": 2,"unit": "log_return","status": "ok","display_value": null,"display_status": "counts_only"},"width_80_pct": {"value": 2.49382275,"n_obs": 2,"unit": "percent","status": "ok","display_value": null,"display_status": "counts_only"},"sign_accuracy": {"value": 0.0,"n_obs": 1,"status": "ok","display_value": null,"display_status": "counts_only"},"up_rate": {"value": 0.5,"n_obs": 2,"status": "ok","display_value": null,"display_status": "counts_only"}},
+    {"h": 5,"coverage_80": {"covered_count": 1,"n_obs": 1,"display_value": null,"display_status": "counts_only","n_base_dates": 1,"status": "ok"},"width_80": {"value": 0.025,"n_obs": 1,"unit": "log_return","status": "ok","display_value": null,"display_status": "counts_only"},"width_80_pct": {"value": 2.49382275,"n_obs": 1,"unit": "percent","status": "ok","display_value": null,"display_status": "counts_only"},"sign_accuracy": {"value": null,"n_obs": 0,"status": "undefined","display_value": null,"display_status": "counts_only"},"up_rate": {"value": 0.0,"n_obs": 1,"status": "ok","display_value": null,"display_status": "counts_only"}},
+    {"h": 6,"coverage_80": {"covered_count": 1,"n_obs": 1,"display_value": null,"display_status": "counts_only","n_base_dates": 1,"status": "ok"},"width_80": {"value": 0.025,"n_obs": 1,"unit": "log_return","status": "ok","display_value": null,"display_status": "counts_only"},"width_80_pct": {"value": 2.49382275,"n_obs": 1,"unit": "percent","status": "ok","display_value": null,"display_status": "counts_only"},"sign_accuracy": {"value": null,"n_obs": 0,"status": "undefined","display_value": null,"display_status": "counts_only"},"up_rate": {"value": 0.0,"n_obs": 1,"status": "ok","display_value": null,"display_status": "counts_only"}},
+    {"h": 7,"coverage_80": {"covered_count": 0,"n_obs": 0,"display_value": null,"display_status": "counts_only","n_base_dates": 0,"status": "undefined"},"width_80": {"value": null,"n_obs": 0,"unit": "log_return","status": "undefined","display_value": null,"display_status": "counts_only"},"width_80_pct": {"value": null,"n_obs": 0,"unit": "percent","status": "undefined","display_value": null,"display_status": "counts_only"},"sign_accuracy": {"value": null,"n_obs": 0,"status": "undefined","display_value": null,"display_status": "counts_only"},"up_rate": {"value": null,"n_obs": 0,"status": "undefined","display_value": null,"display_status": "counts_only"}}
   ],
-  "data_status": "collecting",
-  "disclaimer": "Dự báo chỉ mang tính tham khảo, không phải lời khuyên đầu tư."
+    "data_status": "collecting",
+    "disclaimer": "Dự báo chỉ mang tính tham khảo, không phải lời khuyên đầu tư."
 }
 ```
 
@@ -497,13 +539,13 @@ state_promote_condition = (
 
 ```json
 {
-  "asset": "wti",
-  "model_version": "baseline-q252",
-  "evaluation_kind": "rolling_8w",
-  "sample": "all",
-  "run_id": "example-rolling-2026-12-05-wti",
-  "evaluated_at": "2026-12-05T18:00:00Z",
-  "window": {
+    "asset": "wti",
+    "model_version": "baseline-q252",
+    "evaluation_kind": "rolling_8w",
+    "sample": "all",
+    "run_id": "example-rolling-2026-12-05-wti",
+    "evaluated_at": "2026-12-05T18:00:00Z",
+    "window": {
     "basis": "base_date",
     "days": 56,
     "window_start": "2026-10-11",
@@ -511,7 +553,7 @@ state_promote_condition = (
     "target_cutoff_date": "2026-12-04",
     "first_eligible_base_date": "2026-10-26"
   },
-  "evaluation_evidence": {
+    "evaluation_evidence": {
     "schedule_basis": "trading_calendar_and_predict_schedule",
     "schedule_evidence_status": "not_audited_mvp",
     "issuance_evidence_status": "verified_eligible_rows",
@@ -519,13 +561,13 @@ state_promote_condition = (
     "published_count": 24,
     "missing_count": 1
   },
-  "overall": {
+    "overall": {
     "coverage_80": {
       "covered_count": 114,
       "n_obs": 147,
       "n_base_dates": 24,
       "min_display_base_dates": 20,
-      "display_value": 0.77551,
+      "display_value": 0.7755102,
       "status": "ok",
       "display_status": "ready"
     },
@@ -533,39 +575,53 @@ state_promote_condition = (
       "value": 0.025,
       "n_obs": 147,
       "unit": "log_return",
-      "status": "ok"
+      "status": "ok",
+      "display_status": "ready",
+      "display_value": 0.025
+    },
+    "width_80_pct": {
+      "value": 2.49382275,
+      "n_obs": 147,
+      "unit": "percent",
+      "status": "ok",
+      "display_status": "ready",
+      "display_value": 2.49382275
     },
     "sign_accuracy": {
       "value": 0.485714,
       "n_obs": 140,
-      "status": "ok"
+      "status": "ok",
+      "display_status": "ready",
+      "display_value": 0.485714
     },
     "up_rate": {
       "value": 0.489796,
       "n_obs": 147,
-      "status": "ok"
+      "status": "ok",
+      "display_status": "ready",
+      "display_value": 0.489796
     }
   },
   "by_horizon": [
-    {"h": 1, "coverage_80": {"covered_count": 19, "n_obs": 24, "display_value": null, "display_status": "counts_only", "n_base_dates": 24, "status": "ok"}, "width_80": {"value": 0.025, "n_obs": 24, "unit": "log_return", "status": "ok"}, "sign_accuracy": {"value": 0.478261, "n_obs": 23, "status": "ok"}, "up_rate": {"value": 0.5, "n_obs": 24, "status": "ok"}},
-    {"h": 2, "coverage_80": {"covered_count": 18, "n_obs": 23, "display_value": null, "display_status": "counts_only", "n_base_dates": 23, "status": "ok"}, "width_80": {"value": 0.025, "n_obs": 23, "unit": "log_return", "status": "ok"}, "sign_accuracy": {"value": 0.5, "n_obs": 22, "status": "ok"}, "up_rate": {"value": 0.478261, "n_obs": 23, "status": "ok"}},
-    {"h": 3, "coverage_80": {"covered_count": 17, "n_obs": 22, "display_value": null, "display_status": "counts_only", "n_base_dates": 22, "status": "ok"}, "width_80": {"value": 0.025, "n_obs": 22, "unit": "log_return", "status": "ok"}, "sign_accuracy": {"value": 0.47619, "n_obs": 21, "status": "ok"}, "up_rate": {"value": 0.5, "n_obs": 22, "status": "ok"}},
-    {"h": 4, "coverage_80": {"covered_count": 16, "n_obs": 21, "display_value": null, "display_status": "counts_only", "n_base_dates": 21, "status": "ok"}, "width_80": {"value": 0.025, "n_obs": 21, "unit": "log_return", "status": "ok"}, "sign_accuracy": {"value": 0.5, "n_obs": 20, "status": "ok"}, "up_rate": {"value": 0.47619, "n_obs": 21, "status": "ok"}},
-    {"h": 5, "coverage_80": {"covered_count": 16, "n_obs": 20, "display_value": null, "display_status": "counts_only", "n_base_dates": 20, "status": "ok"}, "width_80": {"value": 0.025, "n_obs": 20, "unit": "log_return", "status": "ok"}, "sign_accuracy": {"value": 0.473684, "n_obs": 19, "status": "ok"}, "up_rate": {"value": 0.5, "n_obs": 20, "status": "ok"}},
-    {"h": 6, "coverage_80": {"covered_count": 15, "n_obs": 19, "display_value": null, "display_status": "counts_only", "n_base_dates": 19, "status": "ok"}, "width_80": {"value": 0.025, "n_obs": 19, "unit": "log_return", "status": "ok"}, "sign_accuracy": {"value": 0.5, "n_obs": 18, "status": "ok"}, "up_rate": {"value": 0.473684, "n_obs": 19, "status": "ok"}},
-    {"h": 7, "coverage_80": {"covered_count": 13, "n_obs": 18, "display_value": null, "display_status": "counts_only", "n_base_dates": 18, "status": "ok"}, "width_80": {"value": 0.025, "n_obs": 18, "unit": "log_return", "status": "ok"}, "sign_accuracy": {"value": 0.470588, "n_obs": 17, "status": "ok"}, "up_rate": {"value": 0.5, "n_obs": 18, "status": "ok"}}
+    {"h": 1,"coverage_80": {"covered_count": 19,"n_obs": 24,"display_value": null,"display_status": "counts_only","n_base_dates": 24,"status": "ok"},"width_80": {"value": 0.025,"n_obs": 24,"unit": "log_return","status": "ok","display_value": null,"display_status": "counts_only"},"width_80_pct": {"value": 2.49382275,"n_obs": 24,"unit": "percent","status": "ok","display_value": null,"display_status": "counts_only"},"sign_accuracy": {"value": 0.478261,"n_obs": 23,"status": "ok","display_value": null,"display_status": "counts_only"},"up_rate": {"value": 0.5,"n_obs": 24,"status": "ok","display_value": null,"display_status": "counts_only"}},
+    {"h": 2,"coverage_80": {"covered_count": 18,"n_obs": 23,"display_value": null,"display_status": "counts_only","n_base_dates": 23,"status": "ok"},"width_80": {"value": 0.025,"n_obs": 23,"unit": "log_return","status": "ok","display_value": null,"display_status": "counts_only"},"width_80_pct": {"value": 2.49382275,"n_obs": 23,"unit": "percent","status": "ok","display_value": null,"display_status": "counts_only"},"sign_accuracy": {"value": 0.5,"n_obs": 22,"status": "ok","display_value": null,"display_status": "counts_only"},"up_rate": {"value": 0.478261,"n_obs": 23,"status": "ok","display_value": null,"display_status": "counts_only"}},
+    {"h": 3,"coverage_80": {"covered_count": 17,"n_obs": 22,"display_value": null,"display_status": "counts_only","n_base_dates": 22,"status": "ok"},"width_80": {"value": 0.025,"n_obs": 22,"unit": "log_return","status": "ok","display_value": null,"display_status": "counts_only"},"width_80_pct": {"value": 2.49382275,"n_obs": 22,"unit": "percent","status": "ok","display_value": null,"display_status": "counts_only"},"sign_accuracy": {"value": 0.47619,"n_obs": 21,"status": "ok","display_value": null,"display_status": "counts_only"},"up_rate": {"value": 0.5,"n_obs": 22,"status": "ok","display_value": null,"display_status": "counts_only"}},
+    {"h": 4,"coverage_80": {"covered_count": 16,"n_obs": 21,"display_value": null,"display_status": "counts_only","n_base_dates": 21,"status": "ok"},"width_80": {"value": 0.025,"n_obs": 21,"unit": "log_return","status": "ok","display_value": null,"display_status": "counts_only"},"width_80_pct": {"value": 2.49382275,"n_obs": 21,"unit": "percent","status": "ok","display_value": null,"display_status": "counts_only"},"sign_accuracy": {"value": 0.5,"n_obs": 20,"status": "ok","display_value": null,"display_status": "counts_only"},"up_rate": {"value": 0.47619,"n_obs": 21,"status": "ok","display_value": null,"display_status": "counts_only"}},
+    {"h": 5,"coverage_80": {"covered_count": 16,"n_obs": 20,"display_value": null,"display_status": "counts_only","n_base_dates": 20,"status": "ok"},"width_80": {"value": 0.025,"n_obs": 20,"unit": "log_return","status": "ok","display_value": null,"display_status": "counts_only"},"width_80_pct": {"value": 2.49382275,"n_obs": 20,"unit": "percent","status": "ok","display_value": null,"display_status": "counts_only"},"sign_accuracy": {"value": 0.473684,"n_obs": 19,"status": "ok","display_value": null,"display_status": "counts_only"},"up_rate": {"value": 0.5,"n_obs": 20,"status": "ok","display_value": null,"display_status": "counts_only"}},
+    {"h": 6,"coverage_80": {"covered_count": 15,"n_obs": 19,"display_value": null,"display_status": "counts_only","n_base_dates": 19,"status": "ok"},"width_80": {"value": 0.025,"n_obs": 19,"unit": "log_return","status": "ok","display_value": null,"display_status": "counts_only"},"width_80_pct": {"value": 2.49382275,"n_obs": 19,"unit": "percent","status": "ok","display_value": null,"display_status": "counts_only"},"sign_accuracy": {"value": 0.5,"n_obs": 18,"status": "ok","display_value": null,"display_status": "counts_only"},"up_rate": {"value": 0.473684,"n_obs": 19,"status": "ok","display_value": null,"display_status": "counts_only"}},
+    {"h": 7,"coverage_80": {"covered_count": 13,"n_obs": 18,"display_value": null,"display_status": "counts_only","n_base_dates": 18,"status": "ok"},"width_80": {"value": 0.025,"n_obs": 18,"unit": "log_return","status": "ok","display_value": null,"display_status": "counts_only"},"width_80_pct": {"value": 2.49382275,"n_obs": 18,"unit": "percent","status": "ok","display_value": null,"display_status": "counts_only"},"sign_accuracy": {"value": 0.470588,"n_obs": 17,"status": "ok","display_value": null,"display_status": "counts_only"},"up_rate": {"value": 0.5,"n_obs": 18,"status": "ok","display_value": null,"display_status": "counts_only"}}
   ],
-  "data_status": "ready",
-  "disclaimer": "Dự báo chỉ mang tính tham khảo, không phải lời khuyên đầu tư."
+    "data_status": "ready",
+    "disclaimer": "Dự báo chỉ mang tính tham khảo, không phải lời khuyên đầu tư."
 }
 ```
 
 ### 5.3. Quy ước API
 
 - `overall.coverage_80` gộp theo số cặp; `by_horizon` trả đủ h=1..7, mỗi metric có `n_obs` và trạng thái riêng; `n_base_dates` là số base date **khác nhau có cặp hợp lệ cho scope/metric tương ứng**, không phải số cặp; **`window.first_eligible_base_date` là trường bắt buộc** (ISO date hoặc `null`), tính từ base_date đầu tiên **có ít nhất một cặp được chấm**, của champion `MODEL_VERSIONS[asset]` hiện tại, không sớm hơn champion effective date. Web hiển thị “Kể từ <ngày>” động; không hardcode 27/10, không thay bằng timestamp phát hành.
-- Dashboard MVP hiển thị `coverage_80`, `width_80`, `sign_accuracy`, `up_rate` **cho champion production**. Với `gold/silver`, ADR-0005 (b) cấm hiển thị chuỗi giá Yahoo; các chỉ số Accuracy và dự báo return %/xác suất tăng không phải chuỗi giá và tiếp tục được phép hiển thị. Không hiển thị `pinball_skill=0` của champion `baseline-q252` so với chính baseline, không trả S1a/paired report trong Accuracy API. Metric khác vẫn được lưu nếu tính được; shadow `pinball_skill` chỉ trong artifact nội bộ.
-- `width_80` lưu log return; web/chatbot/slide cùng dùng **`display_width_pct = 100 × width_80`**, ví dụ `width_80=0.025` → **`2.5%` độ rộng trên thang log-return** (chính xác hơn gọi là 2.5 điểm phần trăm log-return). **Không** coi đây là độ rộng simple-return; nếu thật sự cần độ rộng simple-return cho một horizon, phải tính theo cặp phân vị `100 × (exp(q90) − exp(q10))`, sau đó mới lấy trung bình trên các cặp hợp lệ, không áp exp lên width trung bình. Frontend không tự dùng công thức thứ hai khi API đang trả metric log-width. `sign_accuracy` và `up_rate` luôn đi cặp nhưng không mặc định có cùng mẫu số.
-- `coverage_80.display_value=null` khi chưa đạt ngưỡng hiển thị đã chốt; không sửa `status` nội bộ chỉ vì ngưỡng UX. Tránh đưa tỷ lệ bị ẩn lên web thông qua field phụ.
+- Dashboard MVP hiển thị `coverage_80`, **`width_80_pct`**, `sign_accuracy`, `up_rate` **cho champion production**. `width_80` gốc vẫn được lưu/trả như metric nghiên cứu (log return) nhưng Web chỉ hiển thị `width_80_pct` (percent). Với `gold/silver`, ADR-0005 (b) cấm hiển thị chuỗi giá Yahoo; các chỉ số Accuracy và dự báo return %/xác suất tăng không phải chuỗi giá và tiếp tục được phép hiển thị. Không hiển thị `pinball_skill=0` của champion `baseline-q252` so với chính baseline, không trả S1a/paired report trong Accuracy API. Derived width percent được đóng băng cùng fingerprint của run; metric khác vẫn được lưu nếu tính được; shadow `pinball_skill` chỉ trong artifact nội bộ.
+- `width_80` gốc đo `mean(q90 − q10)` trên log return; **`width_80_pct` mới** đo `mean_i[100 × (exp(q90_i) − exp(q10_i))]` trên **từng cặp hợp lệ rồi mới tổng hợp** (không bằng `100×width_80`, cũng không bằng `100×(exp(mean_q90)−exp(mean_q10))` trong dữ liệu tổng quát). `unit="percent"`: `4.2` = 4,2%. Derived metric dùng **cùng common mask/n_obs** với `width_80`; lưu trong `META.derived_metrics` (overall và per-h) cùng fingerprint/run để API trả trực tiếp, **không tạo metric row thứ 29**. Web/chatbot/slide dùng **`width_80_pct.display_value` do API trả**, không tự dùng `exp` hay tự chuyển từ log-width. `sign_accuracy` và `up_rate` luôn đi cặp nhưng không mặc định có cùng mẫu số.
+- **Tất cả metric `overall`** có `display_value` và `display_status` theo **cùng ngưỡng ≥20 distinct `base_date` có cặp chấm coverage hợp lệ**; dưới ngưỡng đồng loạt `display_value=null`, không sửa `value`/`status` nội bộ. Web chỉ đọc `display_value`, không hiển thị các `value` nội bộ của `collecting` qua field phụ. Các `by_horizon` chỉ hiển thị counts (`display_value=null`, `display_status=counts_only`), kể cả `width_80_pct` và khi `data_status=ready`.
 - `data_status=not_ready|collecting|ready`: **HTTP 200 + `not_ready`** (null metrics) nếu chưa có completed run của `MODEL_VERSIONS[asset]` hiện hành; `collecting` nếu completed nhưng chưa đủ 20 `base_date` hợp lệ; `ready` khi đạt ngưỡng hiển thị. API đọc `STATE`/`LATEST_COMPLETED` bằng GetItem rồi Query run META+metrics bằng PK, không Scan/GSI; kiểm `META.model_version==MODEL_VERSIONS[asset]` trong cấu hình API và kiểm lại pointer trước khi trả. `STATE` không cung cấp champion; sai model → `not_ready`. Asset/auth/hạ tầng theo error envelope hợp đồng hiện hành.
 - Không công bố là đã kiểm chứng đầy đủ lịch phát hành chỉ vì có forecast được chấm; `schedule_evidence_status=not_audited_mvp` và publication counters tách khỏi coverage. Không đưa logs/credentials hoặc thông tin nội bộ nhạy cảm ra API.
 
@@ -609,22 +665,24 @@ Giá trị chỉ minh họa, `target_date` phải xác nhận theo trading calen
 
 ## 7. Edge cases và vận hành
 
-| Tình huống | Quy tắc MVP v4.5 |
+| Tình huống | Quy tắc MVP v4.6 |
 |---|---|
 | `is_sample=true` hoặc `created_at` trước 27/10 12:00Z | Loại khỏi rolling production |
-| Forecast trước cutover PR #48 | **Đề xuất chưa chốt**: chỉ nhận 27/10+ đúng lượt 12:15–13:30 UTC, xác minh không run tay/overwrite và as-of; nếu không được duyệt hoặc không đủ evidence → `issuance_unverified`, loại khỏi `n_obs` |
+| Forecast trước cutover PR #48 / không có `input_snapshot_dt` | **Policy đã chốt có điều kiện**: chỉ nhận 27/10+ đúng lượt 12:15–13:30 UTC **và** từng record có evidence đã duyệt (không run tay/overwrite, model/is_sample, snapshot-as-of); không đủ → `legacy_unverified`/`issuance_unverified`, loại khỏi `n_obs` |
 | Phát hành 27/10 cho `base_date=26/10` | Vẫn xét nếu đáp ứng nguồn phát hành bất biến và các kiểm tra khác |
 | `h=1` phát hành ngày target | So timestamp cutoff 13:30 UTC, không so ngày; bảo vệ input-as-of tại predict |
 | Đã có production cùng `(asset, base_date)` | Predict conditional write không ghi đè; `ConditionalCheckFailedException` → log `PREDICT_ALREADY_PUBLISHED`, không `GetItem`/so payload/alarm giả; khác với Accuracy METRIC conflict |
 | Một ngày theo calendar TUE–SAT không có Forecasts row | Tăng missing counter, không chấm, reason `missing_record_unclassified`; **không chặn `COMPLETED`**, không gán đã xác minh upstream/skip |
-| Log CloudWatch thiếu/hết 30 ngày | Không dùng làm evidence hay gate completion MVP; không bắt buộc tăng retention 90 ngày |
+| Log CloudWatch thiếu/hết 30 ngày | Không là gate completion Rolling MVP; **riêng bằng chứng legacy** Tiến xuất/đính kèm PR Contract trước 02/11 do log predict chỉ giữ 30 ngày; không bắt buộc tăng retention 90 ngày |
 | `prob_up` lệch >`1e-6` | Chỉ ghi `prob_up_mismatch`, không loại, không ghi đè q/`prob_up` |
+| `width_80_pct` ở API | `mean[100×(exp(q90)−exp(q10))]` **từng cặp**, lưu derived META cùng mask với `width_80`; Web chỉ dùng `display_value` khi đủ ngưỡng, không tự tính |
+| Job 13:45 UTC TUE–SAT nhận snapshot/actual chưa sẵn sàng | Log và thoát, **không COMPLETED/promote**; retry 0; lượt sau tự tính lại khi input READY |
 | Target chưa published/chưa đến cutoff | Pending; không tăng `n_obs` |
 | Giá endpoint thiếu/rejected/không dương | Loại cặp theo ADR-0008, không nội suy endpoint |
 | Thiếu phiên giữa endpoints | Không tự loại nếu hai endpoint hợp lệ; ghi số phiên thiếu |
 | `input_snapshot_dt` sai/thiếu ở champion sau cutover | Record ineligible; trước cutover chỉ được miễn nếu **legacy verification** được họp thông qua và record đã chứng minh eligible |
 | `n_obs=0`, đủ 28 item undefined và dữ liệu nhất quán | Vẫn có thể `COMPLETED`; API `collecting` hoặc chưa đủ dữ liệu tùy run/pointer, không hiện tỷ lệ |
-| Chưa đủ 20 base_date có cặp coverage | Chỉ X/Y và số ngày, không hiện overall %; API vẫn trả `first_eligible_base_date` hoặc null, web không hardcode ngày |
+| Chưa đủ 20 base_date có cặp coverage | **Mọi overall display_value đều null** (coverage, width, width_pct, sign, up); chỉ counts và số ngày, API vẫn trả `first_eligible_base_date` hoặc null; web không hardcode ngày |
 | Đổi champion một asset theo ADR/CDK `MODEL_VERSIONS[asset]` | Không cập nhật champion/generation ở STATE; API đối chiếu META model **per-asset**, mismatch → `not_ready`; job chỉ chấm từ release effective base_date của asset đó; các asset khác giữ nguyên |
 | Writer đời cũ sau deploy, run_order mới hơn | Không có quyền đổi champion; pointer có thể bị đẩy sai model nhưng API fail-closed; quy trình release phải dừng writer cũ và có test cutover |
 | Snapshot correction/run hỏng | New revision/run nếu cần correction; không overwrite metric/run đã hoàn thành |
@@ -635,38 +693,38 @@ Giá trị chỉ minh họa, `target_date` phải xác nhận theo trading calen
 
 ---
 
-## 8. Ma trận quyết định v4.5 — final proposed design trình chốt 30/10
+## 8. Ma trận quyết định v4.6 — chốt theo phản hồi của Khải ngày 30/10
 
-Khải xác nhận **v4.3 đáp ứng 5 yêu cầu trước đó** (shadow Parquet; champion CDK; bỏ CloudWatch/manifest gate; `LATEST_COMPLETED` pointer; bỏ release operator) và nhận xét v4.4 “ổn”. V4.5 chốt thành phương án đề xuất theo comment cuối: **legacy audit theo lượt chạy thật** và **mapping champion riêng cho mỗi asset để phù hợp trường hợp K4 chỉ thắng một số tài sản**. Các vấn đề về owners/Scheduler và phê duyệt ngoại lệ vẫn phải được nhóm xác nhận. D01–D24 là **đề xuất chờ contract**, không tự sửa ADR-0008/Accuracy Schema.
+Khải đã xác nhận các điểm của Tiến, đặc biệt 7 nội dung cập nhật theo cuộc họp 30/10. **Thiết kế đã đủ điều kiện chuyển sang PR Contract** nhưng **không đồng nghĩa GitHub đã có tất cả approving reviews, không đồng nghĩa AWS đã triển khai hoặc dữ liệu legacy đã được kiểm toán xong**. Giữ nguyên các quyết định kiến trúc D01–D24 từ v4.5 trừ các thay đổi đã chỉ rõ.
 
-| ID | Quy tắc / kiến trúc v4.5 | Review chính |
+| ID | Quy tắc / kiến trúc v4.6 | Owner / tình trạng |
 |---|---|---|
-| D01 | 56 ngày UTC inclusive theo `base_date`, evaluation_start/end giữ ranh giới cửa sổ | Khải/Long |
-| D02 | Forecast `created_at >= 27/10/2026 12:00Z`; **đề xuất `LEGACY_ACCEPT_WITH_EVIDENCE`** cho từng record trước cutover PR #48 sau khi Khải/Tiến kiểm chứng, nhóm duyệt và có audit reference; record không xác minh được dùng `POST_CUTOVER_ONLY`. Loại sample/pre-D02. Bằng chứng 29/10 cho base 26/10/27/10 là ứng viên, không tự verified | Khải/Tiến/Long — chờ xác nhận chính sách |
-| D03 | Job tuần sau snapshot/ingest hoàn tất, một evaluation run/asset; cần chốt **lịch Scheduler UTC, readiness/retry/timeout, owner CDK/alarm**; không suy ngầm job đã deploy | Long/Tuấn/Tiến — chờ phân công |
-| D04 | PR #48: Forecasts conditional PutItem cho sample→production; production cũ giữ nguyên. Conditional fail → `PREDICT_ALREADY_PUBLISHED`, **không GetItem/so payload**, không alarm giả; Accuracy METRIC vẫn fingerprint conflict | Khải/Tiến/Tuấn |
-| D05 | `cpaws-<env>-accuracy` `PK/SK`: STATE (`ASSET#asset/STATE`) chỉ pointer, RUN partition cho META/METRIC; không GSI/Scan/TTL | Tuấn |
-| D06 | Overall coverage chỉ hiện % khi `n_base_dates>=20` hợp lệ; vẫn trả counts | Khải/Tiến |
-| D07 | `/accuracy/{asset}`: 4 metrics, overall + h1–7, `first_eligible_base_date` ISO/null, 3 JSON fixtures `not_ready/collecting/ready` trước 02/11; HTTP 200 not_ready khi thiếu current completed | Tuấn/Tiến/Long |
-| D08 | `/forecast-history/{asset}` riêng, phase chart sau MVP | Tuấn/Tiến/Khải |
-| D09 | History pairs on-demand từ Forecasts + clean snapshot, không bảng history detail riêng | Tuấn/Long |
-| **D10** | Champion là **mapping `MODEL_VERSIONS[asset]` ở `infra/app.py`**, truyền Predict/Rolling/API cùng effective date; có CDK test đồng bộ từng asset. Đổi một asset theo ADR không reset các asset khác; STATE chỉ pointer, API so META model với runtime theo asset; S1a không âm thầm áp dụng trên K4 | Khải/Tuấn/Tiến/Long — chờ chốt |
-| D11 | Horizon chỉ X/Y; overall % khi ≥20 distinct `base_date` có **ít nhất một cặp đã chấm**; 20/11 hoặc 27/11 là ước tính theo lịch, **không phải ngày `ready`**; web dùng `first_eligible_base_date`, `width_80` = 100×log-width (%) | Khải/Tiến |
-| D12 | Snapshot correction → revision/run mới; record cũ bất biến | Tuấn/Long |
-| D13 | Validation 2019 tách phương pháp, không trộn rolling | Khải |
-| **D14** | Calendar + TUE–SAT chỉ để đếm expected/missing; **Forecasts record `created_at` + PR #48 conditional writes** là issuance evidence cho cặp được chấm; **không manifest/logs bắt buộc** | Khải/Tuấn |
-| **D15** | Missing Forecasts row chỉ đếm, không chấm; **không chặn COMPLETED**; CloudWatch/retention 90 ngày **ngoài MVP**; không báo schedule verified khi chưa audit | Khải/Tuấn |
-| D16 | `prob_up` mismatch >`1e-6` chỉ log, không loại/overwrite | Khải/Tuấn/Long |
-| D17 | External import provenance ngoài rolling MVP; không nới workflow khác | Khải/Tuấn |
-| D18 | `created_at < target_date 13:30 UTC`, input-as-of; champion sau cutover PR #48 phải lưu `input_snapshot_dt=snap.dt`; legacy trước cutover chỉ miễn trường này nếu **nhóm duyệt `LEGACY_ACCEPT_WITH_EVIDENCE` và từng record được audit**, không chỉ dựa vào timestamp | Khải/Tiến/Long — xác nhận cutover/audit |
-| **D19** | Run fingerprint bất biến, 28 metric items, `RUNNING→VALIDATING→COMPLETED`; `STATE` ba trường pointer là **`LATEST_COMPLETED`**, promote chỉ khi `latest_run_order` tăng hoặc same-run idempotent; không champion generation | Tuấn/Long |
-| **D20** | Rolling writer Put/Update Accuracy, read clean/shadow, write `eval/shadow_eval/*`; thêm `s3:ListBucket` bucket ARN giới hạn `s3:prefix` cần thiết; API Get/Query; Predict không GetItem thêm ở Forecasts, không đọc Accuracy; không champion operator | Tuấn/Tiến |
-| D21 | Champion Forecasts + S1a JSON `eval/shadow/s1a-l094/dt=<UTC>/<asset>.json`, không retrain | Khải/Long/Tiến |
-| D22 | Paired common mask, pinball_skill/coverage_80/width_80 mỗi model, không backfill shadow | Long/Khải |
-| **D23** | Comparison **S3 Parquet** tại `eval/shadow_eval/run_id=<run_id>/`, immutable checksum; không DynamoDB/API, không ghi `eval/shadow/reports/` | Long/Tuấn/Khải |
-| D24 | Shadow lỗi/thiếu không chặn champion `COMPLETED`; ADR mới đổi champion, không auto-switch | Khải/Long/Tuấn |
+| D01 | 56 ngày lịch UTC inclusive theo `base_date`, giữ evaluation_start/end | Khải/Long — giữ |
+| D02 | `created_at>=27/10 12:00Z`; `LEGACY_ACCEPT_WITH_EVIDENCE` cho **từng record trước cutover** qua audit và danh sách đã duyệt; thiếu evidence loại khỏi `n_obs`. Tiến xuất chứng cứ trước 02/11 | Khải/Tiến/Long — **policy chốt; audit record chờ** |
+| D03 | Job **hằng ngày TUE–SAT lúc 13:45 UTC** theo `cron(45 13 ? * TUE-SAT *)`, sau predict; readiness fail → log/thoát, không promote; timeout 300s, Scheduler retry=0, không reserved concurrency | Tiến CDK/Alarm; Long job — **chốt lịch, chưa deploy** |
+| D04 | PR #48 Forecasts conditional PutItem, sample→production; already published log, không GetItem/so payload | Khải/Tiến — giữ |
+| D05 | Bảng Accuracy `PK/SK` STATE pointer + RUN/META/28 METRIC; không GSI/Scan/TTL | Tuấn — giữ |
+| D06 | Tất cả metric **`overall`** có `display_value`/`display_status`, cùng gate ≥20 distinct base_date đã có cặp coverage hợp lệ; `status`/`value` nội bộ giữ riêng | Khải/Tiến/Long — **chốt** |
+| D07 | `/accuracy/{asset}` overall/h1..7: 4 metric gốc + `width_80_pct` derived; 3 JSON fixtures PR #62 (`not_ready/collecting/ready`); `first_eligible_base_date` ISO/null; HTTP 200 not_ready | Tuấn/Tiến/Long — **chốt schema, chờ Contract** |
+| D08 | `/forecast-history/{asset}` riêng, phase 2 | Tuấn/Tiến — giữ |
+| D09 | Historical pairs on-demand Forecasts + clean snapshot; không bảng history riêng | Tuấn/Long — giữ |
+| D10 | **`MODEL_VERSIONS` + `CHAMPION_EFFECTIVE_BASE_DATES`** cùng trong `infra/app.py`, truyền JSON env cho Predict/Rolling/API; CDK test đủ 4 asset và cùng map; Khải sửa Predict trong PR #53 với fallback `MODEL_VERSION` cũ | Khải Predict, Tiến CDK, Tuấn API — **chốt** |
+| D11 | Giữ `width_80=mean(q90−q10)` log; **`width_80_pct=mean_i[100×(exp(q90_i)−exp(q10_i))]`** trên cùng mask, `unit=percent`; Web chỉ dùng pct từ API; per-h chỉ counts. `width_80_pct` derived META, **28 metric items không đổi** | Khải/Tiến/Long — **chốt công thức; representation trong META là lựa chọn MVP đề xuất để contract hóa** |
+| D12 | Snapshot correction → revision/run mới; record cũ bất biến | Tuấn/Long — giữ |
+| D13 | Validation 2019 tách rolling, không sửa DM-HAC/gap policy trước 22/11 | Khải/Long — giữ/hoãn DM |
+| D14 | Calendar + TUE–SAT chỉ expected/missing; Forecasts conditional write hoặc *verified legacy* mới là evidence cho cặp chấm; không dùng manifest/log gate | Khải/Tuấn — giữ |
+| D15 | Missing record chỉ đếm, không chấm/không chặn COMPLETED; CloudWatch chỉ dùng audit legacy riêng trước 02/11, không thành dependency thường kỳ | Khải/Tuấn/Tiến — giữ |
+| D16 | `prob_up` mismatch >1e-6 chỉ log, không loại/overwrite | Khải/Tuấn — giữ |
+| D17 | External import ngoài rolling MVP | Khải/Tuấn — giữ |
+| D18 | Record hậu cutover có `input_snapshot_dt` và conditional provenance; record thiếu field chỉ **ứng viên legacy** và phải có evidence/approval. Tiến ghi event deploy và lượt predict 31/10 nếu thực tế | Khải/Tiến/Long — **policy chốt; deploy/audit chờ** |
+| D19 | META/28 METRIC immutable, RUNNING→VALIDATING→COMPLETED, STATE/LATEST_COMPLETED monotonic; derived `width_80_pct` trong run META, có fingerprint và không thêm hàng metric | Tuấn/Long — giữ + derived |
+| D20 | IAM writer Accuracy/snapshot/shadow scoped, `ListBucket` theo prefix; API read-only; Predict không GetItem Accuracy | Tuấn/Tiến — giữ; IAM CDK review trước deploy |
+| D21 | Champion Forecasts + S1a JSON `eval/shadow/s1a-l094/dt=<UTC>/<asset>.json`, không retrain | Khải/Long/Tiến — giữ |
+| D22 | Paired common mask, pinball_skill/coverage/width của hai model, không backfill | Long/Khải — giữ |
+| D23 | So sánh shadow Parquet nội bộ `eval/shadow_eval/run_id=<run_id>/`, immutable, không public API | Long/Tuấn — giữ |
+| D24 | Shadow lỗi/thiếu không chặn champion; ADR riêng mới đổi champion | Khải/Long — giữ |
 
-**Hiệu lực:** chỉ sau approve và PR contract tương ứng merge. Issue #23 mục 2 đóng sau khi điều chỉnh Walk-forward contract và PR contract được merge; RFC #45 review-only, không merge vào `developer`. Nếu cần bổ sung guard cross-version ở deployment, phải chốt trong PR implementation, không ngầm biến STATE thành champion registry.
+**Hiệu lực và đóng PR:** Đây là kết quả chốt nội dung theo comment Khải/Tiến ngày 30/10; **PR #45 review-only, không merge**, sau khi chuyển sang PR Contract và hoàn tất review/merge Contract thì đóng #45 `Closed — Not Merged`. Issue #23.2 hoàn tất ở mức tài liệu sau khi contract được merge, không mặc định implementation đã done.
 
 ---
 
@@ -680,15 +738,15 @@ Khải xác nhận **v4.3 đáp ứng 5 yêu cầu trước đó** (shadow Parqu
 - [ ] `run_id`/fingerprint khóa asset, model config, snapshot, eligible records, cutoff và revision; retry cùng payload no-op; khác payload conflict; metric chỉ conditional PutItem, không overwrite, không BatchWriteItem.
 - [ ] `COMPLETED` cần đủ 28 METRIC rows, correct counts, snapshot/cutoff và issuance evidence **của cặp được chấm**; **không yêu cầu** CloudWatch logs, publication manifest, 90-day retention hoặc mọi kỳ expected có row. `n_obs=0`/undefined hợp lệ nếu đầy đủ 28 rows.
 - [ ] Expected count dùng calendar/TUE–SAT; thiếu Forecasts row chỉ tăng `missing_count` và không khẳng định skip/upstream, không chặn completion. `schedule_evidence_status=not_audited_mvp`, tách khỏi `issuance_evidence_status=verified_eligible_rows`.
-- [ ] `MODEL_VERSIONS` là **mapping per-asset tại `infra/app.py`** truyền Predict/Rolling/API, có CDK test đồng bộ mọi asset và effective date; Predict không gọi `STATE`/Accuracy, API fail-closed theo asset nếu META version khác. Một asset đổi K4 không làm reset ba asset khác; S1a không được đổi định nghĩa ngầm.
-- [ ] API `/accuracy/{asset}` có 4 metrics, overall/by_horizon, `n_obs`,`n_base_dates`, **`first_eligible_base_date` ISO/null**, 20 ngày chỉ là UI; thống nhất `display_width_pct=100×width_80`, 3 JSON fixtures cho Tiến trước 02/11.
+- [ ] `MODEL_VERSIONS` và **`CHAMPION_EFFECTIVE_BASE_DATES`** là **hai mapping per-asset tại `infra/app.py`** truyền JSON env cho Predict/Rolling/API, có CDK test đồng bộ đủ 4 asset và effective date; Predict không gọi `STATE`/Accuracy, API fail-closed theo asset nếu META version khác. Một asset đổi K4 không làm reset ba asset khác; S1a không được đổi định nghĩa ngầm.
+- [ ] API `/accuracy/{asset}` có **4 metric gốc + `width_80_pct` dẫn xuất** (không tăng 28 METRIC), overall/by_horizon, `n_obs`,`n_base_dates`, `first_eligible_base_date` ISO/null; mọi metric overall có `display_value/display_status` theo ngưỡng 20 base dates đã có cặp; Web chỉ dùng `width_80_pct` tính theo từng q10/q90 và chỉ dùng display field. Đồng bộ 3 fixtures PR #62 trước 02/11.
 - [ ] IAM chỉ Rolling writer cập nhật STATE pointer (không field champion); API reader chỉ GetItem/Query. `s3:ListBucket` được scope bằng `s3:prefix` đúng clean/shadow, adapter phân biệt missing với IAM 403 qua scoped ListObjectsV2 nếu cần; ưu tiên PK/attributes IAM và deny tests. Không champion operator.
 - [ ] Predict đọc/ghi source S1a tại `eval/shadow/s1a-l094/*` theo PR #49/#51; Rolling writer ghi **Parquet `eval/shadow_eval/*`**; quyền Predict `eval/shadow/*` không được ghi vào báo cáo so sánh, API không đọc report.
-- [ ] Shadow trên paired mask, không tác động champion Accuracy/API và không auto-switch. Không SageMaker/Step Functions retrain. **Chốt owner hạ tầng và giờ UTC**: bảng `CpawsServing`, API `CpawsApi`, scheduler/handler/image/alarm trước 05/11; chỉ ghi nhận phân công khi người nhận xác nhận.
+- [ ] Shadow trên paired mask, không tác động champion Accuracy/API và không auto-switch. Không SageMaker/Step Functions retrain. **Lịch/owner được Khải/Tiến xác nhận**: Tuấn bảng/API/IAM, Long job, Tiến CDK Scheduler/Lambda/image/alarm, Khải Predict mapping. Scheduler TUE–SAT 13:45 UTC, timeout 300s, retry=0, no reserved concurrency; deploy trước 05/11, xác minh bằng CDK/IAM/smoke tests.
 
-### 9.2. Functional tests — 48 trường hợp (T01–T48)
+### 9.2. Functional tests — 48 trường hợp (T01–T48) cập nhật theo họp 30/10
 
-| ID test | Điều kiện thử | Expected v4.5 |
+| ID test | Điều kiện thử | Expected v4.6 |
 |---|---|---|
 | T01 | Key metric khác `run_id`, asset, model, sample, kind, window, cutoff, h hoặc metric | Không va chạm PK/SK và đủ logical key |
 | T02 | GET accuracy 4 asset; run có 28 METRIC và Query nhiều page | GetItem STATE + Query RUN, không Scan/GSI, chỉ current `MODEL_VERSIONS[asset]` |
@@ -697,7 +755,7 @@ Khải xác nhận **v4.3 đáp ứng 5 yêu cầu trước đó** (shadow Parqu
 | T05 | Cùng PK/SK khác payload hoặc cùng run_order khác run_id | Conflict, giữ record gốc, pointer không tự đổi |
 | T06 | Hai writers complete trái thứ tự, run_order B>A | Pointer monotonic trỏ B; không rollback |
 | T07 | ADR/CDK đổi champion **chỉ `gold`** từ baseline sang K4, ba asset khác giữ baseline, STATE gold còn pointer cũ | `/accuracy/gold` → `not_ready`, ba asset khác vẫn trả kết quả; gold không trộn model hoặc tự backfill trước effective date |
-| T08 | Run đủ 28 rows nhưng không có cặp có nhãn hợp lệ | COMPLETED được phép với 28 undefined + reasons, counts đúng; display không giả % |
+| T08 | Run đủ 28 rows nhưng không có cặp có nhãn hợp lệ, derived `width_80_pct` undefined | COMPLETED được phép với 28 undefined + reasons, derived value null và counts đúng; không giả tỷ lệ |
 | T09 | Thiếu metric row hoặc hash/count không nhất quán | Không COMPLETED hoặc promote |
 | T10 | Lịch có ngày expected nhưng Forecasts không có row | missing_count tăng, bỏ qua ngày; **không** block COMPLETED vì thiếu record |
 | T11 | Record Forecasts hợp lệ nhưng không đọc được CloudWatch logs | Vẫn chấm theo record + conditional immutability, không đòi log |
@@ -707,8 +765,8 @@ Khải xác nhận **v4.3 đáp ứng 5 yêu cầu trước đó** (shadow Parqu
 | T15 | `input_snapshot_dt` sai/missing **sau cutover** PR #48 | Ineligible; legacy chỉ miễn sau audit/duyệt `LEGACY_ACCEPT_WITH_EVIDENCE` tại T38 |
 | T16 | `prob_up` sai lệch 0, 1e-6, >1e-6 | >ngưỡng chỉ log, không sửa/loại một mình |
 | T17 | Endpoint invalid/missing; intermediate missing | Theo ADR-0008, không fill endpoint; thiếu giữa không tự invalid |
-| T18 | Coverage overall, 0/19/20 base dates, nhiều horizons cùng base date | Pool hit/count, UX ẩn/hiện đúng |
-| T19 | Sign zero-mask khác up_rate; width log return | Metric n_obs riêng, đúng đơn vị, không h=0 |
+| T18 | Tất cả metric overall, 0/19/20 base dates và nhiều horizons cùng base_date | Pool hit/count; **5 trường overall** cùng gate (4 metric + derived width_pct), 0/19 đều `display_value=null`, 20 có `status=ok` mới hiện; Web không đọc `value` để bypass |
+| T19 | Sign zero-mask khác up_rate; width log return và derived percent | Metric n_obs riêng; `width_80` ở log, `width_80_pct` ở %, cùng mask/n_obs; không h=0 hoặc hàng METRIC thứ 29 |
 | T20 | IAM: API ghi/scan Accuracy; Predict đọc Accuracy; Rolling writer PutObject vào eval/shadow/*; writer sửa ngoài pointer fields | AccessDenied; quyền nguồn S3 phân biệt `ListBucket` trong T39 |
 | T21 | API đang Query thì pointer đổi, hoặc **config mapping per-asset** không khớp `META.model_version` | Recheck STATE, fail-closed với asset sai model; không ảnh hưởng 3 asset còn lại |
 | T22 | Snapshot correction cùng ngày, revision mới | New run_id/order, old run immutable; chỉ newer eligible promote |
@@ -729,83 +787,87 @@ Khải xác nhận **v4.3 đáp ứng 5 yêu cầu trước đó** (shadow Parqu
 | T37 | Audit 29/10 bốn asset: base 26/10 issued 27/10T12:15:31Z, base 27/10 issued 28/10T12:16:03Z; base 23/10 (25/10) và sample 16/10 là đối chứng; thêm timestamps ngoài khung/manual overwrite giả lập | Hai lượt đầu **chỉ là ứng viên**; chỉ nhận khi `LEGACY_ACCEPT_WITH_EVIDENCE` được duyệt và có record audit; ngoài khung/manual/unverified và đối chứng luôn loại |
 | T38 | Legacy base 26/10, 27/10 thiếu `input_snapshot_dt`, cờ policy và audit reference; record post-cutover thiếu/sai snapshot field | Legacy chỉ miễn khi đã duyệt và audit; fallback `POST_CUTOVER_ONLY` loại record không xác minh; sau cutover thiếu/sai field luôn loại |
 | T39 | S3 GetObject key shadow vắng, IAM 403 và key trong/ngoài prefix | Scoped ListObjectsV2 xác nhận missing khi GetObject 403 mơ hồ; 403 IAM thật không bị gán missing; ngoài prefix denied |
-| T40 | CDK `MODEL_VERSIONS` mapping + effective date cho Predict, Rolling và API, thử thay version chỉ gold | Assert cả ba nhận **cùng map và từng hiệu lực asset**; mismatch một asset fail-closed đúng asset; không ảnh hưởng asset khác |
+| T40 | CDK **hai JSON env mappings** `MODEL_VERSIONS` và `CHAMPION_EFFECTIVE_BASE_DATES` đủ bốn asset cho Predict/Rolling/API; Predict fallback `MODEL_VERSION` cũ lúc chuyển | Cả ba nhận **hai map giống nhau**, đổi riêng gold không reset asset khác; fallback không âm thầm đổi champion, mismatch fail-closed |
 | T41 | API `first_eligible_base_date` null/26-10/31-10 và Web khi có/lúc chưa có nhãn | ISO/null từ ngày gốc đầu **đã chấm**, không hardcode ngày phát hành, không sớm hơn champion effective date |
-| T42 | `width_80=0.025` và khoảng q10/q90 bất đối xứng | Web/chatbot/slide hiển thị `2.5%` log-width; không nhầm với simple-return width `100×(exp(q90)−exp(q10))` |
-| T43 | JSON fixtures `not_ready`, `collecting`, `ready`; 7 horizons và 4 metrics | Parse/schema/status nhất quán; API actual phải trả đủ metrics/h dù ví dụ rút gọn |
-| T44 | CDK infra bảng, weekly Scheduler sau snapshot/ingest, image/handler, route, alarm; owner/giờ UTC chưa được nhóm xác nhận | Test wiring, retry khi snapshot chưa ready, IAM và monitoring; owner/giờ còn trống là blocker deploy 05/11, **không phải bằng chứng job đã có** |
+| T42 | Nhiều cặp có q10/q90 bất đối xứng, khác độ rộng; tính theo từng cặp và gộp horizon/overall | `width_80_pct=mean_i[100×(exp(q90_i)−exp(q10_i))]`; không thay bằng `100×mean(q90−q10)` hoặc exp trên mean; unit percent, h/overall weighted đúng, derived META fingerprint ổn định |
+| T43 | JSON fixtures PR #62: 7 horizons, **4 metric gốc + `width_80_pct` derived**, overall gating `not_ready/collecting/ready` | Parse/schema đúng; mọi `overall` metric có `display_value/display_status`, `collecting` không rò tỷ lệ từ `value`; `by_horizon` chỉ counts, all synthetic aggregates/units nhất quán |
+| T44 | CDK accuracy job **`cpaws-dev-accuracy-job`**, ECR predict khác CMD, Scheduler `cron(45 13 ? * TUE-SAT *)` UTC (20:45 VN), alarm Errors→SNS; input chưa READY | Scheduler retry 0, timeout 300s, **không reserved concurrency**; snapshot/actual thiếu → log/exit không promote; wiring/permissions/alarm test, mỗi asset one run |
 
 | T45 | Champion mapping đổi **chỉ Brent**, effective base_date ở giữa rolling window, `RUN` cũ còn trong STATE | Chỉ chấm Brent champion mới kể từ effective date; không trộn phiên trước, `not_ready` nếu chưa có run mới; gold/silver/wti không reset |
 | T46 | Một asset đổi K4, S1a object cũ vẫn tồn tại; asset khác vẫn baseline | Không dùng K4 làm input cho `s1a-l094`; `shadow_not_applicable_model_change` theo asset đổi, paired S1a của asset khác vẫn tính; champion run không block |
-| T47 | Lịch có 20 base_date nhưng mới 19 có target đủ điều kiện; sau khi target thứ 20 mature nhưng job chưa chạy | Trước job hoàn tất `display_status=insufficient_data`; sau completed run mới có `n_base_dates>=20` mới được hiện overall %, không hứa ngày ready cố định |
-| T48 | Legacy whitelist/fingerprint thiếu approval, sai input-as-of, cùng timestamp nhưng có manual update; cutover timestamp thực tế khác lịch dự kiến | Không chấm các record chưa đủ chứng cứ; chỉ nhận audit entries được duyệt; policy và effective cutover versioned trong META, không nâng schedule evidence thành immutable verified |
+| T47 | **Daily job** TUE–SAT: 20 base_date theo lịch nhưng chỉ 19 đã có cặp chấm; cặp thứ 20 trưởng thành sau cutoff, trước job ngày kế; thử cả snapshot not-ready và cuối tuần | Không promote khi snapshot/actual thiếu; trước completed daily run vẫn `insufficient_data` cho mọi overall metric; sau run mới với ≥20 eligible base_date mới có thể `ready`; không cam kết trước 22/11 |
+| T48 | Legacy record thiếu approval, `input_snapshot_dt` thiếu/có, CloudWatch PREDICT_DONE/Invocations mâu thuẫn, cutover 31/10 thực tế khác dự kiến; trường hợp dry_run | Phân loại field chỉ là **candidate**; legacy chưa có audit duyệt bị loại; post-cutover phải verify deploy/conditional write; dry_run không làm chứng cứ; cutover/event & policy trong META |
 
 ### 9.3. Nghiệm thu MVP 05/11
 
 - API `/accuracy/{asset}` chỉ đọc completed run `META.model_version==MODEL_VERSIONS[asset]` hiện deploy, có 28 METRIC, dữ liệu forecast thực hợp lệ; trạng thái `not_ready` hợp lệ nếu chưa có completed run hiện hành, không bịa forecast.
-- `COMPLETED` không đòi `n_base_dates>=20`/`n_obs>0`, không phụ thuộc logs/manifest/90-day retention. Đủ 28 METRIC, snapshot/eligible pairs đúng, `n_obs`/counts nhất quán; ngày expected thiếu row được đếm riêng, không chấm.
+- `COMPLETED` không đòi `n_base_dates>=20`/`n_obs>0`, không phụ thuộc logs/manifest/90-day retention. Đủ 28 METRIC, snapshot/eligible pairs đúng, `n_obs`/counts nhất quán; `width_80_pct` derived đúng theo từng cặp, mọi overall display fields tuân ngưỡng 20 ngày; ngày expected thiếu row được đếm riêng, không chấm.
 - `STATE` chỉ pointer ba trường `LATEST_COMPLETED`; IAM writer scoped pointer và `ListBucket` S3 theo prefix, API chỉ đọc; champion authoritative = mapping CDK `MODEL_VERSIONS[asset]`, đổi từng asset bằng ADR.
 - S1a shadow xuất **S3 Parquet `eval/shadow_eval/run_id=<run_id>/`** trên paired mask và không chặn champion. Predict có thể ghi `eval/shadow/*` nhưng không ghi report.
-- PR implementation chứng minh T01–T48 (shadow T25–T34 sau khi có S1a, Predict T35–T36 theo PR #48, legacy T37–T38 theo quyết định họp); IAM deny tests, correct payload/hash và không có giả lập dữ liệu production.
+- PR implementation chứng minh T01–T48 (T18/T42/T43/T44/T47 được cập nhật theo cuộc họp) (shadow T25–T34 sau khi có S1a, Predict T35–T36 theo PR #48, legacy T37–T38 theo quyết định họp); IAM deny tests, correct payload/hash và không có giả lập dữ liệu production.
 - Không backfill 2020–2026, không retrain hoặc sửa Validation 2019/ADR-0008.
 
-## 10. Những quyết định cuối cần xác nhận, phân công và chuyển contract
+## 10. Quyết định đã chốt ngày 30/10, việc còn chờ evidence/deploy và chuyển Contract
 
-**RFC v4.5 là tài liệu đề xuất sẵn để chốt, không tự coi cả nhóm đã approve.** Khải xác nhận kiến trúc v4.3 đạt 5 mục và nhận xét v4.4 “ổn”; phản hồi cuối ngày 30/10 ủng hộ legacy đúng lịch và yêu cầu D10 hỗ trợ champion per-asset. Hai điểm này còn cần xác nhận của Tuấn/Tiến và được ghi trong biên bản họp. Những phần khác (D01/D04/D05/D06/D14–D16/D19/D20/D21–D24) giữ theo phương án đã review, không mở lại nếu không có xung đột implementation.
+**Trạng thái quyết định:** Khải đã chốt thiết kế theo phản hồi của Tiến và kết quả họp 30/10; đây không phải tuyên bố PR GitHub đã được formally approved bởi toàn bộ reviewers. Tài liệu PR #45 **không merge**; thực thi phụ thuộc review/merge PR Contract riêng và smoke test hệ thống thực tế. Những phần chưa có dữ liệu production/bằng chứng được ghi là *pending evidence* thay vì suy diễn approved.
 
-### 10.1. Bảng chốt họp 30/10 (không suy diễn approval)
+### 10.1. Bảng chốt họp 30/10 và kế hoạch cutover
 
-| Quyết định | Phương án v4.5 đề xuất | Điều kiện đóng |
+| Quyết định | Chính sách đã chốt | Việc cần chứng minh khi triển khai |
 |---|---|---|
-| **Legacy từ 27/10** | `LEGACY_ACCEPT_WITH_EVIDENCE` theo đề xuất Khải; chỉ record trong khung chạy lịch 12:15–13:30 UTC đã được audit/duyệt, miễn `input_snapshot_dt` trước cutover; nếu thiếu evidence dùng `POST_CUTOVER_ONLY` | Khải, Tiến, Tuấn đồng ý tiêu chí kiểm record; Long ghi policy/record references và thời điểm PR #48 **thực tế deploy** vào contract/provenance |
-| **Champion từng asset — D10** | `MODEL_VERSIONS = {gold, silver, brent, wti}` trong CDK, cùng mapping cho Predict/Rolling/API; từng asset có `champion_effective_base_date` theo ADR/release, không thay STATE | Khải, Tuấn, Tiến xác nhận rollout/owner và CDK fixture; không triển khai K4 làm champion nếu chưa có ADR riêng |
-| **Hiển thị ngưỡng 20** | Chỉ tính ≥20 **distinct base_date đã có cặp được chấm**; 20/11/27/11 chỉ là ước tính ngày theo calendar, còn phụ thuộc cutoff và lần chạy job | Khải/Tiến xác nhận JSON và web logic; không hardcode ngày `ready` |
-| **Hạ tầng 05/11** | Tuấn: Accuracy DynamoDB + API; Long: rolling core/job; Tiến: predict image/handler, CDK deploy/wiring với nhóm; Khải: PR #48 `input_snapshot_dt`. **Scheduler/CDK/alarm vẫn cần người nhận trực tiếp** | Người nhận xác nhận trách nhiệm, lịch UTC, trigger sau snapshot, retry/alert và IAM tại họp; không hiểu dòng đề xuất là đã nhận việc |
+| **`width_80_pct` (điểm 18)** | Derived `mean_i[100×(exp(q90_i)−exp(q10_i))]` trên từng cặp hợp lệ, `unit=percent`, `4.2` nghĩa 4,2%; giữ `width_80` log trong 28 METRIC; API có trường ở overall/by_horizon; Web chỉ dùng pct | Long triển khai tính trên raw pairs + persist derived META, Tuấn API, Tiến Web, PR #62 cập nhật fixtures; test T42/T43 |
+| **Gating mọi overall metric** | `display_value/display_status` cho `coverage_80`, `width_80`, `width_80_pct`, `sign_accuracy`, `up_rate` theo chung 20 distinct `base_date` có cặp chấm hợp lệ; Web không tự gating | Tuấn/Long API/tests, Tiến Web; test T18/T43/T47 |
+| **Lịch accuracy job daily** | **`cron(45 13 ? * TUE-SAT *)` UTC** (20:45 VN), sau predict 12:15–13:30 UTC; retry Scheduler 0, timeout 300s, không reserved concurrency; thiếu snapshot/actual → log/exit, không promote | Tiến CDK Scheduler/alarm Errors→SNS, Long readiness/idempotency; test T44/T47 |
+| **Legacy records** | `LEGACY_ACCEPT_WITH_EVIDENCE` chỉ từng record từ mốc 27/10 12:00Z theo lịch, `is_sample=false`, model đúng, không overwrite, snapshot-as-of; thiếu evidence không vào `n_obs` | Tiến xuất `created_at` 4 asset cho base 26–29/10 (+30/10 nếu trước cutover), CloudWatch `AWS/Lambda Invocations` và `PREDICT_DONE` (`snapshot_dt`, `dry_run`, `written`, `model_version`) thành artifact đính PR Contract **trước 02/11**, do predict logs giữ ~30 ngày; nhóm duyệt danh sách từng record |
+| **Cutover PR #48** | Phân loại ứng viên theo field: có `input_snapshot_dt` → hậu cutover; không có → legacy cần audit. Không dùng field đơn độc chứng minh provenance. Dry-run **không ghi bảng**. Conditional write thực sự dự kiến lượt 19:15 VN **31/10** (12:15 UTC) | Tiến ghi thời điểm CloudFormation deploy và kết quả predict production lượt 31/10, Khải/Tiến smoke test conditional write; đưa timestamp và evidence ref vào Contract và META, không tự coi 31/10 đã deploy |
+| **Champion map** | `MODEL_VERSIONS` và `CHAMPION_EFFECTIVE_BASE_DATES` trong `infra/app.py`, env JSON giống nhau cho Predict/job/API; per asset, đổi champion phải có ADR; Predict fallback `MODEL_VERSION` khi env map chưa có | Khải sửa Predict PR #53, Tiến CDK env/tests, Tuấn API map; test T40 |
+| **Owner/infra** | **Tuấn:** Accuracy table, API, IAM. **Long:** rolling job/metrics/tests. **Tiến:** ECR predict image CMD handler mới, Lambda `cpaws-dev-accuracy-job`, CDK/Scheduler/alarm. **Khải:** Predict mapping/legacy code | Triển khai theo thứ tự bảng Tuấn → job Long merge → Tiến build/deploy image; nếu Long merge trước 03/11, Tiến có thể build image chung với S1a PR #53 |
+| **`ready` và DM** | Không cam kết Dashboard `ready` trước 22/11; `collecting` phải đúng. DM calendar-gap policy **hoãn sau 22/11**, không sửa DM-HAC hay fingerprint K4 | Dùng `n_base_dates` từ cặp thực có nhãn, không tính theo lịch, no backfill 2019 |
 
-**Điều kiện nhận legacy tối thiểu:** Tiến cung cấp biên bản kiểm từ 29/10 và cập nhật trước cutover, Khải/nhóm xác nhận tính phù hợp của lịch, phương thức kiểm manual overwrite, kiểm input-as-of và danh sách `asset/base_date/created_at/model_version` được nhận; Long lưu `policy_id`/audit reference/hash vào `META`. **Bằng chứng timestamp đúng lịch không chứng minh tuyệt đối bất biến trước PR #48.** Không có xác nhận thì fail-closed, không chấm. Không xây store manifest mới.
+**Lịch Scheduler/logic an toàn:** cron `cron(45 13 ? * TUE-SAT *)` UTC; timeout Lambda 300 giây, retry Scheduler = 0, không dùng reserved concurrency vì quota tài khoản. Bản job same `run_id`/fingerprint phải idempotent với conditional PutItem, không promote khi snapshot/actual chưa sẵn sàng. **Lưu ý:** không dùng được Scheduler retries=0 để thay thế xử lý lỗi input trong Lambda hoặc cảnh báo `Errors`→SNS. Một lượt chạy trùng giờ dựa vào run_id/condition để tránh double-publish; run thất bại có thể được xử lý ở lượt kế tiếp hoặc correction revision được audit.
 
-**Cutover:** `predict_immutable_cutover_at` là timestamp UTC chính xác sau deploy **và smoke test** PR #48 có conditional PutItem + `input_snapshot_dt`; không mặc định 31/10 là đã triển khai. Forecasts sau cutover thiếu trường snapshot/conditional provenance là ineligible, trước cutover chỉ nhận theo policy legacy duyệt. Khải phụ trách thay đổi Predict, Tuấn/Tiến phối hợp CDK/release; lịch cụ thể cần được cập nhật sau khi deploy.
+**Legacy evidence:** Kiểm `created_at`, dữ liệu Forecasts thực, 4 asset, lịch phiên/khung giờ, model và `is_sample=false`, CloudWatch Invocations, dòng `PREDICT_DONE` (snapshot_dt, dry_run, written, model_version), dấu vết không overwrite/manual, kiểm input-as-of; **ghi rõ danh sách asset/base_date nào được duyệt** và audit reference/hash trong META. `PREDICT_DONE` là bằng chứng audit **một lần** cho legacy, **không** là dependency runtime của job thường kỳ. Đừng nhận `created_at` trong khung giờ làm bằng chứng đủ. Nếu không xác minh được, bỏ cặp khỏi `n_obs` và giữ `schedule_evidence_status=not_audited_mvp`.
 
-**Lịch chạy đề xuất để nhóm chọn:** job **mỗi tuần sau khi ingest 12:15 UTC và clean snapshot/quality được xác nhận READY**, một run per asset. Cuộc họp cần điền **thứ/ngày và giờ UTC chính xác**, scheduler owner, timeout/retry khi snapshot chưa ready, cơ chế không chạy trùng và nơi báo alarm. Không tự coi mọi thứ đã sẵn sàng khi chỉ có Lambda handler trong repo. Ngày/giờ không chốt là blocker production 05/11, nhưng không thay đổi thuật toán RFC.
+**Cutover:** Mốc chuyển production phải dựa trên CloudFormation deploy event + hành vi ghi thật và `input_snapshot_dt`, không dựa vào `dry_run`, commit/approve PR #48 hay ngày 31/10 dự kiến. Có field snapshot → chỉ là candidate hậu cutover và phải so với timestamp/event, conditional provenance; không có field → candidate legacy **chỉ** theo whitelist audit được duyệt. Khi dữ liệu trái với sự kiện deploy, fail-closed và điều tra.
 
 ### 10.2. Milestones và ownership
 
 | Mốc | Đầu ra | Owner / trạng thái |
 |---|---|---|
-| **30/10/2026** | Chốt legacy policy, champion mapping per-asset, cutover verification, mapping release, Scheduler UTC/owner, role IAM | Khải/Tuấn/Tiến/Long — cần xác nhận trong họp |
-| **31/10/2026 (dự kiến)** | Deploy PR #48 kèm `input_snapshot_dt` champion; ghi lại timestamp thật và smoke-test conditional write | Khải + người deploy của nhóm — chưa xác nhận deploy |
-| **Sau họp** | PR riêng `docs/api/contract.md` + `docs/eval/walk-forward-contract.md` §7; không merge RFC #45 | Long, Tuấn/Khải/Tiến review |
-| **Trước 02/11/2026** | JSON fixtures `not_ready`, `collecting`, `ready` theo champion per-asset để Tiến làm web | Long soạn, Tiến review |
-| **05/11/2026** | MVP champion: rolling job + STATE/META/28 METRIC + `/accuracy/{asset}`, IAM/alarm/scheduler verified | Đề xuất Long job; Tuấn table/API; Tiến image/deploy; cần xác nhận |
-| **02–06/11/2026** | Source S1a JSON PR #53, không chặn champion MVP | Khải/Tiến/Tuấn |
-| **Sau khi S1a có nhãn** | Paired report **S3 Parquet `eval/shadow_eval/run_id=<run_id>/`** chỉ cho baseline champion, không public | Long + Khải/Tuấn review |
-| **15/11/2026 (dự kiến)** | Web độ tin cậy phụ thuộc Accuracy JSON contract | Tiến + Long |
-| **22/11/2026** | Đóng băng tính năng | Nhóm |
+| **30/10/2026** | Chốt thiết kế RFC trên comment Khải/Tiến; thông báo và bắt đầu chuyển Contract | Khải/Tiến đã xác nhận chính sách; reviewer khác vẫn có thể cần review Contract |
+| **31/10/2026 (dự kiến lượt 12:15 UTC)** | PR #48 conditional write + `input_snapshot_dt` có hiệu lực production; lưu CloudFormation event + smoke test | Tiến/Khải — **chưa coi đã deploy cho đến khi có evidence** |
+| **Trước 02/11/2026** | Export audit legacy đính PR Contract; cập nhật **PR #62** ba JSON theo `width_80_pct` và gating mọi overall | Tiến audit/log; Long fixtures/contract, Tuấn/Tiến review |
+| **Trước 03/11/2026 (nếu kịp)** | Merge code rolling job để dùng chung image predict/S1a | Long; Tiến build image, không là điều kiện thay thế QA |
+| **05/11/2026** | Accuracy table/API + rolling job/handler + Scheduler TUE–SAT 13:45 UTC + Alarm Errors→SNS, IAM tests/smoke | Tuấn table/API/IAM; Long job/tests; Tiến CDK/deploy; Khải Predict mapping |
+| **02–06/11/2026** | S1a JSON source từ PR #53, shadow paired không chặn champion MVP | Khải/Tiến/Tuấn |
+| **Sau khi shadow có nhãn** | Paired report Parquet nội bộ `eval/shadow_eval/run_id=<run_id>/` | Long + Khải/Tuấn review |
+| **15/11/2026 (dự kiến)** | Dashboard hiển thị đúng `not_ready/collecting/ready` theo API | Tiến + Long |
+| **22/11/2026** | Freeze: không cam kết `ready`, hoãn DM gap cho đến sau mốc | Nhóm |
 
-### 10.3. Các thay đổi chính thức trong PR contract sau khi approve RFC
+### 10.3. Nội dung cần chuyển sang PR Contract (không merge PR #45)
 
-1. **Forecast eligibility:** 56 ngày UTC, `created_at` min/target UTC cutoff, champion `MODEL_VERSIONS[asset]`, effective base date từng asset, `input_snapshot_dt` sau cutover và policy `LEGACY_ACCEPT_WITH_EVIDENCE` (có evidence reference, fallback và timestamp cutover thực tế).
-2. **`docs/eval/walk-forward-contract.md` §7:** ngoại lệ `rolling_8w` MVP **không manifest/CloudWatch gate**; calendar expected chỉ đếm, dữ liệu thật mới chấm, không nới các quy tắc `validation`/`test`/import.
-3. **API contract:** 4 metrics + per-metric `n_obs`, overall `n_base_dates`, `first_eligible_base_date` ISO/null, `display_width_pct=100×width_80`, JSON `not_ready/collecting/ready`, chỉ current champion **per-asset**; không công bố shadow. Ngưỡng 20 theo dữ liệu đã chấm.
-4. **Accuracy storage:** STATE pointer `LATEST_COMPLETED`, META/METRIC immutable 28 rows, order/fingerprint, completion/promotion, API check champion map runtime per asset + fail-closed; không registry champion trong STATE.
-5. **IAM/infra:** writer scoped Get/Put/Update Accuracy; API chỉ Get/Query; scoped `s3:ListBucket` cho clean/shadow khi cần, Forecasts Predict không `GetItem` bổ sung theo D04, S3 shadow JSON khác paired Parquet; lịch Scheduler/owner và alarm đã chốt.
-6. **S1a/champion switch:** `s1a-l094` chỉ định nghĩa dựa trên baseline-q252; asset đổi K4 không tự được chấm cặp S1a cũ, chờ ADR hoặc challenger mới. Không tự đổi champion bằng Shadow.
-7. **Data integrity:** `prob_up` >1e-6 chỉ log; import provenance ngoài MVP, không backfill, tách score theo horizon/asset/cutoff, cập nhật T01–T48 theo các quyết định đã approve.
+1. **Forecast eligibility/legacy:** 56 ngày UTC, `created_at` min, timestamp trước target cutoff, champion theo `MODEL_VERSIONS[asset]`/`CHAMPION_EFFECTIVE_BASE_DATES[asset]`; field snapshot post-cutover, policy legacy có whitelist/evidence, cutover UTC thật và audit ref. Không nhận mọi record thiếu field là legacy hợp lệ.
+2. **`docs/eval/walk-forward-contract.md` §7:** ngoại lệ `rolling_8w` MVP **không manifest/CloudWatch gate**; các log đính Contract chỉ xác minh legacy, calendar expected chỉ là expected count; không nới rules `validation/test/import`.
+3. **API `/accuracy/{asset}`:** 4 metric gốc + derived `width_80_pct` (unit percent) ở overall/by_horizon, 3 JSON fixtures PR #62; mọi metric overall có `display_value/display_status` cùng ngưỡng ≥20 base_dates đã có cặp; Web chỉ dùng `width_80_pct.display_value` và không tự exp/chuyển đổi. Giữ `first_eligible_base_date` ISO/null.
+4. **Storage:** 28 METRIC gốc không đổi và `META.derived_metrics.width_80_pct` cùng per-h/overall payload hash/provenance; STATE pointer LATEST_COMPLETED, META/METRIC immutability/idempotency; chỉ current champion API được hiển thị.
+5. **Scheduler/CDK/ownership:** hai mappings từ `infra/app.py` qua JSON env cho Predict/Rolling/API; Predict fallback legacy env, không đọc Accuracy; Lambda accuracy job dùng predict ECR image với CMD handler riêng, Scheduler daily `cron(45 13 ? * TUE-SAT *)`, retry 0, timeout 300s, no reserved concurrency, Errors alarm SNS; Tuấn bảng/API/IAM, Long job, Tiến CDK/deploy, Khải Predict. Test T40/T44/T47 và IAM deny cases.
+6. **Paired S1a/champion:** JSON shadow `eval/shadow/`, paired Parquet `eval/shadow_eval/`, không đụng state/champion. Nếu asset chuyển K4 thì dừng S1a của asset đó cho tới ADR khác.
+7. **Data integrity/freeze:** mismatch `prob_up` >1e-6 chỉ log, không backfill, không sửa Validation 2019, hoãn DM calendar-gap sau 22/11; test T01–T48 theo update.
 
-**Quy trình:** RFC v4.5 → nhóm chốt/approve → PR contract riêng → implementation/tests/deploy. **PR #45 chỉ review/approval, KHÔNG MERGE `developer`**; sau khi contract PR merge, đóng RFC *Closed — Not Merged* và xử lý Issue #23 theo thỏa thuận.
+**Trình tự:** RFC #45 xác nhận chính sách (review-only) → **PR Contract** review/merge → implementation + smoke tests theo ownership → RFC #45 **Closed — Not Merged**. Không xem comment chốt thiết kế là approval IAM/CDK triển khai hoặc xác nhận Forecasts legacy đủ bằng chứng.
 
-**File đề xuất trên PR #45:** `docs/proposal/rolling-accuracy-design.md` (không phải `docs/proposals/`).
+**Đường dẫn trên PR #45:** `docs/proposal/rolling-accuracy-design.md`.
 
 ## Phụ lục A — Đối chiếu source code
 
 - Theo review Khải, tài liệu ở GitHub dẫn commit **`a5f770c`** thay vì tên ZIP source. Khi chuyển sang contract, đối chiếu commit thực tế với nhánh đang deploy.
 - `docs/api/contract.md`: `/accuracy/{asset}` chưa có JSON chính thức trong snapshot được review.
 - `docs/api/accuracy-schema.md`: có `evaluation_kind=rolling_8w`, khóa logic, `target_cutoff_date`, common mask và status.
-- `docs/eval/walk-forward-contract.md`: hiện yêu cầu publication manifest; **v4.5** dùng Forecasts+conditional immutable write để xác minh **các cặp được chấm**, calendar/TUE–SAT chỉ đếm expected/missing; sửa mục 7 qua PR contract riêng, không bắt buộc CloudWatch hoặc 90-day retention MVP.
+- `docs/eval/walk-forward-contract.md`: hiện yêu cầu publication manifest; **v4.6** dùng Forecasts+conditional immutable write hoặc legacy verified để xác minh **các cặp được chấm**, calendar/TUE–SAT chỉ đếm expected/missing; sửa mục 7 qua PR contract riêng, không bắt buộc CloudWatch hoặc 90-day retention MVP.
 - `src/forecast/predict.py`/`to_forecast_record`: PR #48 đã được approve về conditional PutItem nhưng **bản được Tiến review chưa thêm `input_snapshot_dt` champion**; Khải mới **nhận bổ sung** và contract Forecasts trước khi deploy. PR #53 có `input_snapshot_dt` trên **S1a shadow**, không thay thế trường của champion. `MODEL_VERSIONS[asset]` từ CDK (đề xuất v4.5), Predict không truy cập STATE. Chỉ đánh giá tình trạng code/deploy sau khi xác minh commit.
 - `src/eval/metrics.py`: có helper metrics; chưa có orchestration rolling hoàn chỉnh theo RFC.
-- **PR #49** `docs/experiments/s1a-shadow-plan.md`: kế hoạch `src/forecast/vol_scale_core.py`, S1a input JSON `eval/shadow/s1a-l094/` và báo cáo paired shadow **Parquet `eval/shadow_eval/`**; PR #51 cấp quyền predict cho `eval/shadow/*` nên output phải nằm ngoài prefix đó. Tình trạng deploy cần xác minh riêng.
-- **PR #46** ADR-0011: bỏ Step Functions/SageMaker retrain trước bảo vệ; bổ sung paired shadow weekly. ADR-0005 cũng chọn hiển thị (b), chỉ return %/xác suất cho vàng/bạc; **RFC Accuracy vẫn đo trên log return** và không dùng giá vàng/bạc quy đổi để tính nhãn.
+- **PR #49/#53** `docs/experiments/s1a-shadow-plan.md` và code Predict: kế hoạch `src/forecast/vol_scale_core.py`, S1a input JSON `eval/shadow/s1a-l094/` và báo cáo paired shadow **Parquet `eval/shadow_eval/`**; PR #51 cấp quyền predict cho `eval/shadow/*` nên output phải nằm ngoài prefix đó. Tình trạng deploy cần xác minh riêng.
+- **PR #46** ADR-0011: bỏ Step Functions/SageMaker retrain trước bảo vệ; bổ sung paired shadow theo lịch Rolling (cuộc họp 30/10 chốt TUE–SAT daily cho MVP). ADR-0005 cũng chọn hiển thị (b), chỉ return %/xác suất cho vàng/bạc; **RFC Accuracy vẫn đo trên log return; `width_80_pct` là dẫn xuất simple-return width cho Web** và không dùng giá vàng/bạc quy đổi để tính nhãn.
 - `infra/lambda/forecast_api/handler.py`: chưa hỗ trợ `/accuracy/{asset}` trong snapshot được review.
 
 Các trạng thái code là từ snapshot đã dùng để soạn RFC, không xác nhận deployment AWS đang chạy.
@@ -819,4 +881,4 @@ Các trạng thái code là từ snapshot đã dùng để soạn RFC, không x�
 5. Dawid (1984), *The Prequential Approach*, DOI: https://doi.org/10.2307/2981683.
 6. Gneiting et al. (2007), *Probabilistic Forecasts, Calibration and Sharpness*, DOI: https://doi.org/10.1111/j.1467-9868.2007.00587.x.
 
-> **Trạng thái cuối v4.5:** Kiến trúc v4.3 đã đáp ứng 5 góp ý theo Khải; v4.4 được Khải nhận xét “ổn”; v4.5 bổ sung chính sách `LEGACY_ACCEPT_WITH_EVIDENCE` và D10 **champion per-asset** theo comment cuối. **Nhóm vẫn cần duyệt ngoại lệ legacy, mapping per-asset, giờ Scheduler/owner và cutover thực tế trước khi coi RFC đã chốt.** PR #45 **review-only, KHÔNG MERGE**; chỉ PR contract đã được duyệt và merge mới là chuẩn triển khai.
+> **Trạng thái cuối v4.6 (30/10):** Khải đã chốt quyết định thiết kế theo comment Tiến/họp: `width_80_pct` per-pair, gating **mọi** overall metric, Scheduler daily `13:45 UTC TUE–SAT`, policy legacy có audit, hai CDK mappings và owner. **Còn chờ dữ liệu vận hành**: danh sách legacy được kiểm toán trước 02/11, CloudFormation/predict cutover 31/10 và review/merge PR Contract. Không cam kết `ready` trước 22/11; DM gap hoãn sau 22/11. PR #45 **review-only, KHÔNG MERGE**; chỉ PR contract đã được duyệt/merge mới thành chuẩn triển khai.
