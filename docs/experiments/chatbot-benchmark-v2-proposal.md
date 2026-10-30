@@ -339,4 +339,10 @@ Báo cáo đầy đủ: [`chatbot-benchmark-v2-2026-10.md`](chatbot-benchmark-v2
 - Chạy sớm hơn mốc 5/11, sau khi PR #61 (khóa) merge. Mỗi bài chạy một lần; khóa SHA-256 khớp.
 - **Chưa đạt:** Nova 21/30 (ngưỡng 27), Haiku 14/30 (ngưỡng 25). Không có vi phạm chính sách.
 - Khải chấm lại 10 câu seed 7 không dùng Claude. Hai người chấm khớp 7/10 ở kết luận rubric; điểm thống nhất theo chuẩn của Khải.
-- Đề xuất prompt Haiku v3, lần chạy dev trước demo và bộ câu hỏi v3: xem mục "Đề xuất" của báo cáo. Khải quyết.
+- **Khải quyết (30/10, PR #66),** chi tiết ở mục "Quyết định của Khải" của báo cáo:
+  - đồng ý prompt `chatbot-haiku-v3` (file mới; Phước viết trước 2/11, Khải duyệt 3/11);
+  - đồng ý chạy dev trước 4/11 với điều kiện chốt trước khi chạy, quyết 5/11, không đạt thì demo dùng v2;
+  - cần kịch bản câu hỏi demo cố định;
+  - hoãn bộ v3 và lần chạy chính thức sau đến sau demo;
+  - rubric (a)–(d) dùng cho lần chấm sau;
+  - không làm router trước demo.

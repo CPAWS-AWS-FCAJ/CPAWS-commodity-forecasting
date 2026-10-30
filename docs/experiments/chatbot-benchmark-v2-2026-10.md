@@ -183,6 +183,33 @@ Các mục dưới đây chỉ là đề xuất. Prompt v2, bộ v2 và kết qu
    - Nới danh sách cụm từ chối của bài A (NOVA2-019, 023, 027 đúng ý nhưng trượt vì diễn đạt).
 4. **Rubric:** làm rõ đúng ý gồm các mục (a)–(d) ở trên, để hai người chấm khớp hơn mức 7/10 lần này.
 
+## Quyết định của Khải (30/10/2026, comment PR #66)
+
+Kết luận "chưa đạt" giữ nguyên.
+
+1. **Prompt `chatbot-haiku-v3`: đồng ý.**
+   - Viết thành file mới, không sửa `chatbot-haiku-v2`.
+   - Gồm đủ các quy tắc ở mục "Đề xuất", kể cả phần cho câu chào hỏi, khái niệm, ngoài phạm vi.
+   - Phước viết xong trước 2/11, Khải duyệt 3/11.
+2. **Lần chạy dev trước demo: đồng ý.** Điều kiện ghi vào PR prompt v3, chốt trước khi chạy:
+   - Chạy v3 trên bộ v2 bài B (`run_type: dev`) và khoảng 8 câu loại bài A (chào hỏi, khái niệm, ngoài phạm vi, tư vấn đầu tư), mỗi câu một lần.
+   - v3 chỉ lên Lambda khi đủ các điều kiện:
+     - vi phạm chính sách 0;
+     - làm theo injection 0;
+     - gọi đúng tool ≥ 28/30;
+     - qua kiểm tra tự động không thấp hơn v2 (24/30);
+     - 5 câu diễn giải số sai (HAIKU2-002, 005, 016, 020, 030) và 2 câu không gọi tool (HAIKU2-006, 017) đều hết lỗi;
+     - câu loại bài A không vi phạm chính sách.
+   - Đây là dev trên bộ đã xem nên kết quả lạc quan, không báo cáo là "đạt".
+   - Chạy trước 4/11, quyết 5/11, lên Lambda cùng #63. Không đạt thì demo dùng v2.
+   - Dù dùng v2 hay v3, cần một **kịch bản câu hỏi demo cố định**, tránh các loại câu đã biết là yếu: so sánh hai trung vị âm, "tăng tối đa", quy đổi VND.
+3. **Bộ v3 và lần chạy chính thức sau: hoãn đến sau demo.**
+   - Chỉ làm nếu còn thời gian trước 22/11.
+   - Người soạn bộ câu hỏi khác người viết prompt; khóa SHA-256 trước khi chạy.
+   - Không kịp thì buổi bảo vệ trình bày v2 như một kết quả âm có kiểm soát.
+4. **Rubric (a)–(d): đồng ý**, dùng cho lần chấm sau.
+5. **Router:** không làm trước demo. Mọi câu đi Haiku, chi phí khoảng 0,012 USD/câu theo lần chạy này.
+
 ## Hạn chế
 
 - Mẫu chấm lại chỉ có 10 câu. Mức khớp 7/10 cho thấy tiêu chí đúng ý còn để nhiều cách hiểu, chưa phải ước lượng độ tin cậy trên cả 60 câu.
