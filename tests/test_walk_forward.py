@@ -116,6 +116,113 @@ def test_reject_unsupported_configuration(changes):
         W.EvaluationConfig(**changes)
 
 
+CV_PERIOD = {
+    "evaluation_kind": "cross_validation",
+    "evaluation_start": "2016-01-01",
+    "evaluation_end": "2018-12-31",
+    "target_cutoff_date": "2018-12-31",
+}
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"evaluation_kind": "cross_validation"},  # 2019 dates with the CV kind
+        {**CV_PERIOD, "evaluation_kind": "validation"},
+        {**CV_PERIOD, "evaluation_start": "2015-01-01"},
+        {**CV_PERIOD, "target_cutoff_date": "2019-12-31"},
+        {**CV_PERIOD, "block_length": 10},
+    ],
+)
+def test_cross_validation_period_is_fixed(changes):
+    with pytest.raises(ValueError):
+        W.EvaluationConfig(evaluation_as_of_time="2026-10-22T00:00:00Z", **changes)
+
+
+def test_validation_2019_period_and_roll_window_unchanged():
+    """Pure calendar check (no price data): defaults and roll dates equal the former literals."""
+    cfg = W.EvaluationConfig(evaluation_as_of_time="2026-10-22T00:00:00Z")
+    assert (cfg.evaluation_kind, cfg.evaluation_start, cfg.evaluation_end) == (
+        "validation",
+        "2019-01-01",
+        "2019-12-31",
+    )
+    assert cfg.target_cutoff_date == "2019-12-31"
+    assert W.roll_window(cfg) == ("2018-12-01", "2020-02-01")
+    for asset, expiries in (("wti", calendars.cl_expiries), ("brent", calendars.bz_expiries)):
+        expiry, roll = W.roll_calendar(asset, cfg)
+        assert expiry.equals(expiries("2019-01-01", "2020-02-01"))
+        former = calendars.roll_days(
+            W.ASSETS[asset].roll_rule, calendars.sessions("CME", "2018-12-01", "2020-02-01")
+        )
+        assert roll.equals(former)
+
+
+def test_cfg_roll_window_reproduces_former_window_on_fixed_synthetic_fixture(
+    forecasts, prices, rejected, fits, cfg, result, monkeypatch
+):
+    """Hồi quy trên fixture tổng hợp cố định (không đọc dữ liệu thật 2019): cửa sổ roll gắn cứng
+    cũ 2018-12-01..2020-02-01, dựng lại ở đây, và cửa sổ tính từ cfg cho cùng roll_in_horizon,
+    số cặp all/excl_roll, target_date/cutoff và chỉ số của dầu."""
+
+    def former(asset, c):
+        expiry = (calendars.cl_expiries if asset == "wti" else calendars.bz_expiries)(
+            c.evaluation_start, "2020-02-01"
+        )
+        roll = calendars.roll_days(
+            W.ASSETS[asset].roll_rule,
+            calendars.sessions(W.ASSETS[asset].calendar, "2018-12-01", "2020-02-01"),
+        )
+        return expiry, roll
+
+    monkeypatch.setattr(W, "roll_calendar", former)
+    old = W.evaluate(forecasts, prices, rejected, fits, cfg)
+    cols = [
+        "asset",
+        "base_date",
+        "h",
+        "target_date",
+        "target_cutoff_date",
+        "within_cutoff",
+        "roll_in_horizon",
+        "common_mask_all",
+        "common_mask_excl_roll",
+        "y_true",
+        "model_pinball_loss",
+        "baseline_pinball_loss",
+    ]
+    for asset in ("brent", "wti"):
+        a = old.detail.loc[old.detail.asset == asset, cols].reset_index(drop=True)
+        b = result.detail.loc[result.detail.asset == asset, cols].reset_index(drop=True)
+        pd.testing.assert_frame_equal(a, b, check_exact=True)
+        assert b.roll_in_horizon.notna().all() and b.roll_in_horizon.astype(bool).any()
+        for sample in ("all", "excl_roll"):
+            mask = "common_mask_" + sample
+            assert a[mask].fillna(False).sum() == b[mask].fillna(False).sum() > 0
+    key = ["asset", "sample", "h", "metric"]
+    oil = old.accuracy.asset.isin(["brent", "wti"])
+    a = old.accuracy.loc[oil, [*key, "value", "ci_low", "ci_high", "n_obs"]]
+    b = result.accuracy.loc[
+        result.accuracy.asset.isin(["brent", "wti"]), [*key, "value", "ci_low", "ci_high", "n_obs"]
+    ]
+    pd.testing.assert_frame_equal(
+        a.sort_values(key).reset_index(drop=True),
+        b.sort_values(key).reset_index(drop=True),
+        check_exact=True,
+    )
+    assert set(a["sample"]) == {"all", "excl_roll"}
+
+
+def test_cross_validation_roll_window_covers_2016_2018():
+    cfg = W.EvaluationConfig(evaluation_as_of_time="2026-10-22T00:00:00Z", **CV_PERIOD)
+    assert W.roll_window(cfg) == ("2015-12-01", "2019-02-01")
+    for asset in ("wti", "brent"):
+        expiry, roll = W.roll_calendar(asset, cfg)
+        for year in (2016, 2017, 2018):
+            assert 11 <= int((roll.year == year).sum()) <= 13
+            assert 11 <= int((expiry.year == year).sum()) <= 13
+
+
 def test_expected_full_grid_and_schema(forecasts, cfg):
     assert len(forecasts) == sum(
         len(calendars.sessions(W.ASSETS[a].calendar, "2019-01-01", "2019-12-31")) * 7

@@ -422,9 +422,16 @@ def mean_skill_ci(detail: pd.DataFrame, asset: str, sample: str, cfg) -> dict:
     """pinball_skill trung bình 7 h và CI 95% (mục 6.3): mỗi lần lấy mẫu của kế hoạch bootstrap
     chung, pinball_skill từng h trên các ngày được rút rồi lấy trung bình 7 h. Cùng cách lọc và
     cùng kế hoạch rút với walk_forward._skill_ci."""
+    groups = [(asset, h) for h in HORIZONS]
+    return {"asset": asset, "sample": sample, **groups_skill_ci(detail, groups, sample, cfg)}
+
+
+def groups_skill_ci(detail: pd.DataFrame, groups, sample: str, cfg) -> dict:
+    """pinball_skill trung bình trên các nhóm (asset, h) và CI 95%, như mean_skill_ci (K4 dùng
+    cho trung bình 28 nhóm)."""
     dates, draws = wf.shared_bootstrap_plan(cfg)
     parts = []
-    for h in HORIZONS:
+    for asset, h in groups:
         rows = detail.loc[(detail.asset == asset) & (detail.h == h)].sort_values("base_date")
         g = rows.loc[rows["common_mask_" + sample].fillna(False).to_numpy(bool)]
         parts.append(
@@ -460,8 +467,6 @@ def mean_skill_ci(detail: pd.DataFrame, asset: str, sample: str, cfg) -> dict:
         seed=cfg.seed,
     )
     return {
-        "asset": asset,
-        "sample": sample,
         "value": float(np.mean(by_h)),
         "ci_low": low,
         "ci_high": high,
@@ -470,12 +475,13 @@ def mean_skill_ci(detail: pd.DataFrame, asset: str, sample: str, cfg) -> dict:
     }
 
 
-def evaluate_set(models: dict, origins: dict, p, r) -> dict:
-    """Mỗi model: T.evaluate trên `origins` + CI trung bình 7 h theo tài sản × sample."""
+def evaluate_set(models: dict, origins: dict, p, r, config=T.evaluation_config) -> dict:
+    """Mỗi model: T.evaluate trên `origins` + CI trung bình 7 h theo tài sản × sample. config(name)
+    trả EvaluationConfig (mặc định validation 2019 của K3; K4 truyền cấu hình cross_validation)."""
     named = {}
     for name, forecasts in models.items():
-        e = T.evaluate(name, restrict(forecasts, origins), p, r)
-        cfg = T.evaluation_config(name)
+        cfg = config(name)
+        e = T.evaluate(name, restrict(forecasts, origins), p, r, cfg=cfg)
         acc = e["accuracy"].query("metric == 'pinball_skill'")
         rows = []
         for asset in C.ASSETS:
