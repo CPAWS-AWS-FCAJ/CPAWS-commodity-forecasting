@@ -5,4 +5,4 @@ accuracy/ contains three synthetic GET /accuracy/{asset} response examples:
 - collecting.json: Valid observations exist, but fewer than 20 eligible base dates.
 - ready.json: At least 20 eligible base dates; summary metrics can be displayed.
 
-Based on Rolling Accuracy RFC #45 v4.5. These are proposed examples for API/Web review, not production data or a finalized API contract.
+Based on docs/api/contract.md (GET /accuracy/{asset}, RFC #45 v4.6, PR #65). Synthetic examples, not production data.
