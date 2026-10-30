@@ -57,7 +57,7 @@ Phước gắn 2–3 bài mỗi tuần, chỉ từ các loại sau:
 2. Phước đọc bài gốc, viết tóm tắt tiếng Việt (1–2 câu, tối đa 300 ký tự, tự viết, không chép đoạn văn gốc) và nhãn, rồi ghi file `labels/<article_id>.json`.
 3. Lần chạy sau, collector thấy file nhãn thì `PutItem` vào bảng `NewsLabels`. File trong S3 là marker cho biết bài đã có nhãn (theo góp ý của Tiến ở #52).
 
-Định dạng `labels/<article_id>.json` theo đúng schema của một phần tử `cases` trong [`tests/labeling/real_cases_v3.json`](../../tests/labeling/real_cases_v3.json): `source`, `release_type`, `published_at_utc`, `url`, `title`, `summary`, và `expected` gồm `relevant`, `event_type`, `notes`, `asset_labels` cho cả bốn tài sản (`impact_score`, `direction`, `confidence`, `evidence`). Khóa định danh là `article_id` thay cho `case_id`; trường `group` chỉ dùng cho benchmark. Cách ánh xạ chính xác sang item `NewsLabels` (ví dụ chuẩn hóa `published_at` về dạng `YYYY-MM-DDTHH:MM:SSZ` của contract, giá trị `prompt_version` cho nhãn tay) chốt với Tuấn trong #52.
+Định dạng `labels/<article_id>.json` theo đúng schema của một phần tử `cases` trong [`tests/labeling/real_cases_v3.json`](../../tests/labeling/real_cases_v3.json): `source`, `release_type`, `published_at_utc`, `url`, `title`, `summary`, và `expected` gồm `relevant`, `event_type`, `notes`, `asset_labels` cho cả bốn tài sản (`impact_score`, `direction`, `confidence`, `evidence`). Khóa định danh là `article_id` thay cho `case_id`; trường `group` chỉ dùng cho benchmark. Thêm trường `labeled_at_utc` (thời điểm ghi file nhãn, ISO 8601 UTC); trường này chỉ có trong file trên S3, không đổi schema `NewsLabels`. Nhãn tay mang `prompt_version = "manual-v3"` để chatbot và báo cáo phân biệt với nhãn Nova. Cách ánh xạ còn lại sang item `NewsLabels` (ví dụ chuẩn hóa `published_at` về dạng `YYYY-MM-DDTHH:MM:SSZ` của contract) chốt với Tuấn trong #52.
 
 ### Quyền IAM
 
@@ -67,7 +67,13 @@ Phước gắn 2–3 bài mỗi tuần, chỉ từ các loại sau:
 ### Quy ước gắn nhãn
 
 - Theo [`labeling-v3-plan.md`](../experiments/labeling-v3/labeling-v3-plan.md), mục "Gắn nhãn" (bảng quy ước vàng/bạc, Brent/WTI và mức `confidence`) và các quy tắc của prompt `labeling-v3` mà plan dẫn tới.
-- Chỉ gắn theo nội dung thông cáo. **Không nhìn giá sau ngày công bố**, để nhãn không mang thông tin tương lai (ADR-0003 mục 5).
+- Chỉ gắn theo nội dung thông cáo. **Không nhìn giá sau ngày công bố**, để nhãn không mang thông tin tương lai (ADR-0003 mục 5). Đây chỉ là cố gắng: nhãn tay viết sau khi công bố, có khi vài ngày, nên người gắn khó tránh biết diễn biến giá.
+
+### Point-in-time khi dùng nhãn cho mô hình
+
+- Với chatbot, nhãn được dùng như hiện có, không cần điều chỉnh.
+- Nếu sau này dùng nhãn làm đặc trưng hoặc trong backtest, thời điểm nhãn khả dụng là `max(published_at, labeled_at_utc)`, không phải `published_at`.
+- Nhãn tay **không dùng để đánh giá dự báo** trước khi bảo vệ.
 
 ### Quan hệ với ADR khác
 
