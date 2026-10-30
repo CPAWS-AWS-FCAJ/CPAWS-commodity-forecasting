@@ -1,0 +1,244 @@
+{
+  "asset": "gold",
+  "model_version": "baseline-q252",
+  "evaluation_kind": "rolling_8w",
+  "sample": "all",
+  "run_id": "synthetic-example-rolling-2026-11-07-gold",
+  "evaluated_at": "2026-11-07T18:00:00Z",
+  "window": {
+    "basis": "base_date",
+    "days": 56,
+    "window_start": "2026-09-13",
+    "window_end": "2026-11-07",
+    "target_cutoff_date": "2026-11-06",
+    "first_eligible_base_date": "2026-11-02"
+  },
+  "evaluation_evidence": {
+    "schedule_basis": "trading_calendar_and_predict_schedule",
+    "schedule_evidence_status": "not_audited_mvp",
+    "issuance_evidence_status": "verified_eligible_rows",
+    "expected_count": 10,
+    "published_count": 5,
+    "missing_count": 5
+  },
+  "overall": {
+    "coverage_80": {
+      "covered_count": 6,
+      "n_obs": 10,
+      "display_value": null,
+      "display_status": "insufficient_data",
+      "n_base_dates": 4,
+      "status": "ok",
+      "min_display_base_dates": 20
+    },
+    "width_80": {
+      "value": 0.014,
+      "n_obs": 10,
+      "status": "ok",
+      "unit": "log_return"
+    },
+    "sign_accuracy": {
+      "value": 0.444444,
+      "n_obs": 9,
+      "status": "ok"
+    },
+    "up_rate": {
+      "value": 0.7,
+      "n_obs": 10,
+      "status": "ok"
+    }
+  },
+  "by_horizon": [
+    {
+      "h": 1,
+      "coverage_80": {
+        "covered_count": 2,
+        "n_obs": 4,
+        "display_value": null,
+        "display_status": "counts_only",
+        "n_base_dates": 4,
+        "status": "ok"
+      },
+      "width_80": {
+        "value": 0.012,
+        "n_obs": 4,
+        "status": "ok",
+        "unit": "log_return"
+      },
+      "sign_accuracy": {
+        "value": 0.333333,
+        "n_obs": 3,
+        "status": "ok"
+      },
+      "up_rate": {
+        "value": 0.5,
+        "n_obs": 4,
+        "status": "ok"
+      }
+    },
+    {
+      "h": 2,
+      "coverage_80": {
+        "covered_count": 1,
+        "n_obs": 3,
+        "display_value": null,
+        "display_status": "counts_only",
+        "n_base_dates": 3,
+        "status": "ok"
+      },
+      "width_80": {
+        "value": 0.014,
+        "n_obs": 3,
+        "status": "ok",
+        "unit": "log_return"
+      },
+      "sign_accuracy": {
+        "value": 0.333333,
+        "n_obs": 3,
+        "status": "ok"
+      },
+      "up_rate": {
+        "value": 0.666667,
+        "n_obs": 3,
+        "status": "ok"
+      }
+    },
+    {
+      "h": 3,
+      "coverage_80": {
+        "covered_count": 2,
+        "n_obs": 2,
+        "display_value": null,
+        "display_status": "counts_only",
+        "n_base_dates": 2,
+        "status": "ok"
+      },
+      "width_80": {
+        "value": 0.016,
+        "n_obs": 2,
+        "status": "ok",
+        "unit": "log_return"
+      },
+      "sign_accuracy": {
+        "value": 0.5,
+        "n_obs": 2,
+        "status": "ok"
+      },
+      "up_rate": {
+        "value": 1.0,
+        "n_obs": 2,
+        "status": "ok"
+      }
+    },
+    {
+      "h": 4,
+      "coverage_80": {
+        "covered_count": 1,
+        "n_obs": 1,
+        "display_value": null,
+        "display_status": "counts_only",
+        "n_base_dates": 1,
+        "status": "ok"
+      },
+      "width_80": {
+        "value": 0.018,
+        "n_obs": 1,
+        "status": "ok",
+        "unit": "log_return"
+      },
+      "sign_accuracy": {
+        "value": 1.0,
+        "n_obs": 1,
+        "status": "ok"
+      },
+      "up_rate": {
+        "value": 1.0,
+        "n_obs": 1,
+        "status": "ok"
+      }
+    },
+    {
+      "h": 5,
+      "coverage_80": {
+        "covered_count": 0,
+        "n_obs": 0,
+        "display_value": null,
+        "display_status": "counts_only",
+        "n_base_dates": 0,
+        "status": "undefined"
+      },
+      "width_80": {
+        "value": null,
+        "n_obs": 0,
+        "status": "undefined",
+        "unit": "log_return"
+      },
+      "sign_accuracy": {
+        "value": null,
+        "n_obs": 0,
+        "status": "undefined"
+      },
+      "up_rate": {
+        "value": null,
+        "n_obs": 0,
+        "status": "undefined"
+      }
+    },
+    {
+      "h": 6,
+      "coverage_80": {
+        "covered_count": 0,
+        "n_obs": 0,
+        "display_value": null,
+        "display_status": "counts_only",
+        "n_base_dates": 0,
+        "status": "undefined"
+      },
+      "width_80": {
+        "value": null,
+        "n_obs": 0,
+        "status": "undefined",
+        "unit": "log_return"
+      },
+      "sign_accuracy": {
+        "value": null,
+        "n_obs": 0,
+        "status": "undefined"
+      },
+      "up_rate": {
+        "value": null,
+        "n_obs": 0,
+        "status": "undefined"
+      }
+    },
+    {
+      "h": 7,
+      "coverage_80": {
+        "covered_count": 0,
+        "n_obs": 0,
+        "display_value": null,
+        "display_status": "counts_only",
+        "n_base_dates": 0,
+        "status": "undefined"
+      },
+      "width_80": {
+        "value": null,
+        "n_obs": 0,
+        "status": "undefined",
+        "unit": "log_return"
+      },
+      "sign_accuracy": {
+        "value": null,
+        "n_obs": 0,
+        "status": "undefined"
+      },
+      "up_rate": {
+        "value": null,
+        "n_obs": 0,
+        "status": "undefined"
+      }
+    }
+  ],
+  "data_status": "collecting",
+  "disclaimer": "Dự báo chỉ mang tính tham khảo, không phải lời khuyên đầu tư."
+}

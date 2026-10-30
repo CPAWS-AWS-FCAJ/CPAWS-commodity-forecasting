@@ -1,0 +1,244 @@
+{
+  "asset": "gold",
+  "model_version": "baseline-q252",
+  "evaluation_kind": "rolling_8w",
+  "sample": "all",
+  "run_id": "synthetic-example-rolling-2026-12-12-gold",
+  "evaluated_at": "2026-12-12T18:00:00Z",
+  "window": {
+    "basis": "base_date",
+    "days": 56,
+    "window_start": "2026-10-18",
+    "window_end": "2026-12-12",
+    "target_cutoff_date": "2026-12-11",
+    "first_eligible_base_date": "2026-11-02"
+  },
+  "evaluation_evidence": {
+    "schedule_basis": "trading_calendar_and_predict_schedule",
+    "schedule_evidence_status": "not_audited_mvp",
+    "issuance_evidence_status": "verified_eligible_rows",
+    "expected_count": 34,
+    "published_count": 29,
+    "missing_count": 5
+  },
+  "overall": {
+    "coverage_80": {
+      "covered_count": 127,
+      "n_obs": 175,
+      "display_value": 0.725714,
+      "display_status": "ready",
+      "n_base_dates": 28,
+      "status": "ok",
+      "min_display_base_dates": 20
+    },
+    "width_80": {
+      "value": 0.01768,
+      "n_obs": 175,
+      "status": "ok",
+      "unit": "log_return"
+    },
+    "sign_accuracy": {
+      "value": 0.561644,
+      "n_obs": 146,
+      "status": "ok"
+    },
+    "up_rate": {
+      "value": 0.702857,
+      "n_obs": 175,
+      "status": "ok"
+    }
+  },
+  "by_horizon": [
+    {
+      "h": 1,
+      "coverage_80": {
+        "covered_count": 16,
+        "n_obs": 28,
+        "display_value": null,
+        "display_status": "counts_only",
+        "n_base_dates": 28,
+        "status": "ok"
+      },
+      "width_80": {
+        "value": 0.012,
+        "n_obs": 28,
+        "status": "ok",
+        "unit": "log_return"
+      },
+      "sign_accuracy": {
+        "value": 0.565217,
+        "n_obs": 23,
+        "status": "ok"
+      },
+      "up_rate": {
+        "value": 0.535714,
+        "n_obs": 28,
+        "status": "ok"
+      }
+    },
+    {
+      "h": 2,
+      "coverage_80": {
+        "covered_count": 12,
+        "n_obs": 27,
+        "display_value": null,
+        "display_status": "counts_only",
+        "n_base_dates": 27,
+        "status": "ok"
+      },
+      "width_80": {
+        "value": 0.014,
+        "n_obs": 27,
+        "status": "ok",
+        "unit": "log_return"
+      },
+      "sign_accuracy": {
+        "value": 0.521739,
+        "n_obs": 23,
+        "status": "ok"
+      },
+      "up_rate": {
+        "value": 0.518519,
+        "n_obs": 27,
+        "status": "ok"
+      }
+    },
+    {
+      "h": 3,
+      "coverage_80": {
+        "covered_count": 22,
+        "n_obs": 26,
+        "display_value": null,
+        "display_status": "counts_only",
+        "n_base_dates": 26,
+        "status": "ok"
+      },
+      "width_80": {
+        "value": 0.016,
+        "n_obs": 26,
+        "status": "ok",
+        "unit": "log_return"
+      },
+      "sign_accuracy": {
+        "value": 0.5,
+        "n_obs": 22,
+        "status": "ok"
+      },
+      "up_rate": {
+        "value": 0.653846,
+        "n_obs": 26,
+        "status": "ok"
+      }
+    },
+    {
+      "h": 4,
+      "coverage_80": {
+        "covered_count": 23,
+        "n_obs": 25,
+        "display_value": null,
+        "display_status": "counts_only",
+        "n_base_dates": 25,
+        "status": "ok"
+      },
+      "width_80": {
+        "value": 0.018,
+        "n_obs": 25,
+        "status": "ok",
+        "unit": "log_return"
+      },
+      "sign_accuracy": {
+        "value": 0.619048,
+        "n_obs": 21,
+        "status": "ok"
+      },
+      "up_rate": {
+        "value": 1.0,
+        "n_obs": 25,
+        "status": "ok"
+      }
+    },
+    {
+      "h": 5,
+      "coverage_80": {
+        "covered_count": 18,
+        "n_obs": 24,
+        "display_value": null,
+        "display_status": "counts_only",
+        "n_base_dates": 24,
+        "status": "ok"
+      },
+      "width_80": {
+        "value": 0.02,
+        "n_obs": 24,
+        "status": "ok",
+        "unit": "log_return"
+      },
+      "sign_accuracy": {
+        "value": 0.55,
+        "n_obs": 20,
+        "status": "ok"
+      },
+      "up_rate": {
+        "value": 0.625,
+        "n_obs": 24,
+        "status": "ok"
+      }
+    },
+    {
+      "h": 6,
+      "coverage_80": {
+        "covered_count": 17,
+        "n_obs": 23,
+        "display_value": null,
+        "display_status": "counts_only",
+        "n_base_dates": 23,
+        "status": "ok"
+      },
+      "width_80": {
+        "value": 0.022,
+        "n_obs": 23,
+        "status": "ok",
+        "unit": "log_return"
+      },
+      "sign_accuracy": {
+        "value": 0.578947,
+        "n_obs": 19,
+        "status": "ok"
+      },
+      "up_rate": {
+        "value": 0.652174,
+        "n_obs": 23,
+        "status": "ok"
+      }
+    },
+    {
+      "h": 7,
+      "coverage_80": {
+        "covered_count": 19,
+        "n_obs": 22,
+        "display_value": null,
+        "display_status": "counts_only",
+        "n_base_dates": 22,
+        "status": "ok"
+      },
+      "width_80": {
+        "value": 0.024,
+        "n_obs": 22,
+        "status": "ok",
+        "unit": "log_return"
+      },
+      "sign_accuracy": {
+        "value": 0.611111,
+        "n_obs": 18,
+        "status": "ok"
+      },
+      "up_rate": {
+        "value": 1.0,
+        "n_obs": 22,
+        "status": "ok"
+      }
+    }
+  ],
+  "data_status": "ready",
+  "disclaimer": "Dự báo chỉ mang tính tham khảo, không phải lời khuyên đầu tư."
+}
