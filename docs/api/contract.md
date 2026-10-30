@@ -5,6 +5,7 @@
 - Cập nhật 2026-10-25: thêm bản đề xuất `POST /chat` (Phước), chờ Tiến, Tuấn, Khải chốt các mục ở cuối phần đó
 - Cập nhật 2026-10-27: nguồn tin cho `get_news` (bảng `NewsLabels`, ADR-0003); `POST /chat` theo prompt và tool v2 (PR #38), tool đọc thẳng bảng `Forecasts` (Khải chốt 26/10), số liệu chi phí và thời gian theo lần chạy dev 26/10; sửa theo review của Tiến và Tuấn trên PR #41 (quyền IAM Bedrock cho global inference profile, hạn chót tính từ `requestTimeEpoch`, vị trí tài nguyên, hai loại `429`); chốt schema 7 trường của `NewsLabels` và cách chọn nguồn tin bằng `NEWS_TABLE_NAME`/`NEWS_DIR`
 - Cập nhật 2026-10-29: bảng `Forecasts` thêm `input_snapshot_dt` (ngày `dt=` của snapshot `clean/prices` mà `predict` đã dùng), ghi cho bản ghi champion từ PR #48; theo review của Tiến trên RFC #45 (điểm 2)
+- Cập nhật đề xuất 2026-10-30: Rolling Accuracy theo RFC #45 v4.6 và fixtures v3.1; chờ review/merge Contract, không xác nhận deploy.
 - Người viết: Khải; góp ý: Long (bản "Chốt target, phân vị và đánh giá mô hình" và "Đánh giá các metric trong metrics.py", 15/10; review PR #6)
 - Người dùng: Tuấn (API, Cognito), Tiến (web, Lambda `predict`), Long (DLinear), Phước (tool `get_forecast` của chatbot)
 
@@ -51,7 +52,7 @@ Vàng và bạc: mô hình dự báo return của quỹ GLD, SLV (chuỗi đại
 | `stale_sources` | L of S | Nguồn bị lỗi lần chạy này (lấy từ `quality.json`); rỗng nếu không có |
 | `roll_in_horizon` | BOOL | Chỉ dầu: `true` khi có phiên roll (phiên đầu tiên sau một ngày đáo hạn hợp đồng) nằm trong (`base_date`, `target_date` của h = 7], tức ít nhất một return trong kỳ dự báo nối hai hợp đồng. Đáo hạn đúng `base_date` → `true`; đáo hạn đúng `target_date` của h = 7 → `false`. Web hiện dòng lưu ý; vàng, bạc luôn `false` |
 | `is_sample` | BOOL | `true` nếu là dữ liệu mẫu để test; web phải hiện nhãn "dữ liệu mẫu" |
-| `input_snapshot_dt` | S | Ngày `dt=` (`YYYY-MM-DD`) của snapshot `clean/prices` mà lần chạy `predict` đã dùng. Bản ghi tạo trước khi PR #48 deploy (dự kiến 31/10/2026) và bản ghi mẫu (`is_sample = true`) có thể thiếu; `rolling_8w` loại bản ghi thiếu trường này (RFC #45 mục 7). API và chatbot không trả trường này |
+| `input_snapshot_dt` | S | Ngày `dt=` (`YYYY-MM-DD`) của snapshot `clean/prices` mà predict đã thực sự dùng. Sau cutover PR #48 được xác minh bằng CloudFormation/deploy production và smoke test: bắt buộc cho champion production, kiểm tra với input-as-of. Trước cutover chỉ legacy được duyệt từng record theo `LEGACY_ACCEPT_WITH_EVIDENCE` mới được miễn; sample có thể thiếu nhưng không được chấm. Không hardcode ngày deploy. API Forecasts và chatbot không trả trường này; xem mục Accuracy. |
 
 Mỗi phần tử của `horizons`:
 
@@ -136,24 +137,341 @@ Dự báo mới nhất của một tài sản, đủ 7 mức h và 7 phân vị 
 
 Lỗi: `400 invalid_asset` (mã tài sản sai), `400 invalid_date`, `404 not_found` (chưa có bản ghi).
 
-### Thêm sau
+### `GET /accuracy/{asset}` — Rolling Accuracy MVP
 
-**`GET /accuracy/{asset}`** (tuần 3, Long). Chỉ số tính trên 8 tuần gần nhất, riêng từng h, trên log return. Công thức, mốc 252 phiên và quy tắc dữ liệu hợp lệ nằm ở ADR-0008 mục 4–5; API chỉ trả kết quả:
+**Cập nhật đề xuất ngày 30/10/2026 theo RFC #45 v4.6.** Thiết kế đã được Khải xác nhận; phần Contract này còn cần review/merge trước khi có hiệu lực. Không xác nhận code, IAM hoặc AWS đã deploy. RFC #45 là review-only; không dùng trạng thái thiết kế làm bằng chứng vận hành.
 
-| Trường | Ý nghĩa | Vai trò |
+Dùng Cognito ID token và error envelope chung ở đầu mục Endpoint. Asset hỗ trợ: `gold`, `silver`, `brent`, `wti`; asset sai dùng `400 invalid_asset`. HTTP 200 với `data_status=not_ready` khi chưa có run phù hợp; lỗi xác thực/hạ tầng vẫn theo cơ chế hiện hành, không giả thành thiếu dữ liệu.
+
+Chỉ trả champion production hiện hành của asset, `evaluation_kind=rolling_8w`, `sample=all`, h=1..7 theo lịch tài sản. Không public S1a, paired reports, validation/test, pinball skill hoặc model/run tùy chọn. Không nhúng lịch sử forecast vào response này; endpoint lịch sử thuộc giai đoạn riêng.
+
+#### Response: trường bắt buộc và kiểu dữ liệu
+
+Mọi trường trong ba ví dụ v3.1 dưới đây đều hiện diện. `number` phải hữu hạn; không NaN/Infinity. Không thêm root field cho Scheduler, run lifecycle hoặc provenance nội bộ.
+
+| Trường | Kiểu / null | Quy tắc |
 |---|---|---|
-| `pinball_skill` | 1 − PL(mô hình) / PL(mốc 252 phiên); PL = pinball loss trung bình đều trên 7 phân vị | Chỉ số chính |
-| `quantile_hit_rates` | Với từng mức τ: tỷ lệ log return thực tế nằm dưới phân vị dự báo q_τ (7 giá trị, so với 0.05…0.95) | Kiểm tra hiệu chỉnh |
-| `coverage_80` | Tỷ lệ log return thực tế nằm trong [q10, q90] | Hiển thị trên web |
-| `width_80` | Độ rộng trung bình q90 − q10, đơn vị log return | Đi kèm `coverage_80` |
-| `interval_score_80` | Interval score của khoảng [q10, q90], α = 0,2 | Kiểm tra hiệu chỉnh |
-| `brier_skill` | 1 − BS(mô hình) / BS(tần suất tăng 252 phiên); kèm `brier_skill_vs_half` so với hằng số 0,5 | Xác suất tăng |
-| `mae_ratio_vs_naive` | MAE của q50 / MAE của naive (return = 0) trên cùng tập điểm | Báo cáo phụ |
-| `sign_accuracy` | Tỷ lệ dự báo đúng chiều, tính trên các điểm có y ≠ 0 và q_0.50 ≠ 0 | Báo cáo phụ |
-| `up_rate` | Tỷ lệ log return thực tế dương | Luôn đi cùng `sign_accuracy` |
-| `n_obs` | Số điểm hợp lệ thực sự dùng, theo từng chỉ số | |
+| `asset` | string, không null | Một trong bốn asset |
+| `model_version` | string, không null | `MODEL_VERSIONS[asset]` hiện hành, kể cả khi not_ready |
+| `evaluation_kind`, `sample` | string, không null | Cố định `rolling_8w`, `all` |
+| `run_id` | string hoặc null | Evaluation run, null khi chưa có completed run phù hợp |
+| `evaluated_at` | timestamp ISO 8601 UTC hoặc null | Thời điểm đánh giá của run; null khi not_ready, không phải giờ GET |
+| `window` | object, không null | Các trường bên dưới |
+| `evaluation_evidence` | object, không null | Counts vận hành và mức evidence bên dưới |
+| `overall` | object, không null | Đúng 5 trường: coverage_80, width_80, width_80_pct, sign_accuracy, up_rate |
+| `by_horizon` | array 7 object, không null | h là integer 1..7 duy nhất; mỗi object có cùng 5 metric, không h=0 |
+| `data_status` | string, không null | `not_ready`, `collecting`, `ready` |
+| `disclaimer` | string, không null | Chuỗi hằng chính xác nêu dưới đây |
 
-Mọi chỉ số dùng cùng một quy tắc lọc dữ liệu hợp lệ (ADR-0008 mục 5). Không dùng RMSE, không tính sai số trên mức giá, không gọi tỷ lệ MAE là "MASE". Mốc 252 phiên chỉ dùng các return đã hoàn tất trước thời điểm dự báo.
+| `window` | Kiểu / null | Quy tắc |
+|---|---|---|
+| `basis`, `days` | string, integer | `base_date`, 56 |
+| `window_start`, `window_end` | ISO date hoặc null | `job_utc_date - 55 ngày`, `job_utc_date`, inclusive; null khi not_ready |
+| `target_cutoff_date` | ISO date hoặc null | Ngày target hợp lệ đã công bố cuối cùng, riêng asset; null khi not_ready |
+| `first_eligible_base_date` | ISO date hoặc null | Base date đầu có ít nhất một cặp thực sự được chấm của champion, không sớm hơn effective date; null nếu chưa có cặp |
+
+Không co cửa sổ theo ngày đầu/cuối có forecast. `first_eligible_base_date` không hardcode 27/10 và không thay bằng ngày phát hành.
+
+| `evaluation_evidence` | Kiểu / null | Ý nghĩa |
+|---|---|---|
+| `schedule_basis` | string | `trading_calendar_and_predict_schedule` |
+| `schedule_evidence_status` | string | `not_audited_mvp`: lịch kỳ vọng không phải lịch phát hành đã kiểm chứng |
+| `issuance_evidence_status` | string | `no_completed_run`, `no_eligible_rows`, hoặc `verified_eligible_rows` theo run và các cặp thực sự chấm |
+| `expected_count`, `published_count`, `missing_count` | integer >=0 hoặc null | Counts kỳ phát hành cùng phạm vi theo Walk-forward §7; `expected_count = published_count + missing_count`; cả ba null khi not_ready |
+
+#### Metric, đơn vị và phép tổng hợp
+
+Giữ [Schema kết quả Accuracy](accuracy-schema.md) cho khóa logic, common mask và status tính toán. Các cập nhật Rolling MVP tại đây và [Walk-forward Contract](../eval/walk-forward-contract.md) §7 thay phần Rolling cũ tương ứng; không đổi mask hoặc chính sách validation/test.
+
+| Metric response | Công thức trên các cặp hợp lệ | Đơn vị / trường |
+|---|---|---|
+| `coverage_80` | count(q10 <= y <= q90) / n_obs | Tỷ lệ [0,1]; trả `covered_count`, `n_obs`, `n_base_dates`, status và display fields; **không có field value** theo fixtures |
+| `width_80` | mean(q90 - q10) | `value`, `unit=log_return` |
+| `width_80_pct` | mean_i[100 * (exp(q90_i) - exp(q10_i))] | `value`, `unit=percent`; 4.2 nghĩa 4,2% |
+| `sign_accuracy` | mean(sign(q50) = sign(y)), loại thêm y=0 hoặc q50=0 | `value` tỷ lệ [0,1], luôn đi cùng up_rate |
+| `up_rate` | mean(y > 0) trên common mask | `value` tỷ lệ [0,1] |
+
+`width_80_pct` tính trên **từng cặp trước khi lấy trung bình**, cùng mask/n_obs với width_80. Không dùng `100 * width_80` hoặc `100 * (exp(mean_q90) - exp(mean_q10))` thay thế. Job đóng băng derived overall/by-horizon trong `META.derived_metrics.width_80_pct`, kèm payload/hash và fingerprint của run. API trả trực tiếp dữ liệu dẫn xuất; không thể dựng lại nó chỉ từ width_80 trung bình. Vẫn **28 METRIC rows = 7 × 4 metric nền**, không 35 rows, không thêm h=0 và không đổi danh mục metric gốc của Accuracy Schema.
+
+Overall coverage gộp tổng hit/tổng cặp. Overall width, width_pct, sign và up_rate gộp theo `n_obs` **của chính metric đó**, không lấy trung bình ngang 7 tỷ lệ; tổng hợp trước khi làm tròn. `n_base_dates` overall là hợp các base dates có cặp coverage hợp lệ, không cộng số ngày của 7 horizons; `n_obs` là số cặp, không phải số ngày độc lập. Sign có thể ít quan sát hơn up_rate.
+
+Mọi metric có `n_obs` integer >=0, `status` tính toán và hai display fields. Với bốn metric ngoài coverage, `value` là number hoặc null; width/width_pct có unit như bảng. Coverage có `covered_count` integer trong [0,n_obs], `n_base_dates` integer trong [0,n_obs]; chỉ overall có `min_display_base_dates=20`. `status=ok` khi tính được; `undefined` khi không có quan sát, giữ null thay số giả. Storage giữ `not_applicable`/reason theo schema nếu thực sự không áp dụng; không tự phát minh reason trong public JSON. Các fixture không có `undefined_reason`; đây không phải root/metric field mới của API.
+
+#### Trạng thái tính toán và hiển thị
+
+Ngưỡng dùng chung cho **mọi metric overall** là `overall.coverage_80.n_base_dates >= 20`: distinct base_date có ít nhất một cặp coverage được chấm, không dùng lịch hoặc mẫu riêng của từng metric để qua ngưỡng.
+
+| Điều kiện | data_status | display_status của overall | display_value |
+|---|---|---|---|
+| Không có completed run phù hợp champion | not_ready | not_ready | null cho cả 5 metric |
+| Có completed run, dưới 20 base dates | collecting | insufficient_data | null cho cả 5 metric; giữ value/status nội bộ |
+| Có completed run, từ 20 base dates và metric status=ok | ready | ready | Giá trị metric; coverage là covered_count/n_obs |
+| Đã đủ ngưỡng nhưng metric không tính được | ready | undefined | null, không biến undefined/not_applicable thành ready |
+
+Không có run: run/time/window dates và evidence counters null; metric value null, status undefined; các counts metric bằng 0 đúng fixtures, không biểu diễn một phép tính thành công bằng 0. Completed run hợp lệ nhưng không có cặp: collecting, `issuance_evidence_status=no_eligible_rows`, counts metric 0, values null; vẫn đủ 28 METRIC rows undefined theo schema.
+
+**Mọi metric của by_horizon luôn `display_value=null`, `display_status=counts_only`**, kể cả khi data_status=ready. Web chỉ công bố counts theo h. Web đọc display fields, không lấy value nội bộ để vượt ngưỡng; riêng độ rộng chỉ hiển thị `width_80_pct.display_value`, không tự exp/chuyển log-width. Không cam kết ready trước 22/11/2026 hoặc vào một ngày cố định theo lịch.
+
+#### Champion, access pattern và provenance
+
+`MODEL_VERSIONS` và `CHAMPION_EFFECTIVE_BASE_DATES` là hai mapping đủ 4 asset tại `infra/app.py`, truyền cùng JSON env/release config cho Predict, Rolling job và Accuracy API. Effective date lấy từ ADR/release thực, không điền mốc minh họa. Predict ưu tiên map mới, chỉ fallback `MODEL_VERSION` nếu map chưa cấu hình trong giai đoạn chuyển đổi; fallback không cho phép đổi champion ngầm. API/Rolling không suy mapping từ STATE. Đổi một asset không reset ba asset khác; chỉ chấm từ effective base date của champion hiện hành.
+
+API reader chỉ GetItem/Query trên Accuracy, không ghi/Scan/GSI hoặc đọc Forecasts/S3. `GetItem(ASSET#asset, STATE, ConsistentRead=true)` → `Query(latest_run_pk, ConsistentRead=true)` phân trang hết. Kiểm META COMPLETED, model/effective date, run identity/order, 28 keys/hashes, derived payload/hash và provenance/cutoff; đọc lại STATE để phát hiện promote đồng thời, retry ngắn hoặc fail-closed not_ready. Pointer model cũ không được công bố. STATE chỉ `latest_run_pk`, `latest_run_id`, `latest_run_order` (LATEST_COMPLETED), không giữ champion/generation. Lifecycle/idempotency/IAM chi tiết ở Walk-forward §7; không cấp API reader quyền rộng hơn để dựng derived metrics.
+
+Mốc `created_at >= 2026-10-27T12:00:00Z` là eligibility, **không phải cutover**. Cutover PR #48 phải dựa vào sự kiện CloudFormation deploy thực tế, hành vi predict production và smoke test conditional write; không hardcode 30/10 hoặc 31/10, approve/build không chứng minh đã deploy, dry_run không ghi Forecasts. Sau cutover bắt buộc conditional-write provenance và input_snapshot_dt đúng snapshot/input-as-of. Trước cutover chỉ nhận từng record qua `LEGACY_ACCEPT_WITH_EVIDENCE`, với lịch/model/is_sample=false/không overwrite-reissue/input-as-of và audit reference được duyệt. Chỉ legacy đã duyệt được miễn snapshot field; thiếu evidence loại khỏi n_obs. Timestamp hoặc sự có mặt của snapshot field riêng lẻ không chứng minh provenance. Chưa xác nhận danh sách legacy 26–30/10 hay timestamp cutover production trong bản tài liệu này.
+
+#### Disclaimer và ba ví dụ response v3.1
+
+Lambda Accuracy khi triển khai phải dùng chung `forecast_format.DISCLAIMER`:
+
+> Dự báo mang tính tham khảo, không phải lời khuyên đầu tư.
+
+Các ví dụ sau giữ nguyên dữ liệu của `accuracy-json-fixtures-v3-1-final.zip`, **đều là synthetic examples**, không xác nhận production/cutover/legacy. Chúng mô tả response, không phải lịch Scheduler hoặc run_id production đã tính fingerprint. Giờ evaluated_at minh họa không thay cron đã chốt. Không thêm chữ “chỉ” từ ví dụ RFC cũ vào disclaimer.
+
+**not_ready — synthetic**
+
+```json
+{
+  "asset": "gold",
+  "model_version": "baseline-q252",
+  "evaluation_kind": "rolling_8w",
+  "sample": "all",
+  "run_id": null,
+  "evaluated_at": null,
+  "window": {
+    "basis": "base_date",
+    "days": 56,
+    "window_start": null,
+    "window_end": null,
+    "target_cutoff_date": null,
+    "first_eligible_base_date": null
+  },
+  "evaluation_evidence": {
+    "schedule_basis": "trading_calendar_and_predict_schedule",
+    "schedule_evidence_status": "not_audited_mvp",
+    "issuance_evidence_status": "no_completed_run",
+    "expected_count": null,
+    "published_count": null,
+    "missing_count": null
+  },
+  "overall": {
+    "coverage_80": {
+      "covered_count": 0,
+      "n_obs": 0,
+      "n_base_dates": 0,
+      "min_display_base_dates": 20,
+      "display_value": null,
+      "status": "undefined",
+      "display_status": "not_ready"
+    },
+    "width_80": {
+      "value": null,
+      "n_obs": 0,
+      "unit": "log_return",
+      "status": "undefined",
+      "display_value": null,
+      "display_status": "not_ready"
+    },
+    "sign_accuracy": {
+      "value": null,
+      "n_obs": 0,
+      "status": "undefined",
+      "display_value": null,
+      "display_status": "not_ready"
+    },
+    "up_rate": {
+      "value": null,
+      "n_obs": 0,
+      "status": "undefined",
+      "display_value": null,
+      "display_status": "not_ready"
+    },
+    "width_80_pct": {
+      "value": null,
+      "n_obs": 0,
+      "unit": "percent",
+      "status": "undefined",
+      "display_value": null,
+      "display_status": "not_ready"
+    }
+  },
+  "by_horizon": [
+    {"h": 1, "coverage_80": {"covered_count": 0, "n_obs": 0, "display_value": null, "display_status": "counts_only", "n_base_dates": 0, "status": "undefined"}, "width_80": {"value": null, "n_obs": 0, "unit": "log_return", "status": "undefined", "display_value": null, "display_status": "counts_only"}, "sign_accuracy": {"value": null, "n_obs": 0, "status": "undefined", "display_value": null, "display_status": "counts_only"}, "up_rate": {"value": null, "n_obs": 0, "status": "undefined", "display_value": null, "display_status": "counts_only"}, "width_80_pct": {"value": null, "n_obs": 0, "unit": "percent", "status": "undefined", "display_value": null, "display_status": "counts_only"}},
+    {"h": 2, "coverage_80": {"covered_count": 0, "n_obs": 0, "display_value": null, "display_status": "counts_only", "n_base_dates": 0, "status": "undefined"}, "width_80": {"value": null, "n_obs": 0, "unit": "log_return", "status": "undefined", "display_value": null, "display_status": "counts_only"}, "sign_accuracy": {"value": null, "n_obs": 0, "status": "undefined", "display_value": null, "display_status": "counts_only"}, "up_rate": {"value": null, "n_obs": 0, "status": "undefined", "display_value": null, "display_status": "counts_only"}, "width_80_pct": {"value": null, "n_obs": 0, "unit": "percent", "status": "undefined", "display_value": null, "display_status": "counts_only"}},
+    {"h": 3, "coverage_80": {"covered_count": 0, "n_obs": 0, "display_value": null, "display_status": "counts_only", "n_base_dates": 0, "status": "undefined"}, "width_80": {"value": null, "n_obs": 0, "unit": "log_return", "status": "undefined", "display_value": null, "display_status": "counts_only"}, "sign_accuracy": {"value": null, "n_obs": 0, "status": "undefined", "display_value": null, "display_status": "counts_only"}, "up_rate": {"value": null, "n_obs": 0, "status": "undefined", "display_value": null, "display_status": "counts_only"}, "width_80_pct": {"value": null, "n_obs": 0, "unit": "percent", "status": "undefined", "display_value": null, "display_status": "counts_only"}},
+    {"h": 4, "coverage_80": {"covered_count": 0, "n_obs": 0, "display_value": null, "display_status": "counts_only", "n_base_dates": 0, "status": "undefined"}, "width_80": {"value": null, "n_obs": 0, "unit": "log_return", "status": "undefined", "display_value": null, "display_status": "counts_only"}, "sign_accuracy": {"value": null, "n_obs": 0, "status": "undefined", "display_value": null, "display_status": "counts_only"}, "up_rate": {"value": null, "n_obs": 0, "status": "undefined", "display_value": null, "display_status": "counts_only"}, "width_80_pct": {"value": null, "n_obs": 0, "unit": "percent", "status": "undefined", "display_value": null, "display_status": "counts_only"}},
+    {"h": 5, "coverage_80": {"covered_count": 0, "n_obs": 0, "display_value": null, "display_status": "counts_only", "n_base_dates": 0, "status": "undefined"}, "width_80": {"value": null, "n_obs": 0, "unit": "log_return", "status": "undefined", "display_value": null, "display_status": "counts_only"}, "sign_accuracy": {"value": null, "n_obs": 0, "status": "undefined", "display_value": null, "display_status": "counts_only"}, "up_rate": {"value": null, "n_obs": 0, "status": "undefined", "display_value": null, "display_status": "counts_only"}, "width_80_pct": {"value": null, "n_obs": 0, "unit": "percent", "status": "undefined", "display_value": null, "display_status": "counts_only"}},
+    {"h": 6, "coverage_80": {"covered_count": 0, "n_obs": 0, "display_value": null, "display_status": "counts_only", "n_base_dates": 0, "status": "undefined"}, "width_80": {"value": null, "n_obs": 0, "unit": "log_return", "status": "undefined", "display_value": null, "display_status": "counts_only"}, "sign_accuracy": {"value": null, "n_obs": 0, "status": "undefined", "display_value": null, "display_status": "counts_only"}, "up_rate": {"value": null, "n_obs": 0, "status": "undefined", "display_value": null, "display_status": "counts_only"}, "width_80_pct": {"value": null, "n_obs": 0, "unit": "percent", "status": "undefined", "display_value": null, "display_status": "counts_only"}},
+    {"h": 7, "coverage_80": {"covered_count": 0, "n_obs": 0, "display_value": null, "display_status": "counts_only", "n_base_dates": 0, "status": "undefined"}, "width_80": {"value": null, "n_obs": 0, "unit": "log_return", "status": "undefined", "display_value": null, "display_status": "counts_only"}, "sign_accuracy": {"value": null, "n_obs": 0, "status": "undefined", "display_value": null, "display_status": "counts_only"}, "up_rate": {"value": null, "n_obs": 0, "status": "undefined", "display_value": null, "display_status": "counts_only"}, "width_80_pct": {"value": null, "n_obs": 0, "unit": "percent", "status": "undefined", "display_value": null, "display_status": "counts_only"}}
+  ],
+  "data_status": "not_ready",
+  "disclaimer": "Dự báo mang tính tham khảo, không phải lời khuyên đầu tư."
+}
+```
+
+**collecting — synthetic**
+
+```json
+{
+  "asset": "gold",
+  "model_version": "baseline-q252",
+  "evaluation_kind": "rolling_8w",
+  "sample": "all",
+  "run_id": "synthetic-example-rolling-2026-11-07-gold",
+  "evaluated_at": "2026-11-07T18:00:00Z",
+  "window": {
+    "basis": "base_date",
+    "days": 56,
+    "window_start": "2026-09-13",
+    "window_end": "2026-11-07",
+    "target_cutoff_date": "2026-11-06",
+    "first_eligible_base_date": "2026-11-02"
+  },
+  "evaluation_evidence": {
+    "schedule_basis": "trading_calendar_and_predict_schedule",
+    "schedule_evidence_status": "not_audited_mvp",
+    "issuance_evidence_status": "verified_eligible_rows",
+    "expected_count": 10,
+    "published_count": 5,
+    "missing_count": 5
+  },
+  "overall": {
+    "coverage_80": {
+      "covered_count": 6,
+      "n_obs": 10,
+      "display_value": null,
+      "display_status": "insufficient_data",
+      "n_base_dates": 4,
+      "status": "ok",
+      "min_display_base_dates": 20
+    },
+    "width_80": {
+      "value": 0.014,
+      "n_obs": 10,
+      "status": "ok",
+      "unit": "log_return",
+      "display_value": null,
+      "display_status": "insufficient_data"
+    },
+    "sign_accuracy": {
+      "value": 0.444444,
+      "n_obs": 9,
+      "status": "ok",
+      "display_value": null,
+      "display_status": "insufficient_data"
+    },
+    "up_rate": {
+      "value": 0.7,
+      "n_obs": 10,
+      "status": "ok",
+      "display_value": null,
+      "display_status": "insufficient_data"
+    },
+    "width_80_pct": {
+      "value": 1.401338,
+      "n_obs": 10,
+      "unit": "percent",
+      "status": "ok",
+      "display_value": null,
+      "display_status": "insufficient_data"
+    }
+  },
+  "by_horizon": [
+    {"h": 1, "coverage_80": {"covered_count": 2, "n_obs": 4, "display_value": null, "display_status": "counts_only", "n_base_dates": 4, "status": "ok"}, "width_80": {"value": 0.012, "n_obs": 4, "status": "ok", "unit": "log_return", "display_value": null, "display_status": "counts_only"}, "sign_accuracy": {"value": 0.333333, "n_obs": 3, "status": "ok", "display_value": null, "display_status": "counts_only"}, "up_rate": {"value": 0.5, "n_obs": 4, "status": "ok", "display_value": null, "display_status": "counts_only"}, "width_80_pct": {"value": 1.200911, "n_obs": 4, "unit": "percent", "status": "ok", "display_value": null, "display_status": "counts_only"}},
+    {"h": 2, "coverage_80": {"covered_count": 1, "n_obs": 3, "display_value": null, "display_status": "counts_only", "n_base_dates": 3, "status": "ok"}, "width_80": {"value": 0.014, "n_obs": 3, "status": "ok", "unit": "log_return", "display_value": null, "display_status": "counts_only"}, "sign_accuracy": {"value": 0.333333, "n_obs": 3, "status": "ok", "display_value": null, "display_status": "counts_only"}, "up_rate": {"value": 0.666667, "n_obs": 3, "status": "ok", "display_value": null, "display_status": "counts_only"}, "width_80_pct": {"value": 1.401418, "n_obs": 3, "unit": "percent", "status": "ok", "display_value": null, "display_status": "counts_only"}},
+    {"h": 3, "coverage_80": {"covered_count": 2, "n_obs": 2, "display_value": null, "display_status": "counts_only", "n_base_dates": 2, "status": "ok"}, "width_80": {"value": 0.016, "n_obs": 2, "status": "ok", "unit": "log_return", "display_value": null, "display_status": "counts_only"}, "sign_accuracy": {"value": 0.5, "n_obs": 2, "status": "ok", "display_value": null, "display_status": "counts_only"}, "up_rate": {"value": 1.0, "n_obs": 2, "status": "ok", "display_value": null, "display_status": "counts_only"}, "width_80_pct": {"value": 1.600024, "n_obs": 2, "unit": "percent", "status": "ok", "display_value": null, "display_status": "counts_only"}},
+    {"h": 4, "coverage_80": {"covered_count": 1, "n_obs": 1, "display_value": null, "display_status": "counts_only", "n_base_dates": 1, "status": "ok"}, "width_80": {"value": 0.018, "n_obs": 1, "status": "ok", "unit": "log_return", "display_value": null, "display_status": "counts_only"}, "sign_accuracy": {"value": 1.0, "n_obs": 1, "status": "ok", "display_value": null, "display_status": "counts_only"}, "up_rate": {"value": 1.0, "n_obs": 1, "status": "ok", "display_value": null, "display_status": "counts_only"}, "width_80_pct": {"value": 1.805432, "n_obs": 1, "unit": "percent", "status": "ok", "display_value": null, "display_status": "counts_only"}},
+    {"h": 5, "coverage_80": {"covered_count": 0, "n_obs": 0, "display_value": null, "display_status": "counts_only", "n_base_dates": 0, "status": "undefined"}, "width_80": {"value": null, "n_obs": 0, "status": "undefined", "unit": "log_return", "display_value": null, "display_status": "counts_only"}, "sign_accuracy": {"value": null, "n_obs": 0, "status": "undefined", "display_value": null, "display_status": "counts_only"}, "up_rate": {"value": null, "n_obs": 0, "status": "undefined", "display_value": null, "display_status": "counts_only"}, "width_80_pct": {"value": null, "n_obs": 0, "unit": "percent", "status": "undefined", "display_value": null, "display_status": "counts_only"}},
+    {"h": 6, "coverage_80": {"covered_count": 0, "n_obs": 0, "display_value": null, "display_status": "counts_only", "n_base_dates": 0, "status": "undefined"}, "width_80": {"value": null, "n_obs": 0, "status": "undefined", "unit": "log_return", "display_value": null, "display_status": "counts_only"}, "sign_accuracy": {"value": null, "n_obs": 0, "status": "undefined", "display_value": null, "display_status": "counts_only"}, "up_rate": {"value": null, "n_obs": 0, "status": "undefined", "display_value": null, "display_status": "counts_only"}, "width_80_pct": {"value": null, "n_obs": 0, "unit": "percent", "status": "undefined", "display_value": null, "display_status": "counts_only"}},
+    {"h": 7, "coverage_80": {"covered_count": 0, "n_obs": 0, "display_value": null, "display_status": "counts_only", "n_base_dates": 0, "status": "undefined"}, "width_80": {"value": null, "n_obs": 0, "status": "undefined", "unit": "log_return", "display_value": null, "display_status": "counts_only"}, "sign_accuracy": {"value": null, "n_obs": 0, "status": "undefined", "display_value": null, "display_status": "counts_only"}, "up_rate": {"value": null, "n_obs": 0, "status": "undefined", "display_value": null, "display_status": "counts_only"}, "width_80_pct": {"value": null, "n_obs": 0, "unit": "percent", "status": "undefined", "display_value": null, "display_status": "counts_only"}}
+  ],
+  "data_status": "collecting",
+  "disclaimer": "Dự báo mang tính tham khảo, không phải lời khuyên đầu tư."
+}
+```
+
+**ready — synthetic**
+
+```json
+{
+  "asset": "gold",
+  "model_version": "baseline-q252",
+  "evaluation_kind": "rolling_8w",
+  "sample": "all",
+  "run_id": "synthetic-example-rolling-2026-12-12-gold",
+  "evaluated_at": "2026-12-12T18:00:00Z",
+  "window": {
+    "basis": "base_date",
+    "days": 56,
+    "window_start": "2026-10-18",
+    "window_end": "2026-12-12",
+    "target_cutoff_date": "2026-12-11",
+    "first_eligible_base_date": "2026-11-02"
+  },
+  "evaluation_evidence": {
+    "schedule_basis": "trading_calendar_and_predict_schedule",
+    "schedule_evidence_status": "not_audited_mvp",
+    "issuance_evidence_status": "verified_eligible_rows",
+    "expected_count": 34,
+    "published_count": 29,
+    "missing_count": 5
+  },
+  "overall": {
+    "coverage_80": {
+      "covered_count": 127,
+      "n_obs": 175,
+      "display_value": 0.725714,
+      "display_status": "ready",
+      "n_base_dates": 28,
+      "status": "ok",
+      "min_display_base_dates": 20
+    },
+    "width_80": {
+      "value": 0.01768,
+      "n_obs": 175,
+      "status": "ok",
+      "unit": "log_return",
+      "display_value": 0.01768,
+      "display_status": "ready"
+    },
+    "sign_accuracy": {
+      "value": 0.561644,
+      "n_obs": 146,
+      "status": "ok",
+      "display_value": 0.561644,
+      "display_status": "ready"
+    },
+    "up_rate": {
+      "value": 0.702857,
+      "n_obs": 175,
+      "status": "ok",
+      "display_value": 0.702857,
+      "display_status": "ready"
+    },
+    "width_80_pct": {
+      "value": 1.76901,
+      "n_obs": 175,
+      "unit": "percent",
+      "status": "ok",
+      "display_value": 1.76901,
+      "display_status": "ready"
+    }
+  },
+  "by_horizon": [
+    {"h": 1, "coverage_80": {"covered_count": 16, "n_obs": 28, "display_value": null, "display_status": "counts_only", "n_base_dates": 28, "status": "ok"}, "width_80": {"value": 0.012, "n_obs": 28, "status": "ok", "unit": "log_return", "display_value": null, "display_status": "counts_only"}, "sign_accuracy": {"value": 0.565217, "n_obs": 23, "status": "ok", "display_value": null, "display_status": "counts_only"}, "up_rate": {"value": 0.535714, "n_obs": 28, "status": "ok", "display_value": null, "display_status": "counts_only"}, "width_80_pct": {"value": 1.200654, "n_obs": 28, "unit": "percent", "status": "ok", "display_value": null, "display_status": "counts_only"}},
+    {"h": 2, "coverage_80": {"covered_count": 12, "n_obs": 27, "display_value": null, "display_status": "counts_only", "n_base_dates": 27, "status": "ok"}, "width_80": {"value": 0.014, "n_obs": 27, "status": "ok", "unit": "log_return", "display_value": null, "display_status": "counts_only"}, "sign_accuracy": {"value": 0.521739, "n_obs": 23, "status": "ok", "display_value": null, "display_status": "counts_only"}, "up_rate": {"value": 0.518519, "n_obs": 27, "status": "ok", "display_value": null, "display_status": "counts_only"}, "width_80_pct": {"value": 1.400795, "n_obs": 27, "unit": "percent", "status": "ok", "display_value": null, "display_status": "counts_only"}},
+    {"h": 3, "coverage_80": {"covered_count": 22, "n_obs": 26, "display_value": null, "display_status": "counts_only", "n_base_dates": 26, "status": "ok"}, "width_80": {"value": 0.016, "n_obs": 26, "status": "ok", "unit": "log_return", "display_value": null, "display_status": "counts_only"}, "sign_accuracy": {"value": 0.5, "n_obs": 22, "status": "ok", "display_value": null, "display_status": "counts_only"}, "up_rate": {"value": 0.653846, "n_obs": 26, "status": "ok", "display_value": null, "display_status": "counts_only"}, "width_80_pct": {"value": 1.600762, "n_obs": 26, "unit": "percent", "status": "ok", "display_value": null, "display_status": "counts_only"}},
+    {"h": 4, "coverage_80": {"covered_count": 23, "n_obs": 25, "display_value": null, "display_status": "counts_only", "n_base_dates": 25, "status": "ok"}, "width_80": {"value": 0.018, "n_obs": 25, "status": "ok", "unit": "log_return", "display_value": null, "display_status": "counts_only"}, "sign_accuracy": {"value": 0.619048, "n_obs": 21, "status": "ok", "display_value": null, "display_status": "counts_only"}, "up_rate": {"value": 1.0, "n_obs": 25, "status": "ok", "display_value": null, "display_status": "counts_only"}, "width_80_pct": {"value": 1.801111, "n_obs": 25, "unit": "percent", "status": "ok", "display_value": null, "display_status": "counts_only"}},
+    {"h": 5, "coverage_80": {"covered_count": 18, "n_obs": 24, "display_value": null, "display_status": "counts_only", "n_base_dates": 24, "status": "ok"}, "width_80": {"value": 0.02, "n_obs": 24, "status": "ok", "unit": "log_return", "display_value": null, "display_status": "counts_only"}, "sign_accuracy": {"value": 0.55, "n_obs": 20, "status": "ok", "display_value": null, "display_status": "counts_only"}, "up_rate": {"value": 0.625, "n_obs": 24, "status": "ok", "display_value": null, "display_status": "counts_only"}, "width_80_pct": {"value": 2.001041, "n_obs": 24, "unit": "percent", "status": "ok", "display_value": null, "display_status": "counts_only"}},
+    {"h": 6, "coverage_80": {"covered_count": 17, "n_obs": 23, "display_value": null, "display_status": "counts_only", "n_base_dates": 23, "status": "ok"}, "width_80": {"value": 0.022, "n_obs": 23, "status": "ok", "unit": "log_return", "display_value": null, "display_status": "counts_only"}, "sign_accuracy": {"value": 0.578947, "n_obs": 19, "status": "ok", "display_value": null, "display_status": "counts_only"}, "up_rate": {"value": 0.652174, "n_obs": 23, "status": "ok", "display_value": null, "display_status": "counts_only"}, "width_80_pct": {"value": 2.201487, "n_obs": 23, "unit": "percent", "status": "ok", "display_value": null, "display_status": "counts_only"}},
+    {"h": 7, "coverage_80": {"covered_count": 19, "n_obs": 22, "display_value": null, "display_status": "counts_only", "n_base_dates": 22, "status": "ok"}, "width_80": {"value": 0.024, "n_obs": 22, "status": "ok", "unit": "log_return", "display_value": null, "display_status": "counts_only"}, "sign_accuracy": {"value": 0.611111, "n_obs": 18, "status": "ok", "display_value": null, "display_status": "counts_only"}, "up_rate": {"value": 1.0, "n_obs": 22, "status": "ok", "display_value": null, "display_status": "counts_only"}, "width_80_pct": {"value": 2.401376, "n_obs": 22, "unit": "percent", "status": "ok", "display_value": null, "display_status": "counts_only"}}
+  ],
+  "data_status": "ready",
+  "disclaimer": "Dự báo mang tính tham khảo, không phải lời khuyên đầu tư."
+}
+```
+
+### Thêm sau
 
 #### `POST /chat` (tuần 4, Phước)
 
@@ -167,7 +485,7 @@ Hỏi đáp tiếng Việt về dự báo vàng, bạc, Brent, WTI. Lambda nhậ
 | `complex` | Claude Haiku 4.5 | `get_forecast` v2, `get_news`, tối đa 3 vòng | 1500 | `chatbot-haiku-v2` |
 
 - Router không chắc thì chọn `complex`. Router theo luật chưa xong; nếu chưa kịp cho demo 8/11 thì mọi câu đi `complex` (mục 9 ở cuối phần này).
-- Prompt v2 bản dev3 đã được Khải duyệt (review approve PR #38, 27/10) và khóa SHA-256 ngày 29/10 (`docs/experiments/chatbot-benchmark-v2-proposal.md` mục 11). Lambda dùng đúng bản prompt đã khóa.
+- Prompt v2 đang chờ Khải duyệt bản cuối và khóa SHA-256 ngày 3/11 (`docs/experiments/chatbot-benchmark-v2-proposal.md` mục 10). Lambda dùng đúng bản prompt đã khóa.
 
 **Nguồn dữ liệu của tool `get_forecast` (Khải chốt 26/10)**
 
