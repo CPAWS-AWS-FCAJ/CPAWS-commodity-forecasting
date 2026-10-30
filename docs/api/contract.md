@@ -5,7 +5,7 @@
 - Cập nhật 2026-10-25: thêm bản đề xuất `POST /chat` (Phước), chờ Tiến, Tuấn, Khải chốt các mục ở cuối phần đó
 - Cập nhật 2026-10-27: nguồn tin cho `get_news` (bảng `NewsLabels`, ADR-0003); `POST /chat` theo prompt và tool v2 (PR #38), tool đọc thẳng bảng `Forecasts` (Khải chốt 26/10), số liệu chi phí và thời gian theo lần chạy dev 26/10; sửa theo review của Tiến và Tuấn trên PR #41 (quyền IAM Bedrock cho global inference profile, hạn chót tính từ `requestTimeEpoch`, vị trí tài nguyên, hai loại `429`); chốt schema 7 trường của `NewsLabels` và cách chọn nguồn tin bằng `NEWS_TABLE_NAME`/`NEWS_DIR`
 - Cập nhật 2026-10-29: bảng `Forecasts` thêm `input_snapshot_dt` (ngày `dt=` của snapshot `clean/prices` mà `predict` đã dùng), ghi cho bản ghi champion từ PR #48; theo review của Tiến trên RFC #45 (điểm 2)
-- Cập nhật đề xuất 2026-10-30: Rolling Accuracy theo RFC #45 v4.6 và fixtures v3.1; chờ review/merge Contract, không xác nhận deploy.
+- Cập nhật 2026-10-30 theo RFC [#45](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/45) v4.6 (PR [#65](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/65)): Rolling Accuracy và fixtures v3.1; không xác nhận code/API/IAM đã deploy.
 - Người viết: Khải; góp ý: Long (bản "Chốt target, phân vị và đánh giá mô hình" và "Đánh giá các metric trong metrics.py", 15/10; review PR #6)
 - Người dùng: Tuấn (API, Cognito), Tiến (web, Lambda `predict`), Long (DLinear), Phước (tool `get_forecast` của chatbot)
 
@@ -139,11 +139,11 @@ Lỗi: `400 invalid_asset` (mã tài sản sai), `400 invalid_date`, `404 not_fo
 
 ### `GET /accuracy/{asset}` — Rolling Accuracy MVP
 
-**Cập nhật đề xuất ngày 30/10/2026 theo RFC #45 v4.6.** Thiết kế đã được Khải xác nhận; phần Contract này còn cần review/merge trước khi có hiệu lực. Không xác nhận code, IAM hoặc AWS đã deploy. RFC #45 là review-only; không dùng trạng thái thiết kế làm bằng chứng vận hành.
+**Cập nhật 2026-10-30 theo RFC [#45](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/45) v4.6 (PR [#65](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/65)).** RFC #45 là tài liệu review-only; Contract này xác lập quy tắc sau khi PR #65 được merge. Không xác nhận Accuracy API, IAM hoặc AWS đã deploy; không dùng trạng thái tài liệu làm bằng chứng vận hành.
 
 Dùng Cognito ID token và error envelope chung ở đầu mục Endpoint. Asset hỗ trợ: `gold`, `silver`, `brent`, `wti`; asset sai dùng `400 invalid_asset`. HTTP 200 với `data_status=not_ready` khi chưa có run phù hợp; lỗi xác thực/hạ tầng vẫn theo cơ chế hiện hành, không giả thành thiếu dữ liệu.
 
-Chỉ trả champion production hiện hành của asset, `evaluation_kind=rolling_8w`, `sample=all`, h=1..7 theo lịch tài sản. Không public S1a, paired reports, validation/test, pinball skill hoặc model/run tùy chọn. Không nhúng lịch sử forecast vào response này; endpoint lịch sử thuộc giai đoạn riêng.
+Chỉ trả champion production hiện hành của asset, `evaluation_kind=rolling_8w`, `sample=all`, h=1..7 theo lịch tài sản. Không public S1a, paired reports, validation/test, pinball skill hoặc model/run tùy chọn. Không nhúng lịch sử forecast vào response này; endpoint lịch sử thuộc giai đoạn riêng. **Các chỉ số đánh giá chuyên sâu** như `pinball_skill`, quantile hit rates và Brier ở phạm vi validation/test lưu S3 Parquet `eval/`, không trả qua `/accuracy/{asset}`; **không dùng RMSE, MAPE hay sai số trên mức giá**, không gọi tỷ lệ MAE là MASE (ADR-0008).
 
 #### Response: trường bắt buộc và kiểu dữ liệu
 
@@ -208,25 +208,25 @@ Ngưỡng dùng chung cho **mọi metric overall** là `overall.coverage_80.n_ba
 | Có completed run, từ 20 base dates và metric status=ok | ready | ready | Giá trị metric; coverage là covered_count/n_obs |
 | Đã đủ ngưỡng nhưng metric không tính được | ready | undefined | null, không biến undefined/not_applicable thành ready |
 
-Không có run: run/time/window dates và evidence counters null; metric value null, status undefined; các counts metric bằng 0 đúng fixtures, không biểu diễn một phép tính thành công bằng 0. Completed run hợp lệ nhưng không có cặp: collecting, `issuance_evidence_status=no_eligible_rows`, counts metric 0, values null; vẫn đủ 28 METRIC rows undefined theo schema.
+Không có run: run/time/window dates và evidence counters null; metric value null, status undefined; các counts metric bằng 0 đúng fixtures, không biểu diễn một phép tính thành công bằng 0. Completed run hợp lệ nhưng không có cặp: collecting, `issuance_evidence_status=no_eligible_rows`, counts metric 0, values null; vẫn đủ 28 METRIC rows undefined theo schema. **Enum đóng cho `display_status`:** overall chỉ `not_ready | insufficient_data | ready | undefined`; by_horizon chỉ `counts_only`. Web phải xử lý/kiểm tra đầy đủ các trạng thái này và báo lỗi đối với giá trị lạ; ví dụ synthetic không nhất thiết chứa tất cả trạng thái.
 
 **Mọi metric của by_horizon luôn `display_value=null`, `display_status=counts_only`**, kể cả khi data_status=ready. Web chỉ công bố counts theo h. Web đọc display fields, không lấy value nội bộ để vượt ngưỡng; riêng độ rộng chỉ hiển thị `width_80_pct.display_value`, không tự exp/chuyển log-width. Không cam kết ready trước 22/11/2026 hoặc vào một ngày cố định theo lịch.
 
 #### Champion, access pattern và provenance
 
-`MODEL_VERSIONS` và `CHAMPION_EFFECTIVE_BASE_DATES` là hai mapping đủ 4 asset tại `infra/app.py`, truyền cùng JSON env/release config cho Predict, Rolling job và Accuracy API. Effective date lấy từ ADR/release thực, không điền mốc minh họa. Predict ưu tiên map mới, chỉ fallback `MODEL_VERSION` nếu map chưa cấu hình trong giai đoạn chuyển đổi; fallback không cho phép đổi champion ngầm. API/Rolling không suy mapping từ STATE. Đổi một asset không reset ba asset khác; chỉ chấm từ effective base date của champion hiện hành.
+`MODEL_VERSIONS` và `CHAMPION_EFFECTIVE_BASE_DATES` là hai mapping đủ 4 asset tại `infra/app.py`, truyền cùng JSON env/release config cho Predict, Rolling job và Accuracy API. **Mốc khởi đầu của champion `baseline-q252` là `2026-10-26` cho cả 4 asset**, theo bằng chứng CloudTrail do Tiến cung cấp trong review PR #65: `CreateFunction cpaws-dev-predict` lúc `2026-10-25T09:15:08Z` (PR #32), không có `UpdateFunctionConfiguration` sau đó; lần phát hành theo lịch đầu tiên 27/10 12:15 UTC có `base_date=2026-10-26`. Đây là **effective base date theo phiên** được xác nhận từ lịch sử deploy, **không phải** cutover bảo vệ bất biến PR #48 và **không tự miễn legacy eligibility**. Tiến đưa hai mapping vào `infra/app.py` trong PR CDK S1a; trạng thái triển khai mapping cần được kiểm tra riêng. Predict ưu tiên map mới, chỉ fallback `MODEL_VERSION` nếu map chưa cấu hình trong giai đoạn chuyển đổi; fallback không cho phép đổi champion ngầm. API/Rolling không suy mapping từ STATE. Đổi một asset không reset ba asset khác; chỉ chấm từ effective base date của champion hiện hành.
 
 API reader chỉ GetItem/Query trên Accuracy, không ghi/Scan/GSI hoặc đọc Forecasts/S3. `GetItem(ASSET#asset, STATE, ConsistentRead=true)` → `Query(latest_run_pk, ConsistentRead=true)` phân trang hết. Kiểm META COMPLETED, model/effective date, run identity/order, 28 keys/hashes, derived payload/hash và provenance/cutoff; đọc lại STATE để phát hiện promote đồng thời, retry ngắn hoặc fail-closed not_ready. Pointer model cũ không được công bố. STATE chỉ `latest_run_pk`, `latest_run_id`, `latest_run_order` (LATEST_COMPLETED), không giữ champion/generation. Lifecycle/idempotency/IAM chi tiết ở Walk-forward §7; không cấp API reader quyền rộng hơn để dựng derived metrics.
 
-Mốc `created_at >= 2026-10-27T12:00:00Z` là eligibility, **không phải cutover**. Cutover PR #48 phải dựa vào sự kiện CloudFormation deploy thực tế, hành vi predict production và smoke test conditional write; không hardcode 30/10 hoặc 31/10, approve/build không chứng minh đã deploy, dry_run không ghi Forecasts. Sau cutover bắt buộc conditional-write provenance và input_snapshot_dt đúng snapshot/input-as-of. Trước cutover chỉ nhận từng record qua `LEGACY_ACCEPT_WITH_EVIDENCE`, với lịch/model/is_sample=false/không overwrite-reissue/input-as-of và audit reference được duyệt. Chỉ legacy đã duyệt được miễn snapshot field; thiếu evidence loại khỏi n_obs. Timestamp hoặc sự có mặt của snapshot field riêng lẻ không chứng minh provenance. Chưa xác nhận danh sách legacy 26–30/10 hay timestamp cutover production trong bản tài liệu này.
+Mốc `created_at >= 2026-10-27T12:00:00Z` là eligibility, **không phải cutover**. **Mốc deploy PR #48 do Tiến xác nhận trong review:** CloudFormation `PredictFunction UPDATE_COMPLETE` lúc `2026-10-30T08:10:06Z`, deploy code `ce77bcb` (bằng chứng vận hành PR #68). Đây là ranh giới triển khai cutover; vẫn phải xác minh lượt Predict production 12:15 UTC ngày 30/10 (`written=4`, `already_published=0`, đủ `input_snapshot_dt`) qua smoke test PR #68 trước khi kết luận hành vi conditional write đã được chứng thực. **Base_date 29/10**, phát hành theo lịch 30/10 12:15 UTC, là ứng viên **hậu cutover**, không được nhận như legacy; phải có `input_snapshot_dt` và provenance hợp lệ. Các record phát hành trước cutover cần audit legacy chỉ ở **base_date 26–28/10**, và chỉ từng record được duyệt `LEGACY_ACCEPT_WITH_EVIDENCE` mới được miễn snapshot field. Không tự nhận bản ghi đã eligible chỉ từ timestamp, sự tồn tại của field hoặc build/approve; `dry_run` không ghi Forecasts. Chưa có danh sách legacy được duyệt trong tài liệu này.
 
 #### Disclaimer và ba ví dụ response v3.1
 
-Lambda Accuracy khi triển khai phải dùng chung `forecast_format.DISCLAIMER`:
+Lambda `/accuracy` khi triển khai **chỉ import `DISCLAIMER` từ `forecast_format`**, dùng chung đúng chuỗi như các endpoint dự báo; **không sửa `forecast_format.py` trước 05/11/2026** vì file nằm trong phạm vi khóa SHA-256 của benchmark chatbot:
 
 > Dự báo mang tính tham khảo, không phải lời khuyên đầu tư.
 
-Các ví dụ sau giữ nguyên dữ liệu của `accuracy-json-fixtures-v3-1-final.zip`, **đều là synthetic examples**, không xác nhận production/cutover/legacy. Chúng mô tả response, không phải lịch Scheduler hoặc run_id production đã tính fingerprint. Giờ evaluated_at minh họa không thay cron đã chốt. Không thêm chữ “chỉ” từ ví dụ RFC cũ vào disclaimer.
+Các ví dụ sau giữ nguyên dữ liệu của fixtures Accuracy tại `tests/fixtures/accuracy/` (PR [#62](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/62): `not_ready.json`, `collecting.json`, `ready.json`), **đều là synthetic examples**, không xác nhận production/cutover/legacy. Đường dẫn trên là nguồn chuẩn sau khi PR #62 bổ sung fixtures vào repository; PR #65 không tự thêm hoặc sửa fixtures. Chúng mô tả response, không phải lịch Scheduler hoặc run_id production đã tính fingerprint. Giờ evaluated_at minh họa không thay cron đã chốt. Không thêm chữ “chỉ” từ ví dụ RFC cũ vào disclaimer.
 
 **not_ready — synthetic**
 
@@ -485,7 +485,7 @@ Hỏi đáp tiếng Việt về dự báo vàng, bạc, Brent, WTI. Lambda nhậ
 | `complex` | Claude Haiku 4.5 | `get_forecast` v2, `get_news`, tối đa 3 vòng | 1500 | `chatbot-haiku-v2` |
 
 - Router không chắc thì chọn `complex`. Router theo luật chưa xong; nếu chưa kịp cho demo 8/11 thì mọi câu đi `complex` (mục 9 ở cuối phần này).
-- Prompt v2 đang chờ Khải duyệt bản cuối và khóa SHA-256 ngày 3/11 (`docs/experiments/chatbot-benchmark-v2-proposal.md` mục 10). Lambda dùng đúng bản prompt đã khóa.
+- Prompt v2 bản dev3 đã được Khải duyệt (review approve PR [#38](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/38), 27/10) và khóa SHA-256 ngày 29/10 (`docs/experiments/chatbot-benchmark-v2-proposal.md` mục 11). Lambda dùng đúng bản prompt đã khóa.
 
 **Nguồn dữ liệu của tool `get_forecast` (Khải chốt 26/10)**
 
