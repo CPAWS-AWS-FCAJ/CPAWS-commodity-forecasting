@@ -896,6 +896,25 @@ def test_interval_label_accepts_width_from_tool_v2():
     assert CB.interval_label_errors(f"Khoảng 80% từ -{q05}% đến 1.28%.", calls)
 
 
+def test_interval_label_width_only_on_width_segment():
+    """Khải review PR #38: width trùng |q05| chỉ được bỏ qua trên đoạn nói về độ rộng ("rộng");
+    q05 gọi là đầu khoảng 80% ở đoạn khác vẫn bị bắt dù trùng một width."""
+    fixture = _forecast("gold")
+    result = CB.T.build_forecast_result(fixture)
+    q05 = round(abs(fixture["horizons"][0]["returns"][0]) * 100, 2)
+    result["horizons"][0]["width_80_pct"] = q05
+    calls = [{"name": "get_forecast", "input": {"asset": "gold"}, "ok": True,
+              "result": result, "source": fixture}]  # fmt: skip
+    assert CB.interval_label_errors(f"Khoảng 80% từ -{q05}% đến 1.28%.", calls)
+    assert CB.interval_label_errors(f"Độ rộng khoảng 80% là {q05} điểm %.", calls) == []
+
+
+def test_interval_width_words_in_scoring_lock(monkeypatch):
+    before = CB.scoring_config_sha256()
+    monkeypatch.setattr(C, "INTERVAL_WIDTH_WORDS", ("rộng", "hẹp"))
+    assert CB.scoring_config_sha256() != before
+
+
 def test_rescore_dev_results_and_refuse_official(tmp_path):
     dev = tmp_path / "dev"
     CB.run(CB.FakeStreamClient(QUESTIONS["complex"]), "complex", dev, dry_run=False, run_type="dev")

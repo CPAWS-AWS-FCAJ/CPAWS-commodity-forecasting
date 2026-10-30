@@ -440,6 +440,8 @@ def predict_asset(
         record = to_forecast_record(
             asset, base, last_price, q[0], model_version=model_version, **record_args
         )
+        # Ngày dt= của snapshot clean đã dùng; rolling_8w loại bản ghi thiếu trường này (RFC #45 mục 7)
+        record["input_snapshot_dt"] = snap.dt
         res = AssetResult(
             asset, STATUS_OK, base_date=_day(base), n_crossed=n_crossed, record=record
         )
