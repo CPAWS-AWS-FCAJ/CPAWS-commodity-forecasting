@@ -72,10 +72,11 @@ Chọn **phương án 2**.
    - **Theo từng h:** 2/42 nhóm tài sản × h × sample có cận dưới CI > 0, là vàng h1 [+0,74; +4,32] và vàng h2 [+0,59; +4,89]. Kết quả này chưa hiệu chỉnh cho kiểm định nhiều lần. DM vàng h1 có p = 0,006, sau hiệu chỉnh Holm còn 0,176.
    - **Thu hẹp so với kiểm định chéo:** trung bình 28 nhóm giảm từ +2,57 (cv-dm 2016–2018) xuống +1,25 (2019).
    - **Độ bền mô phỏng:** đổi seed hai lần cho trung bình 28 nhóm là +1,18 và +1,18; chạy 10000 đường cho +1,19. Kết quả không phụ thuộc nhiễu mô phỏng.
-3. **Production giữ `MODEL_VERSION=baseline-q252`** cho cả 4 tài sản. **S1a vẫn là challenger** (chạy song song theo PR #53), không đổi.
+3. **Champion giữ `baseline-q252` cho cả 4 tài sản:** `MODEL_VERSIONS[asset] = "baseline-q252"` với gold, silver, brent, wti. Từ PR #53, predict đọc `MODEL_VERSIONS` trước; `MODEL_VERSION` chỉ là giá trị dự phòng khi chưa cấu hình map. **S1a vẫn là challenger** (chạy song song theo PR #53), không đổi.
 4. **Kết thúc dò mô hình chỉ dùng giá đến hết dự án.**
    - Đây là lần thứ ba (K3, K3b, K4) một họ mô hình chỉ dùng giá không vượt mốc phân vị 252 phiên trên 1–7 phiên.
-   - Không có thí nghiệm mô hình nào khác trước khi đóng băng tính năng 22/11.
+   - Không mở thêm thí nghiệm mô hình chỉ dùng giá nào. Việc dừng chỉ áp dụng cho dò mô hình chỉ dùng giá, không áp dụng cho chấm `rolling_8w`, chạy song song S1a, chatbot, tin tức hay web.
+   - Trước khi đóng băng tính năng 22/11, nhóm không lên kế hoạch thí nghiệm mô hình dùng tín hiệu ngoài giá.
    - Nếu sau này có thí nghiệm dùng tín hiệu ngoài giá, thí nghiệm đó cần kế hoạch riêng, commit trước khi chạy, và phải ghi là lần dùng validation 2019 thứ 5.
 
 ## Hệ quả
