@@ -300,6 +300,9 @@ def test_scoring_inputs_and_direction_table(evaluated):
 # của cfecd62 trên cùng máy. Phần NumPy-only có tham số cố định vẫn so hash từng bit
 # (tests/test_fhs_numpy.py).
 TOL = {"rtol": 1e-6, "atol": 1e-10}
+# mô hình có bước fit arch: lệch tối đa đo trên CI Linux 2,0e-7 (log return), đặt atol gấp 10
+TOL_FIT = {"rtol": 1e-5, "atol": 2e-6}
+FIT_MODELS = {"fhs-gjr-t", "combo-eq3", "fhs-gjr-t-dm"}
 N_COMMON = [754, 754, 716, 755]
 REFERENCE = {
     "baseline-q252": {
@@ -407,18 +410,19 @@ GOLDEN_MCS_MEAN = {
 
 def _assert_matches_reference(forecasts, model):
     ref = REFERENCE[model]
+    tol = TOL_FIT if model in FIT_MODELS else TOL
     qs = [forecasts[model][a][1] for a in C.ASSETS]
     assert [len(q) for q in qs] == N_COMMON
     assert not any(np.asarray(forecasts[model][a][2]).any() for a in C.ASSETS)
     sample = [x for q in qs for x in (q[0, 0, 0], q[len(q) // 2, 3, 3], q[-1, 6, 6])]
     allq = np.concatenate([q.ravel() for q in qs])
-    np.testing.assert_allclose(sample, ref["sample"], **TOL)
+    np.testing.assert_allclose(sample, ref["sample"], **tol)
     np.testing.assert_allclose(
-        [np.abs(allq).sum(), (allq**2).sum()], [ref["abs_sum"], ref["sumsq"]], **TOL
+        [np.abs(allq).sum(), (allq**2).sum()], [ref["abs_sum"], ref["sumsq"]], **tol
     )
     # tổng có dấu triệt tiêu nhau (bản dm: −6,7 trên tổng trị tuyệt đối 2912) nên so theo thang
     # của tổng trị tuyệt đối, không theo chính nó
-    np.testing.assert_allclose(allq.sum(), ref["sum"], rtol=0, atol=TOL["rtol"] * ref["abs_sum"])
+    np.testing.assert_allclose(allq.sum(), ref["sum"], rtol=0, atol=tol["rtol"] * ref["abs_sum"])
 
 
 def _synthetic_mcs_named(drop=0):
@@ -449,9 +453,10 @@ def _synthetic_mcs_named(drop=0):
 
 
 def test_cv_and_cv_dm_forecasts_match_previous_commit_within_tolerance(built):
-    """Forecasts cv (4 mô hình) và cv-dm khớp giá trị chuẩn của commit trước trong sai số
-    rtol 1e-6, atol 1e-10: bước fit arch không tái lập từng bit giữa các hệ điều hành, nên tái
-    lập từng bit chỉ áp dụng trên cùng nền tảng (lần chạy thật so file parquet trên cùng máy)."""
+    """Forecasts cv (4 mô hình) và cv-dm khớp giá trị chuẩn của commit trước trong sai số: mốc và
+    S1a (chỉ NumPy) theo TOL; mô hình có bước fit arch theo TOL_FIT, vì fit không tái lập từng bit
+    giữa các hệ điều hành. Tái lập từng bit chỉ áp dụng trên cùng nền tảng (lần chạy thật so file
+    parquet trên cùng máy)."""
     cut, out, expected, _ = built
     for model in R.MODELS:
         _assert_matches_reference(out["forecasts"], model)
