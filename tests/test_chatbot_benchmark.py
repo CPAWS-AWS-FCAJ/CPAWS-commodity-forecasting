@@ -639,11 +639,27 @@ def test_dev_run_is_marked(tmp_path):
     assert summary["run_type"] == "dev" and summary["final_note"].startswith("LẦN CHẠY PHÁT TRIỂN")
 
 
+def _unlock_v2(monkeypatch) -> dict:
+    """Bộ v2 đã khóa 29/10; test nhánh "chưa khóa" tự đặt locked_sha256 = None."""
+    sets = copy.deepcopy(C.QUESTION_SETS)
+    sets["v2"]["locked_sha256"] = None
+    monkeypatch.setattr(C, "QUESTION_SETS", sets)
+    return sets
+
+
+def test_v2_locked_sha256_matches_current_files():
+    """Khóa 29/10 (đề xuất v2 mục 11): sửa câu hỏi, fixture, prompt v2, code tool hay tham số chấm
+    sau khi khóa thì test này đỏ, trước khi lần chạy official bị chặn."""
+    locked = C.QUESTION_SETS["v2"]["locked_sha256"]
+    assert locked == CB.lock_hashes("v2")
+    CB.verify_lock("v2")
+
+
 def test_official_v2_requires_matching_lock(tmp_path, monkeypatch):
     client = CB.FakeStreamClient(V2["simple"])
+    sets = _unlock_v2(monkeypatch)
     with pytest.raises(RuntimeError, match="chưa khóa"):
         CB.run(client, "simple", tmp_path / "a", dry_run=False, qset="v2")
-    sets = copy.deepcopy(C.QUESTION_SETS)
     sets["v2"]["locked_sha256"] = {**CB.lock_hashes("v2"), "fixtures": "0" * 64}
     monkeypatch.setattr(C, "QUESTION_SETS", sets)
     with pytest.raises(RuntimeError, match="fixtures"):
@@ -716,6 +732,7 @@ def test_score_manual_reads_v1_csv_without_instruction_column():
 
 
 def test_cli_official_v2_without_lock_stops_before_bedrock(capsys, monkeypatch):
+    _unlock_v2(monkeypatch)
     monkeypatch.setattr(CB, "bedrock_client", lambda *a: pytest.fail("không được tạo client"))
     assert CB.main(["--branch", "simple", "--set", "v2"]) == 2
     assert "chưa khóa" in capsys.readouterr().err

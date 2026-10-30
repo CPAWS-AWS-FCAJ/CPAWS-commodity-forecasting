@@ -3,7 +3,7 @@
 - Ngày: 24/10/2026
 - Người soạn: Phước
 - Người duyệt: Khải
-- Trạng thái: **Đã duyệt** (Khải, 25/10/2026), kèm các quyết định ở mục 7. Script đã sửa (mục 8) và sửa tiếp theo review PR #35 (mục 9). Chưa chạy.
+- Trạng thái: **Đã duyệt** (Khải, 25/10/2026), kèm các quyết định ở mục 7. Script đã sửa (mục 8) và sửa tiếp theo review PR #35 (mục 9). **Đã khóa SHA-256** ngày 29/10 (mục 11). Chưa chạy chính thức.
 - Căn cứ: ý kiến của Khải ngày 24/10: chạy lại trên cùng 60 câu cũ chỉ tính là lần chạy phát triển; trước 8/11 cần một bộ câu hỏi mới, chốt trước khi chạy. Kết quả và đề xuất của lần chạy 23/10 ở `docs/experiments/bedrock-model-test-2026-10.md`, mục 10.
 
 ## 1. Nguyên tắc
@@ -59,7 +59,7 @@
 | 1 | Khải duyệt câu hỏi, fixture, ngưỡng và các thay đổi ở mục 4 | 27/10 |
 | 2 | Sửa script theo mục 4, kèm test không gọi mạng; dry-run cả hai nhánh | 29/10 |
 | 3 | Sửa tool `get_forecast` (q10/q50/q90 có tên, không trả giá vàng/bạc) và prompt v2; chạy phát triển trên bộ v1 | 31/10 |
-| 4 | Khải duyệt prompt v2; **khóa SHA-256** của bộ v2 (câu hỏi, fixture, prompt) vào file này | 3/11 |
+| 4 | Khải duyệt prompt v2; **khóa SHA-256** của bộ v2 (câu hỏi, fixture, prompt) vào file này | 3/11 (xong 29/10, mục 11) |
 | 5 | Chạy chính thức bộ v2 một lần; Phước chấm tay; Khải chấm lại 10 câu (seed 7) | 5/11 |
 | 6 | Bổ sung kết quả vào báo cáo | 6/11 |
 
@@ -102,7 +102,7 @@ Còn lại trước khi khóa (3/11):
 1. Prompt v2 và tool `get_forecast` v2.
 2. Đổi `prompts` của bộ v2 trong config sang file v2.
 3. Thêm file tool v2 vào `TOOL_CODE_PATHS`. Tool v2 phải giữ `fx.usd_vnd` và `fx.date` như contract (HAIKU2-009 cần tỷ giá và ngày tỷ giá).
-4. Chạy `--print-lock --set v2`, dán kết quả vào `locked_sha256` và vào đề xuất này.
+4. ~~Chạy `--print-lock --set v2`, dán kết quả vào `locked_sha256` và vào đề xuất này~~: xong 29/10 (mục 11).
 
 ## 9. Sửa theo review PR #35 (Khải, 25/10/2026)
 
@@ -151,7 +151,7 @@ Kết quả ghi vào `docs/experiments/results/chatbot-benchmark-<ngày>-dev/`, 
 
 **Ghi chú cho Tiến:** khi làm Lambda `/chat`, đóng gói kèm `infra/lambda/forecast_api/forecast_format.py` ở gốc asset (tool import thẳng `forecast_format`; trong repo thì tool tự nạp theo đường dẫn).
 
-**Còn lại trước khi khóa (3/11):** Khải duyệt prompt v2; chạy `--print-lock --set v2`, dán vào `locked_sha256` và vào đề xuất này.
+**~~Còn lại trước khi khóa~~:** xong. Khải duyệt prompt v2 bản dev3 ở review approve PR #38 (27/10); khóa SHA-256 ngày 29/10 (mục 11).
 
 ### 10.1. Khải review PR #38 (26/10): prompt v2 duyệt có điều kiện
 
@@ -277,8 +277,8 @@ Kết quả ở `docs/experiments/results/chatbot-benchmark-2026-10-27-dev3/comp
 
 1. ~~Chạy dev lần 2 trên bộ v1 với prompt v2 đã sửa~~: xong 26/10 (`-dev2`, mục 10.2).
 2. ~~Sửa prompt Haiku và tool theo lỗi dev2, chạy dev lần 3~~: xong 27/10 (mục 10.6, `-dev3` ở mục 10.2). Prompt chốt ở bản dev3.
-3. ~~Khải chốt mục 10.4~~ (đã áp 27/10). ~~Chốt danh sách 7 câu phân tích độ nhạy~~ (27/10, mục 10.1). ~~Tiến approve `handler.py`~~ (27/10). Còn lại: Khải duyệt prompt v2 bản cuối.
-4. Khóa SHA-256 (3/11), chạy chính thức (5/11).
+3. ~~Khải chốt mục 10.4~~ (đã áp 27/10). ~~Chốt danh sách 7 câu phân tích độ nhạy~~ (27/10, mục 10.1). ~~Tiến approve `handler.py`~~ (27/10). ~~Khải duyệt prompt v2 bản cuối~~ (review approve PR #38, 27/10).
+4. ~~Khóa SHA-256~~ (29/10, mục 11). Còn lại: chạy chính thức (5/11).
 
 ### 10.6. Sửa cho dev3 (27/10): tool trả độ rộng khoảng, prompt Haiku
 
@@ -306,7 +306,28 @@ Không đổi prompt, tool hay cách chấm từng câu; chỉ đổi khóa và 
 
 - **Khóa SHA-256 thêm `set_config`:** băm `QUESTION_SETS[bộ]` (trừ `locked_sha256`) và `PROMPT_SETS` của bộ prompt đi kèm.
   - Trước đây đổi `news_default_to` (khung ngày mặc định của `get_news`), thư mục fixture, bộ prompt hay `tool_format` sau khi khóa mà khóa vẫn khớp.
-  - Khóa ngày 3/11 sẽ có 8 mục.
+  - Khóa có 8 mục (mục 11).
 - **`--rescore`:** `--branch` khác bài ghi trong `summary.json` thì dừng và báo lỗi rõ, thay vì `KeyError`.
 - **Test `exact_record`** (ghi chú của Tiến): kiểm tham số Query cho `?date=` như đã có với `latest_record`.
 - Script nằm trong `tool_code`, nên dev3 chạy sau các sửa này.
+
+## 11. Khóa SHA-256 bộ v2 (29/10/2026)
+
+- **Điều kiện:** Khải duyệt prompt v2 bản dev3 ở review approve PR #38 (27/10): "Mình duyệt prompt v2 bản dev3 làm bản khóa SHA-256 ngày 3/11. Không sửa thêm". Prompt Haiku v2 không đổi từ `4a88ef7` (27/10), prompt Nova v2 không đổi từ `a7b0f87` (26/10).
+- **Khóa sớm hơn mốc 3/11** vì PR #55 (Lambda `/chat`) không đụng file hay tham số nào trong khóa (`chat.py`, `news.py`, `quota.py`, `handler.py` và test của `/chat` nằm ngoài `TOOL_CODE_PATHS`).
+- **`tool_code`** gồm cả sửa kiểm tra nhãn khoảng 80% của PR #56 (28/10: số `width_80_*` chỉ hợp lệ trên đoạn có chữ "rộng"). Chấm lại dev, dev2, dev3 bằng code này không đổi kết quả.
+- Lệnh: `python scripts/benchmark/chatbot_benchmark.py --print-lock --set v2`, chạy trên `developer` tại `bdc6976`. Kết quả đã dán vào `QUESTION_SETS["v2"]["locked_sha256"]` (`configs/chatbot_benchmark.py`):
+
+| Mục | SHA-256 |
+|---|---|
+| `questions_simple` | `e6eb5ac6e32f1efac892326c6587ece48162e2b861300e18f47a2af9e5594e11` |
+| `prompt_simple` | `1246a14cbe38dd1ca90df393d7390703e50263e5ad0f750bdd9bb5e606f1af4f` |
+| `questions_complex` | `d7e0e14fa37d36cef5fe19dac4267ec22c1cb055bf3b54eb67cb56537cbb7540` |
+| `prompt_complex` | `a59e5cf5aa8668fd79a8ad2b3911bffc3c0d2ba30eec0bc8b7be94d46f7ae25a` |
+| `fixtures` | `554b2fbc62a14aef69395f28bdf8d1e775243fe26a44109f13928a1856783ab6` |
+| `tool_code` | `1e68386efb6c4bb5c5d171a7fe57bf2c44ac0f18197d4a7ca8ca5489015c6b8b` |
+| `scoring_config` | `0462aa7ec9aa55ed6c032c6059f848c60fea2e42c6f1cdd35e1357566309798b` |
+| `set_config` | `d2e1f478b852468b2ae7a41031763e644f0a8cddbb0bee76c9dbf7dc37c6b141` |
+
+- **Sau khi khóa:** không sửa câu hỏi, fixture, prompt v2, `TOOL_CODE_PATHS` hay tham số chấm. Lần chạy official kiểm khóa trước khi tạo client Bedrock; lệch bất kỳ mục nào thì dừng.
+- **Còn lại:** chạy chính thức một lần (5/11, Phước chạy sau `aws login --profile cpaws-dev`); Phước chấm tay; Khải chấm lại 10 câu (seed 7) không dùng Claude.
