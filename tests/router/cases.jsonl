@@ -1,0 +1,83 @@
+{"id": "R-001", "group": "greeting_meta", "question": "Chào bot", "expected_branch": "simple", "note": ""}
+{"id": "R-002", "group": "greeting_meta", "question": "xin chao, ban lam duoc gi?", "expected_branch": "simple", "note": "không dấu"}
+{"id": "R-003", "group": "greeting_meta", "question": "Hello! Bạn là ai thế?", "expected_branch": "simple", "note": ""}
+{"id": "R-004", "group": "greeting_meta", "question": "cảm ơn nha, hẹn gặp lại", "expected_branch": "simple", "note": ""}
+{"id": "R-005", "group": "greeting_meta", "question": "Tạm biệt", "expected_branch": "simple", "note": ""}
+{"id": "R-006", "group": "greeting_meta", "question": "Bot hỗ trợ những tài sản nào vậy?", "expected_branch": "simple", "note": ""}
+{"id": "R-007", "group": "greeting_meta", "question": "Mình mới dùng lần đầu, nên bắt đầu từ đâu?", "expected_branch": "simple", "note": ""}
+{"id": "R-008", "group": "greeting_meta", "question": "Can you answer in English?", "expected_branch": "simple", "note": "tiếng Anh"}
+{"id": "R-009", "group": "greeting_meta", "question": "Dự báo ở đây xa nhất được mấy phiên?", "expected_branch": "simple", "note": "hỏi về sản phẩm, không cần số liệu"}
+{"id": "R-010", "group": "greeting_meta", "question": "Dữ liệu trên trang cập nhật khi nào?", "expected_branch": "simple", "note": ""}
+{"id": "R-011", "group": "greeting_meta", "question": "ê có ai trả lời không", "expected_branch": "simple", "note": "tiếng lóng"}
+{"id": "R-012", "group": "greeting_meta", "question": "Thanks bot!", "expected_branch": "simple", "note": ""}
+{"id": "R-013", "group": "definition", "question": "Log return là gì vậy?", "expected_branch": "simple", "note": ""}
+{"id": "R-014", "group": "definition", "question": "q90 nghĩa là gì?", "expected_branch": "simple", "note": ""}
+{"id": "R-015", "group": "definition", "question": "Trung vị với trung bình khác nhau thế nào?", "expected_branch": "simple", "note": ""}
+{"id": "R-016", "group": "definition", "question": "Khoảng dự báo 80% có đảm bảo giá nằm trong đó không?", "expected_branch": "simple", "note": ""}
+{"id": "R-017", "group": "definition", "question": "xac suat tang la gi", "expected_branch": "simple", "note": "không dấu"}
+{"id": "R-018", "group": "definition", "question": "Ngày cơ sở trên trang là ngày gì?", "expected_branch": "simple", "note": ""}
+{"id": "R-019", "group": "definition", "question": "GLD có phải giá vàng giao ngay không?", "expected_branch": "simple", "note": "có tên tài sản nhưng hỏi khái niệm"}
+{"id": "R-020", "group": "definition", "question": "WTI và Brent khác nhau thế nào?", "expected_branch": "simple", "note": "có tên tài sản nhưng hỏi khái niệm"}
+{"id": "R-021", "group": "definition", "question": "Vì sao web chỉ hiện ba phân vị?", "expected_branch": "simple", "note": "có 'vì sao' nhưng không có tài sản"}
+{"id": "R-022", "group": "definition", "question": "Mốc thống kê 252 phiên là gì?", "expected_branch": "simple", "note": ""}
+{"id": "R-023", "group": "definition", "question": "Dữ liệu stale nghĩa là sao?", "expected_branch": "simple", "note": ""}
+{"id": "R-024", "group": "definition", "question": "Hợp đồng tương lai gần nhất là gì?", "expected_branch": "simple", "note": ""}
+{"id": "R-025", "group": "definition", "question": "Log return âm 0.01 thì giá giảm bao nhiêu phần trăm?", "expected_branch": "simple", "note": "hỏi số nhưng là khái niệm"}
+{"id": "R-026", "group": "definition", "question": "Kỳ hạn h tính theo ngày hay theo phiên?", "expected_branch": "simple", "note": ""}
+{"id": "R-027", "group": "out_of_scope", "question": "Giá xăng RON95 tuần tới thế nào?", "expected_branch": "simple", "note": ""}
+{"id": "R-028", "group": "out_of_scope", "question": "Giá dầu diesel ở cây xăng có giảm không?", "expected_branch": "simple", "note": "'dầu' thuộc cụm ngoài phạm vi"}
+{"id": "R-029", "group": "out_of_scope", "question": "Vàng SJC hôm nay bao nhiêu một lượng?", "expected_branch": "simple", "note": ""}
+{"id": "R-030", "group": "out_of_scope", "question": "Vàng nhẫn PNJ có nên mua không?", "expected_branch": "simple", "note": "ngoài phạm vi và xin tư vấn"}
+{"id": "R-031", "group": "out_of_scope", "question": "Bitcoin tuần sau lên không?", "expected_branch": "simple", "note": ""}
+{"id": "R-032", "group": "out_of_scope", "question": "Cổ phiếu VCB thế nào?", "expected_branch": "simple", "note": ""}
+{"id": "R-033", "group": "out_of_scope", "question": "Chiều nay vàng có tăng không?", "expected_branch": "simple", "note": "dự đoán trong ngày"}
+{"id": "R-034", "group": "out_of_scope", "question": "Dự đoán WTI trong 2 giờ tới", "expected_branch": "simple", "note": "dự đoán trong ngày"}
+{"id": "R-035", "group": "out_of_scope", "question": "Kể chuyện cười đi", "expected_branch": "simple", "note": ""}
+{"id": "R-036", "group": "out_of_scope", "question": "Viết code python sắp xếp list giúp mình", "expected_branch": "simple", "note": ""}
+{"id": "R-037", "group": "advice_only", "question": "Giờ mua vàng có hợp lý không bot?", "expected_branch": "simple", "note": ""}
+{"id": "R-038", "group": "advice_only", "question": "Mình có 50 triệu, chia vào vàng với dầu thế nào?", "expected_branch": "simple", "note": ""}
+{"id": "R-039", "group": "advice_only", "question": "Bán bạc luôn hay giữ thêm?", "expected_branch": "simple", "note": ""}
+{"id": "R-040", "group": "advice_only", "question": "Cho mình chiến lược lướt sóng WTI tuần này", "expected_branch": "simple", "note": "có kỳ hạn nhưng chỉ xin chiến lược"}
+{"id": "R-041", "group": "advice_only", "question": "Nên đầu tư vàng hay dầu?", "expected_branch": "simple", "note": "'đầu' và 'dầu' trong cùng câu"}
+{"id": "R-042", "group": "forecast", "question": "Dự báo vàng 3 phiên tới thế nào?", "expected_branch": "complex", "note": ""}
+{"id": "R-043", "group": "forecast", "question": "Ngày mai WTI có tăng không?", "expected_branch": "complex", "note": ""}
+{"id": "R-044", "group": "forecast", "question": "Brent tuần sau ra sao?", "expected_branch": "complex", "note": ""}
+{"id": "R-045", "group": "forecast", "question": "Tuần tới bạc diễn biến ra sao?", "expected_branch": "complex", "note": ""}
+{"id": "R-046", "group": "forecast", "question": "Ngày mai vàng khoảng bao nhiêu đô?", "expected_branch": "complex", "note": "cần số liệu nên sang Haiku"}
+{"id": "R-047", "group": "forecast", "question": "Xác suất tăng của bạc 7 phiên tới là bao nhiêu?", "expected_branch": "complex", "note": ""}
+{"id": "R-048", "group": "forecast", "question": "Khoảng 80% của Brent kỳ hạn 1 phiên?", "expected_branch": "complex", "note": ""}
+{"id": "R-049", "group": "forecast", "question": "q50 của WTI ở kỳ hạn 5 là bao nhiêu", "expected_branch": "complex", "note": ""}
+{"id": "R-050", "group": "forecast", "question": "vang 2 phien toi du bao ra sao", "expected_branch": "complex", "note": "không dấu"}
+{"id": "R-051", "group": "forecast", "question": "What's the gold forecast for tomorrow?", "expected_branch": "complex", "note": "tiếng Anh"}
+{"id": "R-052", "group": "forecast", "question": "Dự báo WTI tuần tới có gì cần lưu ý?", "expected_branch": "complex", "note": ""}
+{"id": "R-053", "group": "forecast", "question": "Tỷ giá USD/VND dùng cho dự báo vàng là bao nhiêu?", "expected_branch": "complex", "note": "cần fx từ tool"}
+{"id": "R-054", "group": "forecast", "question": "Dự báo vàng do mô hình nào làm ra?", "expected_branch": "complex", "note": "cần model_version từ tool"}
+{"id": "R-055", "group": "forecast", "question": "Dự báo bạc có phải dữ liệu thật không?", "expected_branch": "complex", "note": "cần is_sample từ tool"}
+{"id": "R-056", "group": "forecast", "question": "Brent ngày mai có đáng tin không?", "expected_branch": "complex", "note": "cần stale_sources từ tool"}
+{"id": "R-057", "group": "forecast", "question": "gia vang tuan toi", "expected_branch": "complex", "note": "không dấu, không có dấu hỏi"}
+{"id": "R-058", "group": "multi_part", "question": "So sánh xác suất tăng của vàng và bạc ở kỳ hạn 7 phiên", "expected_branch": "complex", "note": ""}
+{"id": "R-059", "group": "multi_part", "question": "Brent với WTI cái nào khoảng dự báo rộng hơn tuần tới?", "expected_branch": "complex", "note": ""}
+{"id": "R-060", "group": "multi_part", "question": "Cho mình dự báo cả 4 tài sản phiên tới", "expected_branch": "complex", "note": "không nêu tên tài sản"}
+{"id": "R-061", "group": "multi_part", "question": "Vàng 1 phiên và 7 phiên khác nhau thế nào?", "expected_branch": "complex", "note": "có 'khác nhau' nhưng hỏi dự báo"}
+{"id": "R-062", "group": "multi_part", "question": "Xếp hạng 4 tài sản theo xác suất tăng tuần tới", "expected_branch": "complex", "note": ""}
+{"id": "R-063", "group": "multi_part", "question": "Bạc và dầu thô, cái nào nghiêng giảm hơn?", "expected_branch": "complex", "note": ""}
+{"id": "R-064", "group": "multi_part", "question": "Brent tuần tới thế nào, còn giá xăng trong nước thì sao?", "expected_branch": "complex", "note": "câu hỗn hợp"}
+{"id": "R-065", "group": "news", "question": "Vì sao dự báo Brent nghiêng giảm?", "expected_branch": "complex", "note": ""}
+{"id": "R-066", "group": "news", "question": "Có tin gì mới về vàng không?", "expected_branch": "complex", "note": ""}
+{"id": "R-067", "group": "news", "question": "Tin tức nào đang ảnh hưởng tới bạc?", "expected_branch": "complex", "note": ""}
+{"id": "R-068", "group": "news", "question": "Tại sao WTI có thể tăng?", "expected_branch": "complex", "note": ""}
+{"id": "R-069", "group": "news", "question": "Tuần qua có tin lớn nào về dầu không?", "expected_branch": "complex", "note": ""}
+{"id": "R-070", "group": "news", "question": "Why is gold expected to fall?", "expected_branch": "complex", "note": "tiếng Anh"}
+{"id": "R-071", "group": "news", "question": "Điều gì có thể khiến giá dầu giảm tuần tới?", "expected_branch": "complex", "note": ""}
+{"id": "R-072", "group": "news", "question": "Lý do bạc tăng gần đây là gì?", "expected_branch": "complex", "note": "có 'là gì' nhưng hỏi lý do"}
+{"id": "R-073", "group": "embedded_advice", "question": "Phân tích dự báo vàng tuần tới rồi nói có nên mua không", "expected_branch": "complex", "note": ""}
+{"id": "R-074", "group": "embedded_advice", "question": "So sánh Brent và WTI rồi chọn giúp nên mua cái nào", "expected_branch": "complex", "note": ""}
+{"id": "R-075", "group": "embedded_advice", "question": "Bạc 5 phiên tới nghiêng tăng hay giảm, nếu giảm thì cắt lỗ ở đâu?", "expected_branch": "complex", "note": ""}
+{"id": "R-076", "group": "embedded_advice", "question": "Dự báo vàng thế nào, có nên chốt lời không?", "expected_branch": "complex", "note": ""}
+{"id": "R-077", "group": "embedded_advice", "question": "Xu hướng dầu tuần này ra sao, có nên vào lệnh?", "expected_branch": "complex", "note": ""}
+{"id": "R-078", "group": "ambiguous", "question": "Còn bạc thì sao?", "expected_branch": "complex", "note": "câu hỏi nối tiếp, không chắc"}
+{"id": "R-079", "group": "ambiguous", "question": "Thế còn dầu?", "expected_branch": "complex", "note": "không chắc"}
+{"id": "R-080", "group": "ambiguous", "question": "Vàng", "expected_branch": "complex", "note": "một từ"}
+{"id": "R-081", "group": "ambiguous", "question": "Xác suất bao nhiêu?", "expected_branch": "complex", "note": "hỏi số, không rõ tài sản"}
+{"id": "R-082", "group": "ambiguous", "question": "Nói thêm về cái đó đi", "expected_branch": "complex", "note": "không chắc"}
+{"id": "R-083", "group": "ambiguous", "question": "Mấy hôm nay thị trường dầu sao rồi?", "expected_branch": "complex", "note": ""}
