@@ -218,7 +218,13 @@ def aws(monkeypatch):
         "MODEL_VERSION": MV,
     }.items():
         monkeypatch.setenv(k, v)
-    for k in ("LAKE_PREFIX", "AWS_PROFILE", "AWS_DEFAULT_PROFILE", "SHADOW_MODELS"):
+    for k in (
+        "LAKE_PREFIX",
+        "AWS_PROFILE",
+        "AWS_DEFAULT_PROFILE",
+        "SHADOW_MODELS",
+        "MODEL_VERSIONS",
+    ):
         monkeypatch.delenv(k, raising=False)
     with mock_aws():
         s3 = boto3.client("s3", region_name=REGION)
@@ -1530,3 +1536,210 @@ def test_shadow_models_switch_and_config_errors(aws, monkeypatch, tmp_path, capl
     assert predict.main([*argv, "--base-date", BASE, "--shadow-models", "bogus"]) == 0
     assert (tmp_path / "out" / "gold.json").exists()
     assert not (tmp_path / "lake" / predict.SHADOW_PREFIX).exists()
+
+
+# ---------- champion theo tài sản (MODEL_VERSIONS, RFC #45 D10) ----------
+
+FAKE_MV = "fake-wti-2019"
+
+
+def _versions(**override) -> str:
+    return json.dumps({**dict.fromkeys(predict.PREDICT_ASSETS, BL), **override})
+
+
+def _mixed_loader(monkeypatch) -> None:
+    """baseline-q252 qua make_model_loader thật; version khác nạp FakeModel (cửa sổ 60)."""
+    real = predict.make_model_loader
+
+    def make(mv, **kw):
+        if mv == BL:
+            return real(mv, **kw)
+        return lambda a: predict.LoadedModel(FakeModel(), 60, {"asset": a, "model_version": mv})
+
+    monkeypatch.setattr(predict, "make_model_loader", make)
+
+
+def _without_created_at(obj: dict) -> dict:
+    return {k: v for k, v in obj.items() if k != "created_at"}
+
+
+@pytest.mark.parametrize("value", [None, "", "  "])
+def test_model_versions_unset_uses_model_version(aws, monkeypatch, value):
+    s3, table = aws
+    _write_lake(storage.S3Storage(BUCKET, client=s3), _prices())
+    _fake_loader(monkeypatch)
+    if value is not None:
+        monkeypatch.setenv("MODEL_VERSIONS", value)
+    out = lambda_predict.handler({}, None)
+    assert out["ok"] and out["written"] == 4
+    assert out["model_version"] == MV
+    assert out["model_versions"] == dict.fromkeys(predict.PREDICT_ASSETS, MV)
+    for asset in predict.PREDICT_ASSETS:
+        _assert_contract(_items(table, asset)[0], asset)
+
+
+def test_model_versions_overrides_model_version(aws, monkeypatch):
+    s3, table = aws
+    _write_lake(storage.S3Storage(BUCKET, client=s3), _prices(BL_START))
+    _forbid_artifact_download(monkeypatch)
+    monkeypatch.setenv("MODEL_VERSION", "not a version!")  # bị bỏ qua
+    monkeypatch.setenv("MODEL_VERSIONS", _versions())
+    out = lambda_predict.handler({}, None)
+    assert out["ok"] and out["model_version"] == BL
+    monkeypatch.delenv("MODEL_VERSION")  # không còn bắt buộc
+    _clear_table(table)
+    assert lambda_predict.handler({"dry_run": True}, None)["ok"]
+
+
+@pytest.mark.parametrize(
+    "value, match",
+    [
+        ('{"gold": "baseline-q252"', "not valid JSON"),
+        ('["baseline-q252"]', "JSON object"),
+        ('"baseline-q252"', "JSON object"),
+        (json.dumps(dict.fromkeys(["gold", "silver", "brent"], BL)), r"missing \['wti'\]"),
+        (_versions(xau=BL), r"unknown \['xau'\]"),
+        (_versions(GOLD=BL), r"unknown \['GOLD'\]"),
+        (_versions(wti="bad/version"), "invalid model_version"),
+        (_versions(wti=""), "invalid model_version"),
+        (_versions(wti=1), "invalid model_version"),
+        (_versions(wti=None), "invalid model_version"),
+        (_versions()[:-1] + ', "wti": "baseline-q252"}', "duplicate keys"),
+    ],
+)
+def test_model_versions_invalid_is_config_error(aws, monkeypatch, value, match):
+    """MODEL_VERSIONS sai → PredictConfigError trước khi đọc lake hay nạp model; không ghi gì."""
+    s3, table = aws
+    _write_lake(storage.S3Storage(BUCKET, client=s3), _prices(BL_START))
+    monkeypatch.setenv("SHADOW_MODELS", S1A)
+
+    def never(*a, **kw):
+        raise AssertionError("must not load models")
+
+    monkeypatch.setattr(predict, "make_model_loader", never)
+    monkeypatch.setenv("MODEL_VERSIONS", value)
+    with pytest.raises(lambda_predict.PredictConfigError, match=match):
+        lambda_predict.handler({}, None)
+    assert table.scan()["Count"] == 0
+    assert _shadow_objects(s3) == {}
+
+
+def test_resolve_model_versions():
+    assert predict.resolve_model_versions(BL, ["gold", "wti"]) == {"gold": BL, "wti": BL}
+    mapping = json.loads(_versions(wti=FAKE_MV))
+    assert predict.resolve_model_versions(mapping, ["wti"]) == {"wti": FAKE_MV}
+    with pytest.raises(ValueError, match="no model_version"):
+        predict.resolve_model_versions({"gold": BL}, ["gold", "wti"])
+    with pytest.raises(ValueError, match="invalid model_version"):
+        predict.resolve_model_versions({"gold": "a b"}, ["gold"])
+    with pytest.raises(ValueError, match="invalid model_version"):
+        predict.resolve_model_versions("", ["gold"])
+
+
+def test_mixed_model_versions_per_asset_records_and_shadow(aws, monkeypatch, caplog):
+    """gold, silver, brent baseline-q252; wti một version giả: mỗi bản ghi mang version của tài sản
+    đó, S1a chỉ chạy ở tài sản baseline, wti bị bỏ shadow kèm WARNING PREDICT_SHADOW_ASSET_SKIPPED
+    (không có PREDICT_SHADOW_CONFIG_INVALID: marker đó gắn alarm)."""
+    s3, table = aws
+    _write_lake(storage.S3Storage(BUCKET, client=s3), _prices(BL_START))
+    _forbid_artifact_download(monkeypatch)
+    _mixed_loader(monkeypatch)
+    monkeypatch.setenv("MODEL_VERSIONS", _versions(wti=FAKE_MV))
+    monkeypatch.setenv("SHADOW_MODELS", S1A)
+    caplog.set_level(logging.INFO, logger="cpaws.predict")
+
+    out = lambda_predict.handler({}, None)
+
+    assert out["ok"] and out["written"] == 4
+    assert out["model_version"] is None
+    assert out["model_versions"] == json.loads(_versions(wti=FAKE_MV))
+    for asset in predict.PREDICT_ASSETS:
+        items = _items(table, asset)
+        assert len(items) == 1
+        _assert_contract(items[0], asset, mv=FAKE_MV if asset == "wti" else BL)
+    assert out["shadow"] == {
+        "model_version": S1A,
+        "written": 3,
+        "already_published": 0,
+        "skipped": 0,
+        "failed": 0,
+        "disabled_assets": {"wti": "champion_not_baseline"},
+    }
+    assert "shadow" not in out["assets"]["wti"]
+    objects = _shadow_objects(s3)
+    names = sorted(k.rsplit("/", 1)[1] for k in objects)
+    assert names == ["brent.json", "gold.json", "silver.json"]
+    for body in objects.values():
+        assert json.loads(body)["shadow"]["champion_model_version"] == BL
+    assert not [r for r in caplog.records if r.levelno >= logging.ERROR]
+    assert "PREDICT_SHADOW_CONFIG_INVALID" not in caplog.text
+    warnings = [
+        r.getMessage()
+        for r in caplog.records
+        if r.levelno == logging.WARNING and "PREDICT_SHADOW_ASSET_SKIPPED" in r.getMessage()
+    ]
+    want = f"reason=champion_not_baseline asset=wti model_version={FAKE_MV}"
+    assert warnings == [f"PREDICT_SHADOW_ASSET_SKIPPED {want}"]
+
+    # Chỉ chạy wti: không tài sản baseline nào → ERROR CONFIG_INVALID, tắt shadow cả lần chạy
+    caplog.clear()
+    out = lambda_predict.handler({"assets": ["wti"], "dry_run": True}, None)
+    assert out["ok"] and out["model_version"] == FAKE_MV
+    assert out["model_versions"] == {"wti": FAKE_MV}
+    assert out["shadow"] == {"disabled_reason": "champion_not_baseline"}
+    assert any(
+        r.levelno == logging.ERROR
+        and "PREDICT_SHADOW_CONFIG_INVALID reason=champion_not_baseline" in r.getMessage()
+        for r in caplog.records
+    )
+    assert "PREDICT_SHADOW_ASSET_SKIPPED" not in caplog.text
+    # Chỉ chạy gold: wti không chạy nên không bị nhắc
+    caplog.clear()
+    out = lambda_predict.handler({"assets": ["gold"], "dry_run": True}, None)
+    assert out["model_versions"] == {"gold": BL}
+    assert "disabled_assets" not in out["shadow"]
+    assert "PREDICT_SHADOW_CONFIG_INVALID" not in caplog.text
+    assert "PREDICT_SHADOW_ASSET_SKIPPED" not in caplog.text
+
+
+def test_mixed_model_versions_artifact_error_names_asset_version(aws, monkeypatch, caplog):
+    """Version không phải baseline nạp từ lake theo đúng tài sản; thiếu artifact chỉ lỗi tài sản đó."""
+    s3, table = aws
+    _write_lake(storage.S3Storage(BUCKET, client=s3), _prices(BL_START))
+    monkeypatch.setenv("MODEL_VERSIONS", _versions(brent=FAKE_MV))
+    caplog.set_level(logging.INFO, logger="cpaws.predict")
+    with pytest.raises(lambda_predict.PredictFailed, match="brent"):
+        lambda_predict.handler({}, None)
+    assert f"PREDICT_MODEL_MISSING asset=brent model_version={FAKE_MV}" in caplog.text
+    assert f"models/brent/{FAKE_MV}/" in caplog.text
+    assert _items(table, "brent") == []
+    for asset in ("gold", "silver", "wti"):
+        _assert_contract(_items(table, asset)[0], asset, mv=BL)
+
+
+def test_all_baseline_model_versions_same_as_model_version(aws, monkeypatch):
+    """Cấu hình hiện tại (cả 4 là baseline-q252): MODEL_VERSIONS cho cùng item, cùng bản shadow và
+    cùng PREDICT_DONE với MODEL_VERSION=baseline-q252 (trừ created_at, là thời điểm chạy)."""
+    s3, table = aws
+    _write_lake(storage.S3Storage(BUCKET, client=s3), _prices(BL_START))
+    _shadow_env(monkeypatch)
+
+    def run() -> tuple[dict, dict, dict]:
+        out = lambda_predict.handler({}, None)
+        items = {a: _without_created_at(_items(table, a)[0]) for a in predict.PREDICT_ASSETS}
+        shadows = {k: _without_created_at(json.loads(b)) for k, b in _shadow_objects(s3).items()}
+        _clear_table(table)
+        for key in shadows:
+            s3.delete_object(Bucket=BUCKET, Key=key)
+        return out, items, shadows
+
+    old = run()
+    monkeypatch.setenv("MODEL_VERSION", "ignored-version")
+    monkeypatch.setenv("MODEL_VERSIONS", _versions())
+    new = run()
+    assert new == old
+    out, items, shadows = new
+    assert out["ok"] and out["written"] == 4 and out["model_version"] == BL
+    assert out["model_versions"] == dict.fromkeys(predict.PREDICT_ASSETS, BL)
+    assert out["shadow"]["written"] == 4 and "disabled_assets" not in out["shadow"]
+    assert len(items) == len(shadows) == 4
