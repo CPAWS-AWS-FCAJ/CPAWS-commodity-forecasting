@@ -25,6 +25,8 @@ Tài sản bị bỏ qua (cửa sổ không hợp lệ, thiếu phiên cuối, .
 có manifest.integration_eligible khác true, ...) không chặn các tài sản khác; sau khi ghi xong
 các tài sản tốt, raise PredictFailed để Lambda tính là lỗi (metric Errors của CloudWatch), giống
 Lambda ingest. Lambda không có cờ cho phép artifact thử nghiệm (chỉ CLI có --allow-experimental).
+Chạy lại cho (asset, base_date) đã có dự báo phát hành (is_sample = false): không ghi đè, log
+PREDICT_ALREADY_PUBLISHED, tài sản tính là xong (không raise); PREDICT_DONE đếm already_published.
 """
 
 from __future__ import annotations

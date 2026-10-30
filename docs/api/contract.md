@@ -4,6 +4,7 @@
 - Trạng thái: Đề xuất (chốt cùng ADR-0008 sau buổi họp 16/10)
 - Cập nhật 2026-10-25: thêm bản đề xuất `POST /chat` (Phước), chờ Tiến, Tuấn, Khải chốt các mục ở cuối phần đó
 - Cập nhật 2026-10-27: nguồn tin cho `get_news` (bảng `NewsLabels`, ADR-0003); `POST /chat` theo prompt và tool v2 (PR #38), tool đọc thẳng bảng `Forecasts` (Khải chốt 26/10), số liệu chi phí và thời gian theo lần chạy dev 26/10; sửa theo review của Tiến và Tuấn trên PR #41 (quyền IAM Bedrock cho global inference profile, hạn chót tính từ `requestTimeEpoch`, vị trí tài nguyên, hai loại `429`); chốt schema 7 trường của `NewsLabels` và cách chọn nguồn tin bằng `NEWS_TABLE_NAME`/`NEWS_DIR`
+- Cập nhật 2026-10-29: bảng `Forecasts` thêm `input_snapshot_dt` (ngày `dt=` của snapshot `clean/prices` mà `predict` đã dùng), ghi cho bản ghi champion từ PR #48; theo review của Tiến trên RFC #45 (điểm 2)
 - Người viết: Khải; góp ý: Long (bản "Chốt target, phân vị và đánh giá mô hình" và "Đánh giá các metric trong metrics.py", 15/10; review PR #6)
 - Người dùng: Tuấn (API, Cognito), Tiến (web, Lambda `predict`), Long (DLinear), Phước (tool `get_forecast` của chatbot)
 
@@ -50,6 +51,7 @@ Vàng và bạc: mô hình dự báo return của quỹ GLD, SLV (chuỗi đại
 | `stale_sources` | L of S | Nguồn bị lỗi lần chạy này (lấy từ `quality.json`); rỗng nếu không có |
 | `roll_in_horizon` | BOOL | Chỉ dầu: `true` khi có phiên roll (phiên đầu tiên sau một ngày đáo hạn hợp đồng) nằm trong (`base_date`, `target_date` của h = 7], tức ít nhất một return trong kỳ dự báo nối hai hợp đồng. Đáo hạn đúng `base_date` → `true`; đáo hạn đúng `target_date` của h = 7 → `false`. Web hiện dòng lưu ý; vàng, bạc luôn `false` |
 | `is_sample` | BOOL | `true` nếu là dữ liệu mẫu để test; web phải hiện nhãn "dữ liệu mẫu" |
+| `input_snapshot_dt` | S | Ngày `dt=` (`YYYY-MM-DD`) của snapshot `clean/prices` mà lần chạy `predict` đã dùng. Bản ghi tạo trước khi PR #48 deploy (dự kiến 31/10/2026) và bản ghi mẫu (`is_sample = true`) có thể thiếu; `rolling_8w` loại bản ghi thiếu trường này (RFC #45 mục 7). API và chatbot không trả trường này |
 
 Mỗi phần tử của `horizons`:
 

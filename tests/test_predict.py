@@ -54,6 +54,7 @@ ITEM_KEYS = {
     "stale_sources",
     "roll_in_horizon",
     "is_sample",
+    "input_snapshot_dt",
 }
 
 
@@ -162,9 +163,12 @@ def _local(tmp_path, name="lake"):
     return storage.LocalStorage(tmp_path / name)
 
 
-def _assert_contract(item: dict, asset: str, base: str = BASE, mv: str = MV) -> None:
+def _assert_contract(
+    item: dict, asset: str, base: str = BASE, mv: str = MV, snapshot_dt: str = DT
+) -> None:
     assert set(item) == ITEM_KEYS
     assert item["asset"] == asset and item["base_date"] == base
+    assert item["input_snapshot_dt"] == snapshot_dt
     assert item["model_version"] == mv and item["is_sample"] is False
     assert item["target_series"] == ASSETS[asset].primary.symbol
     assert item["price_unit"] == ("USD/oz" if asset in ("gold", "silver") else "USD/bbl")
@@ -181,6 +185,11 @@ def _assert_contract(item: dict, asset: str, base: str = BASE, mv: str = MV) -> 
         assert len(h["q"]) == 7 and all(isinstance(v, Decimal) for v in h["q"])
         assert all(a <= b for a, b in zip(h["q"], h["q"][1:], strict=False))
         assert isinstance(h["prob_up"], Decimal) and Decimal("0.05") <= h["prob_up"] <= 0.95
+
+
+def _forecast(record: dict) -> dict:
+    """Bản ghi bỏ input_snapshot_dt (nguồn gốc, khác nhau giữa các snapshot) để so nội dung dự báo."""
+    return {k: v for k, v in record.items() if k != "input_snapshot_dt"}
 
 
 def _no_floats(obj) -> bool:
@@ -285,6 +294,143 @@ def test_local_json_sink_writes_floats(tmp_path):
     rec = json.loads((tmp_path / "out" / "wti.json").read_text(encoding="utf-8"))
     assert rec["base_date"] == BASE and isinstance(rec["last_price"], float)
     assert rec["is_sample"] is False and len(rec["horizons"]) == 7
+
+
+# ---------- không ghi đè dự báo đã phát hành ----------
+
+
+def test_first_write_counts_written_not_already_published(aws, monkeypatch):
+    s3, table = aws
+    _write_lake(storage.S3Storage(BUCKET, client=s3), _prices())
+    _fake_loader(monkeypatch)
+    out = lambda_predict.handler({}, None)
+    assert out["ok"] and out["written"] == 4 and out["already_published"] == 0
+    assert not any("already_published" in a for a in out["assets"].values())
+    assert table.scan()["Count"] == 4
+
+
+def test_second_run_same_key_keeps_published_record(aws, monkeypatch, caplog):
+    s3, table = aws
+    _write_lake(storage.S3Storage(BUCKET, client=s3), _prices())
+    _fake_loader(monkeypatch)
+    lambda_predict.handler({}, None)
+    first = {a: _items(table, a) for a in predict.PREDICT_ASSETS}
+    caplog.set_level(logging.INFO, logger="cpaws.predict")
+
+    out = lambda_predict.handler({}, None)  # không raise PredictFailed
+
+    assert out["ok"] and out["written"] == 0 and out["already_published"] == 4
+    for asset in predict.PREDICT_ASSETS:
+        a = out["assets"][asset]
+        assert a["status"] == "ok" and a["already_published"] is True and "written_to" not in a
+        assert _items(table, asset) == first[asset]  # bản đã phát hành giữ nguyên
+        assert f"PREDICT_ALREADY_PUBLISHED asset={asset} base_date={BASE}" in caplog.text
+    assert all(
+        r.levelno == logging.WARNING
+        for r in caplog.records
+        if r.getMessage().startswith("PREDICT_ALREADY_PUBLISHED")
+    )
+
+
+def test_sample_record_is_replaced(aws, monkeypatch):
+    s3, table = aws
+    _write_lake(storage.S3Storage(BUCKET, client=s3), _prices())
+    sample = {"asset": "gold", "base_date": BASE, "model_version": "sample", "is_sample": True}
+    table.put_item(Item=sample)
+    _fake_loader(monkeypatch)
+    out = lambda_predict.handler({"assets": ["gold"]}, None)
+    assert out["ok"] and out["written"] == 1 and out["already_published"] == 0
+    items = _items(table, "gold")
+    assert len(items) == 1
+    _assert_contract(items[0], "gold")
+
+
+def test_champion_record_has_input_snapshot_dt(aws, monkeypatch, tmp_path):
+    s3, table = aws
+    snap_dt = "2019-06-30"  # khác DT để chắc giá trị lấy từ snapshot, không phải hằng số
+    _write_lake(storage.S3Storage(BUCKET, client=s3), _prices(), dt=snap_dt)
+    _fake_loader(monkeypatch)
+    out = lambda_predict.handler({}, None)
+    assert out["ok"] and out["written"] == 4 and out["already_published"] == 0
+    for asset in predict.PREDICT_ASSETS:
+        items = _items(table, asset)
+        assert len(items) == 1
+        _assert_contract(items[0], asset, snapshot_dt=snap_dt)
+
+    # Lần chạy thứ hai trên snapshot mới hơn: conditional write giữ bản đã phát hành
+    _write_lake(storage.S3Storage(BUCKET, client=s3), _prices(), dt="2019-07-01")
+    out = lambda_predict.handler({}, None)
+    assert out["written"] == 0 and out["already_published"] == 4
+    assert all(_items(table, a)[0]["input_snapshot_dt"] == snap_dt for a in predict.PREDICT_ASSETS)
+
+    st = _local(tmp_path)
+    _write_lake(st, _prices(), dt=snap_dt)
+    assert _run(st, predict.LocalJsonSink(tmp_path / "out"), assets=["wti"]).ok
+    rec = json.loads((tmp_path / "out" / "wti.json").read_text(encoding="utf-8"))
+    assert rec["input_snapshot_dt"] == snap_dt
+
+
+class _FailingTable:
+    def __init__(self, code: str):
+        self.code = code
+        self.calls: list[dict] = []
+
+    def put_item(self, **kw):
+        from botocore.exceptions import ClientError
+
+        self.calls.append(kw)
+        raise ClientError({"Error": {"Code": self.code, "Message": "x"}}, "PutItem")
+
+
+class _FakeResource:
+    def __init__(self, table):
+        self.table = table
+
+    def Table(self, name):  # tên theo boto3
+        return self.table
+
+
+def test_put_uses_condition_on_asset_and_is_sample():
+    table = _FailingTable("ConditionalCheckFailedException")
+    sink = predict.DynamoSink(TABLE, resource=_FakeResource(table))
+    assert sink.put({"asset": "gold", "base_date": BASE}) is None
+    kw = table.calls[0]
+    assert kw["ConditionExpression"] == "attribute_not_exists(#a) OR #s = :t"
+    assert kw["ExpressionAttributeNames"] == {"#a": "asset", "#s": "is_sample"}
+    assert kw["ExpressionAttributeValues"] == {":t": True}
+
+
+def test_other_client_error_still_fails(tmp_path, caplog):
+    from botocore.exceptions import ClientError
+
+    table = _FailingTable("ProvisionedThroughputExceededException")
+    sink = predict.DynamoSink(TABLE, resource=_FakeResource(table))
+    with pytest.raises(ClientError):
+        sink.put({"asset": "gold", "base_date": BASE})
+
+    st = _local(tmp_path)
+    _write_lake(st, _prices())
+    caplog.set_level(logging.INFO, logger="cpaws.predict")
+    run = _run(st, sink, assets=["gold", "wti"])
+    assert not run.ok
+    for r in run.results:
+        assert r.status == predict.STATUS_ERROR and r.reason == predict.REASON_EXCEPTION
+        assert not r.already_published and "ProvisionedThroughputExceeded" in r.detail
+    assert run.summary()["already_published"] == 0
+    assert "PREDICT_ALREADY_PUBLISHED" not in caplog.text
+
+
+def test_handler_raises_on_other_client_error(aws, monkeypatch):
+    s3, _ = aws
+    _write_lake(storage.S3Storage(BUCKET, client=s3), _prices())
+    _fake_loader(monkeypatch)
+    table = _FailingTable("ValidationException")
+    real = predict.DynamoSink
+    monkeypatch.setattr(
+        predict, "DynamoSink", lambda name: real(name, resource=_FakeResource(table))
+    )
+    with pytest.raises(lambda_predict.PredictFailed):
+        lambda_predict.handler({"assets": ["gold"]}, None)
 
 
 # ---------- cửa sổ không hợp lệ, thiếu phiên cuối ----------
@@ -431,7 +577,11 @@ def test_base_date_result_independent_of_later_sessions(tmp_path, caplog):
         assert r_full[asset].status == "ok", r_full[asset]
         assert r_full[asset].record["base_date"] == "2019-05-15"
         assert r_full[asset].record["stale_sources"] == []
-        assert r_full[asset].record == r_cut[asset].record == r_live[asset].record
+        assert _forecast(r_full[asset].record) == _forecast(r_cut[asset].record)
+        assert _forecast(r_cut[asset].record) == _forecast(r_live[asset].record)
+        assert r_full[asset].record["input_snapshot_dt"] == DT
+        assert r_cut[asset].record["input_snapshot_dt"] == "2019-05-16"
+        assert r_live[asset].record["input_snapshot_dt"] == "2019-05-16"
     for a, b in zip(m_full.calls, m_cut.calls, strict=True):
         np.testing.assert_array_equal(a, b)
 
@@ -749,7 +899,9 @@ def test_baseline_unchanged_by_future_data(tmp_path):
     r_full = _by_asset(_bl_run(st_full, base_date=BASE))
     for asset in predict.PREDICT_ASSETS:
         assert r_cut[asset].status == r_full[asset].status == "ok"
-        assert r_cut[asset].record == r_full[asset].record
+        assert _forecast(r_cut[asset].record) == _forecast(r_full[asset].record)
+        assert r_cut[asset].record["input_snapshot_dt"] == DT
+        assert r_full[asset].record["input_snapshot_dt"] == "2019-10-01"
         # quantile_baseline trên chuỗi có tương lai vẫn cho cùng giá trị tại BASE
         np.testing.assert_allclose(_q(r_full[asset].record), _q252_direct(full, asset), atol=1e-6)
 

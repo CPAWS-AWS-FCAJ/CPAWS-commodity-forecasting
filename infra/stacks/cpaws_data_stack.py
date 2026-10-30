@@ -298,7 +298,6 @@ class CpawsDataStack(Stack):
                 conditions={"StringLike": {"s3:prefix": ["clean/*", "models/*"]}},
             )
         )
-
         # Chỉ cho phép ghi kết quả shadow evaluation.
         role.add_to_policy(
             iam.PolicyStatement(
@@ -308,7 +307,8 @@ class CpawsDataStack(Stack):
             )
         )
 
-        # DynamoSink chỉ dùng put_item (ghi đè theo asset + base_date); không Query/Delete.
+        # DynamoSink chỉ dùng put_item có điều kiện: không ghi đè bản đã phát hành cùng
+        # asset + base_date, chỉ thay bản mẫu (is_sample = true); không Query/Delete.
         table_name = forecasts_table_name(env_name)
         role.add_to_policy(
             iam.PolicyStatement(
