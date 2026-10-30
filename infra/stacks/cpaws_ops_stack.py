@@ -1,4 +1,4 @@
-"""Stack CpawsOps: alarm cho Lambda ingest và predict, gửi email qua SNS."""
+"""Stack CpawsOps: alarm cho Lambda ingest, predict và /chat, gửi email qua SNS."""
 
 from typing import Any
 
@@ -8,6 +8,8 @@ from aws_cdk import aws_cloudwatch_actions as cw_actions
 from aws_cdk import aws_sns as sns
 from aws_cdk import aws_sns_subscriptions as subs
 from constructs import Construct
+
+from .shared import CHAT_INTERNAL_ERRORS_METRIC, CHAT_METRIC_NAMESPACE
 
 
 class CpawsOpsStack(Stack):
@@ -19,6 +21,7 @@ class CpawsOpsStack(Stack):
         env_name: str,
         ingest_function_name: str,
         predict_function_name: str,
+        chat_function_name: str | None = None,
         alarm_email: str | None = None,
         **kwargs: Any,
     ) -> None:
@@ -79,4 +82,52 @@ class CpawsOpsStack(Stack):
         )
         predict_alarm.add_alarm_action(cw_actions.SnsAction(self.alarm_topic))
 
+        if chat_function_name:
+            self._add_chat_alarms(env_name, chat_function_name)
+
         CfnOutput(self, "AlarmTopicArn", value=self.alarm_topic.topic_arn)
+
+    def _add_chat_alarms(self, env_name: str, chat_function_name: str) -> None:
+        """Hai alarm cho Lambda /chat: timeout/crash (Errors của Lambda) và lỗi không lường trước
+        mà handler đã bắt rồi trả 500 (metric filter ở CpawsApi). Lỗi 4xx, 429 và lỗi Bedrock trả
+        502/504 có mã riêng là hành vi đã thiết kế, không báo."""
+        chat_errors = cloudwatch.Metric(
+            namespace="AWS/Lambda",
+            metric_name="Errors",
+            dimensions_map={"FunctionName": chat_function_name},
+            statistic="Sum",
+            period=Duration.minutes(5),
+        )
+        chat_internal = cloudwatch.Metric(
+            namespace=CHAT_METRIC_NAMESPACE,
+            metric_name=CHAT_INTERNAL_ERRORS_METRIC,
+            statistic="Sum",
+            period=Duration.minutes(5),
+        )
+        at_least_threshold = cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD
+        for construct_id, name, description, metric in (
+            (
+                "ChatErrorsAlarm",
+                f"cpaws-{env_name}-chat-api-errors",
+                "Chat Lambda timed out or crashed (>= 1 error)",
+                chat_errors,
+            ),
+            (
+                "ChatInternalErrorsAlarm",
+                f"cpaws-{env_name}-chat-api-internal-errors",
+                "Chat Lambda returned 500 after an unexpected exception (>= 1)",
+                chat_internal,
+            ),
+        ):
+            alarm = cloudwatch.Alarm(
+                self,
+                construct_id,
+                alarm_name=name,
+                alarm_description=description,
+                metric=metric,
+                threshold=1,
+                evaluation_periods=1,
+                comparison_operator=at_least_threshold,
+                treat_missing_data=cloudwatch.TreatMissingData.NOT_BREACHING,
+            )
+            alarm.add_alarm_action(cw_actions.SnsAction(self.alarm_topic))

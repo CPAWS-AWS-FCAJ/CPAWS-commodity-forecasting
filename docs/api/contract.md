@@ -4,6 +4,7 @@
 - Trạng thái: Đề xuất (chốt cùng ADR-0008 sau buổi họp 16/10)
 - Cập nhật 2026-10-25: thêm bản đề xuất `POST /chat` (Phước), chờ Tiến, Tuấn, Khải chốt các mục ở cuối phần đó
 - Cập nhật 2026-10-27: nguồn tin cho `get_news` (bảng `NewsLabels`, ADR-0003); `POST /chat` theo prompt và tool v2 (PR #38), tool đọc thẳng bảng `Forecasts` (Khải chốt 26/10), số liệu chi phí và thời gian theo lần chạy dev 26/10; sửa theo review của Tiến và Tuấn trên PR #41 (quyền IAM Bedrock cho global inference profile, hạn chót tính từ `requestTimeEpoch`, vị trí tài nguyên, hai loại `429`); chốt schema 7 trường của `NewsLabels` và cách chọn nguồn tin bằng `NEWS_TABLE_NAME`/`NEWS_DIR`
+- Cập nhật 2026-10-30: hạ tầng `POST /chat` (CDK, Tiến): đóng gói asset bằng bundling cục bộ (`infra/stacks/chat_asset.py`), bảng `cpaws-<env>-chat-usage`, alarm; xem mục "Tài nguyên và quyền IAM của Lambda chat"
 - Người viết: Khải; góp ý: Long (bản "Chốt target, phân vị và đánh giá mô hình" và "Đánh giá các metric trong metrics.py", 15/10; review PR #6)
 - Người dùng: Tuấn (API, Cognito), Tiến (web, Lambda `predict`), Long (DLinear), Phước (tool `get_forecast` của chatbot)
 
@@ -410,7 +411,9 @@ Nguồn (tra 25/10/2026):
 **Tài nguyên và quyền IAM của Lambda chat (theo review của Tiến, Tuấn 27/10)**
 
 - **Lambda `cpaws-<env>-chat-api`** đặt trong `CpawsApiStack`, dùng chung RestApi, Cognito authorizer và throttling với API dự báo; Python 3.12, timeout 28 giây. Lambda dự báo giữ timeout 10 giây, chỉ có quyền đọc và không có quyền Bedrock.
-- **Đóng gói:** `infra/lambda/forecast_api/forecast_format.py` và `src/chatbot/tools.py` được chép vào thư mục asset lúc `cdk synth` bằng bundling cục bộ của CDK (không cần Docker). Không chép tay, để mỗi file chỉ có một bản nguồn. Chi tiết chốt ở PR code.
+- **Đóng gói:** `infra/stacks/chat_asset.py` chép `handler.py`, `forecast_format.py`, `src/chatbot/*.py`, hai prompt v2 và `news/*.json` vào thư mục asset lúc `cdk synth` bằng bundling cục bộ của CDK (không cần Docker, không `pip install`: chỉ stdlib + boto3). Không chép tay, để mỗi file chỉ có một bản nguồn. Thiếu file nguồn thì synth lỗi. Đổi code, prompt hoặc tin demo đều phải deploy lại `CpawsApi`.
+- **Thứ tự deploy:** `CpawsServing` (bảng chat-usage) trước `CpawsApi`, vì Lambda chat dựng ARN bảng theo tên.
+- **Cảnh báo (`CpawsOps`):** `cpaws-<env>-chat-api-errors` (timeout, crash: metric `Errors` của Lambda) và `cpaws-<env>-chat-api-internal-errors` (metric filter trên log `chat: unexpected error`, `chat: cannot initialise dependencies`, vì handler bắt mọi exception rồi trả 500).
 - **Bảng:**
   - `cpaws-<env>-chat-usage` đặt trong `CpawsServing`, cạnh bảng `Forecasts`: on-demand, TTL trên `expires_at`.
   - `NewsLabels` do pipeline tin tạo. Role của Lambda chat dựng ARN từ tên bảng (giống Lambda `predict`), không export chéo stack, để không phụ thuộc thứ tự deploy.
