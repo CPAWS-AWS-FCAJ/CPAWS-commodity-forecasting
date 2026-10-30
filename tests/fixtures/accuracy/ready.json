@@ -35,17 +35,31 @@
       "value": 0.01768,
       "n_obs": 175,
       "status": "ok",
-      "unit": "log_return"
+      "unit": "log_return",
+      "display_value": 0.01768,
+      "display_status": "ready"
     },
     "sign_accuracy": {
       "value": 0.561644,
       "n_obs": 146,
-      "status": "ok"
+      "status": "ok",
+      "display_value": 0.561644,
+      "display_status": "ready"
     },
     "up_rate": {
       "value": 0.702857,
       "n_obs": 175,
-      "status": "ok"
+      "status": "ok",
+      "display_value": 0.702857,
+      "display_status": "ready"
+    },
+    "width_80_pct": {
+      "value": 1.76901,
+      "n_obs": 175,
+      "unit": "percent",
+      "status": "ok",
+      "display_value": 1.76901,
+      "display_status": "ready"
     }
   },
   "by_horizon": [
@@ -63,17 +77,31 @@
         "value": 0.012,
         "n_obs": 28,
         "status": "ok",
-        "unit": "log_return"
+        "unit": "log_return",
+        "display_value": null,
+        "display_status": "counts_only"
       },
       "sign_accuracy": {
         "value": 0.565217,
         "n_obs": 23,
-        "status": "ok"
+        "status": "ok",
+        "display_value": null,
+        "display_status": "counts_only"
       },
       "up_rate": {
         "value": 0.535714,
         "n_obs": 28,
-        "status": "ok"
+        "status": "ok",
+        "display_value": null,
+        "display_status": "counts_only"
+      },
+      "width_80_pct": {
+        "value": 1.200654,
+        "n_obs": 28,
+        "unit": "percent",
+        "status": "ok",
+        "display_value": null,
+        "display_status": "counts_only"
       }
     },
     {
@@ -90,17 +118,31 @@
         "value": 0.014,
         "n_obs": 27,
         "status": "ok",
-        "unit": "log_return"
+        "unit": "log_return",
+        "display_value": null,
+        "display_status": "counts_only"
       },
       "sign_accuracy": {
         "value": 0.521739,
         "n_obs": 23,
-        "status": "ok"
+        "status": "ok",
+        "display_value": null,
+        "display_status": "counts_only"
       },
       "up_rate": {
         "value": 0.518519,
         "n_obs": 27,
-        "status": "ok"
+        "status": "ok",
+        "display_value": null,
+        "display_status": "counts_only"
+      },
+      "width_80_pct": {
+        "value": 1.400795,
+        "n_obs": 27,
+        "unit": "percent",
+        "status": "ok",
+        "display_value": null,
+        "display_status": "counts_only"
       }
     },
     {
@@ -117,17 +159,31 @@
         "value": 0.016,
         "n_obs": 26,
         "status": "ok",
-        "unit": "log_return"
+        "unit": "log_return",
+        "display_value": null,
+        "display_status": "counts_only"
       },
       "sign_accuracy": {
         "value": 0.5,
         "n_obs": 22,
-        "status": "ok"
+        "status": "ok",
+        "display_value": null,
+        "display_status": "counts_only"
       },
       "up_rate": {
         "value": 0.653846,
         "n_obs": 26,
-        "status": "ok"
+        "status": "ok",
+        "display_value": null,
+        "display_status": "counts_only"
+      },
+      "width_80_pct": {
+        "value": 1.600762,
+        "n_obs": 26,
+        "unit": "percent",
+        "status": "ok",
+        "display_value": null,
+        "display_status": "counts_only"
       }
     },
     {
@@ -144,17 +200,31 @@
         "value": 0.018,
         "n_obs": 25,
         "status": "ok",
-        "unit": "log_return"
+        "unit": "log_return",
+        "display_value": null,
+        "display_status": "counts_only"
       },
       "sign_accuracy": {
         "value": 0.619048,
         "n_obs": 21,
-        "status": "ok"
+        "status": "ok",
+        "display_value": null,
+        "display_status": "counts_only"
       },
       "up_rate": {
         "value": 1.0,
         "n_obs": 25,
-        "status": "ok"
+        "status": "ok",
+        "display_value": null,
+        "display_status": "counts_only"
+      },
+      "width_80_pct": {
+        "value": 1.801111,
+        "n_obs": 25,
+        "unit": "percent",
+        "status": "ok",
+        "display_value": null,
+        "display_status": "counts_only"
       }
     },
     {
@@ -171,17 +241,31 @@
         "value": 0.02,
         "n_obs": 24,
         "status": "ok",
-        "unit": "log_return"
+        "unit": "log_return",
+        "display_value": null,
+        "display_status": "counts_only"
       },
       "sign_accuracy": {
         "value": 0.55,
         "n_obs": 20,
-        "status": "ok"
+        "status": "ok",
+        "display_value": null,
+        "display_status": "counts_only"
       },
       "up_rate": {
         "value": 0.625,
         "n_obs": 24,
-        "status": "ok"
+        "status": "ok",
+        "display_value": null,
+        "display_status": "counts_only"
+      },
+      "width_80_pct": {
+        "value": 2.001041,
+        "n_obs": 24,
+        "unit": "percent",
+        "status": "ok",
+        "display_value": null,
+        "display_status": "counts_only"
       }
     },
     {
@@ -198,17 +282,31 @@
         "value": 0.022,
         "n_obs": 23,
         "status": "ok",
-        "unit": "log_return"
+        "unit": "log_return",
+        "display_value": null,
+        "display_status": "counts_only"
       },
       "sign_accuracy": {
         "value": 0.578947,
         "n_obs": 19,
-        "status": "ok"
+        "status": "ok",
+        "display_value": null,
+        "display_status": "counts_only"
       },
       "up_rate": {
         "value": 0.652174,
         "n_obs": 23,
-        "status": "ok"
+        "status": "ok",
+        "display_value": null,
+        "display_status": "counts_only"
+      },
+      "width_80_pct": {
+        "value": 2.201487,
+        "n_obs": 23,
+        "unit": "percent",
+        "status": "ok",
+        "display_value": null,
+        "display_status": "counts_only"
       }
     },
     {
@@ -225,20 +323,34 @@
         "value": 0.024,
         "n_obs": 22,
         "status": "ok",
-        "unit": "log_return"
+        "unit": "log_return",
+        "display_value": null,
+        "display_status": "counts_only"
       },
       "sign_accuracy": {
         "value": 0.611111,
         "n_obs": 18,
-        "status": "ok"
+        "status": "ok",
+        "display_value": null,
+        "display_status": "counts_only"
       },
       "up_rate": {
         "value": 1.0,
         "n_obs": 22,
-        "status": "ok"
+        "status": "ok",
+        "display_value": null,
+        "display_status": "counts_only"
+      },
+      "width_80_pct": {
+        "value": 2.401376,
+        "n_obs": 22,
+        "unit": "percent",
+        "status": "ok",
+        "display_value": null,
+        "display_status": "counts_only"
       }
     }
   ],
   "data_status": "ready",
-  "disclaimer": "Dự báo chỉ mang tính tham khảo, không phải lời khuyên đầu tư."
+  "disclaimer": "Dự báo mang tính tham khảo, không phải lời khuyên đầu tư."
 }
