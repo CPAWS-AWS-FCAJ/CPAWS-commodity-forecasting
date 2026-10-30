@@ -35,17 +35,31 @@
       "value": null,
       "n_obs": 0,
       "unit": "log_return",
-      "status": "undefined"
+      "status": "undefined",
+      "display_value": null,
+      "display_status": "not_ready"
     },
     "sign_accuracy": {
       "value": null,
       "n_obs": 0,
-      "status": "undefined"
+      "status": "undefined",
+      "display_value": null,
+      "display_status": "not_ready"
     },
     "up_rate": {
       "value": null,
       "n_obs": 0,
-      "status": "undefined"
+      "status": "undefined",
+      "display_value": null,
+      "display_status": "not_ready"
+    },
+    "width_80_pct": {
+      "value": null,
+      "n_obs": 0,
+      "unit": "percent",
+      "status": "undefined",
+      "display_value": null,
+      "display_status": "not_ready"
     }
   },
   "by_horizon": [
@@ -63,17 +77,31 @@
         "value": null,
         "n_obs": 0,
         "unit": "log_return",
-        "status": "undefined"
+        "status": "undefined",
+        "display_value": null,
+        "display_status": "counts_only"
       },
       "sign_accuracy": {
         "value": null,
         "n_obs": 0,
-        "status": "undefined"
+        "status": "undefined",
+        "display_value": null,
+        "display_status": "counts_only"
       },
       "up_rate": {
         "value": null,
         "n_obs": 0,
-        "status": "undefined"
+        "status": "undefined",
+        "display_value": null,
+        "display_status": "counts_only"
+      },
+      "width_80_pct": {
+        "value": null,
+        "n_obs": 0,
+        "unit": "percent",
+        "status": "undefined",
+        "display_value": null,
+        "display_status": "counts_only"
       }
     },
     {
@@ -90,17 +118,31 @@
         "value": null,
         "n_obs": 0,
         "unit": "log_return",
-        "status": "undefined"
+        "status": "undefined",
+        "display_value": null,
+        "display_status": "counts_only"
       },
       "sign_accuracy": {
         "value": null,
         "n_obs": 0,
-        "status": "undefined"
+        "status": "undefined",
+        "display_value": null,
+        "display_status": "counts_only"
       },
       "up_rate": {
         "value": null,
         "n_obs": 0,
-        "status": "undefined"
+        "status": "undefined",
+        "display_value": null,
+        "display_status": "counts_only"
+      },
+      "width_80_pct": {
+        "value": null,
+        "n_obs": 0,
+        "unit": "percent",
+        "status": "undefined",
+        "display_value": null,
+        "display_status": "counts_only"
       }
     },
     {
@@ -117,17 +159,31 @@
         "value": null,
         "n_obs": 0,
         "unit": "log_return",
-        "status": "undefined"
+        "status": "undefined",
+        "display_value": null,
+        "display_status": "counts_only"
       },
       "sign_accuracy": {
         "value": null,
         "n_obs": 0,
-        "status": "undefined"
+        "status": "undefined",
+        "display_value": null,
+        "display_status": "counts_only"
       },
       "up_rate": {
         "value": null,
         "n_obs": 0,
-        "status": "undefined"
+        "status": "undefined",
+        "display_value": null,
+        "display_status": "counts_only"
+      },
+      "width_80_pct": {
+        "value": null,
+        "n_obs": 0,
+        "unit": "percent",
+        "status": "undefined",
+        "display_value": null,
+        "display_status": "counts_only"
       }
     },
     {
@@ -144,17 +200,31 @@
         "value": null,
         "n_obs": 0,
         "unit": "log_return",
-        "status": "undefined"
+        "status": "undefined",
+        "display_value": null,
+        "display_status": "counts_only"
       },
       "sign_accuracy": {
         "value": null,
         "n_obs": 0,
-        "status": "undefined"
+        "status": "undefined",
+        "display_value": null,
+        "display_status": "counts_only"
       },
       "up_rate": {
         "value": null,
         "n_obs": 0,
-        "status": "undefined"
+        "status": "undefined",
+        "display_value": null,
+        "display_status": "counts_only"
+      },
+      "width_80_pct": {
+        "value": null,
+        "n_obs": 0,
+        "unit": "percent",
+        "status": "undefined",
+        "display_value": null,
+        "display_status": "counts_only"
       }
     },
     {
@@ -171,17 +241,31 @@
         "value": null,
         "n_obs": 0,
         "unit": "log_return",
-        "status": "undefined"
+        "status": "undefined",
+        "display_value": null,
+        "display_status": "counts_only"
       },
       "sign_accuracy": {
         "value": null,
         "n_obs": 0,
-        "status": "undefined"
+        "status": "undefined",
+        "display_value": null,
+        "display_status": "counts_only"
       },
       "up_rate": {
         "value": null,
         "n_obs": 0,
-        "status": "undefined"
+        "status": "undefined",
+        "display_value": null,
+        "display_status": "counts_only"
+      },
+      "width_80_pct": {
+        "value": null,
+        "n_obs": 0,
+        "unit": "percent",
+        "status": "undefined",
+        "display_value": null,
+        "display_status": "counts_only"
       }
     },
     {
@@ -198,17 +282,31 @@
         "value": null,
         "n_obs": 0,
         "unit": "log_return",
-        "status": "undefined"
+        "status": "undefined",
+        "display_value": null,
+        "display_status": "counts_only"
       },
       "sign_accuracy": {
         "value": null,
         "n_obs": 0,
-        "status": "undefined"
+        "status": "undefined",
+        "display_value": null,
+        "display_status": "counts_only"
       },
       "up_rate": {
         "value": null,
         "n_obs": 0,
-        "status": "undefined"
+        "status": "undefined",
+        "display_value": null,
+        "display_status": "counts_only"
+      },
+      "width_80_pct": {
+        "value": null,
+        "n_obs": 0,
+        "unit": "percent",
+        "status": "undefined",
+        "display_value": null,
+        "display_status": "counts_only"
       }
     },
     {
@@ -225,20 +323,34 @@
         "value": null,
         "n_obs": 0,
         "unit": "log_return",
-        "status": "undefined"
+        "status": "undefined",
+        "display_value": null,
+        "display_status": "counts_only"
       },
       "sign_accuracy": {
         "value": null,
         "n_obs": 0,
-        "status": "undefined"
+        "status": "undefined",
+        "display_value": null,
+        "display_status": "counts_only"
       },
       "up_rate": {
         "value": null,
         "n_obs": 0,
-        "status": "undefined"
+        "status": "undefined",
+        "display_value": null,
+        "display_status": "counts_only"
+      },
+      "width_80_pct": {
+        "value": null,
+        "n_obs": 0,
+        "unit": "percent",
+        "status": "undefined",
+        "display_value": null,
+        "display_status": "counts_only"
       }
     }
   ],
   "data_status": "not_ready",
-  "disclaimer": "Dự báo chỉ mang tính tham khảo, không phải lời khuyên đầu tư."
+  "disclaimer": "Dự báo mang tính tham khảo, không phải lời khuyên đầu tư."
 }
