@@ -17,9 +17,10 @@ from stacks.shared import ingest_function_name, predict_function_name
 # Đổi khi đẩy image mới: cdk deploy CpawsData -c ingest_image_tag=<commit>
 DEFAULT_INGEST_IMAGE_TAG = "5cfde32"
 
-# Tag image của Lambda predict = SHA ngắn của commit trên developer dùng để build (merge #27,
-# gồm #25 + #28). Đổi khi đẩy image mới: cdk deploy CpawsData -c predict_image_tag=<commit>
-DEFAULT_PREDICT_IMAGE_TAG = "ffeee05"
+# Tag image của Lambda predict = SHA ngắn của commit merge PR #48 trên developer (không ghi đè
+# dự báo đã phát hành, thêm input_snapshot_dt; deploy 30/10 08:10 UTC). Đổi khi đẩy image mới:
+# cdk deploy CpawsData -c predict_image_tag=<commit>
+DEFAULT_PREDICT_IMAGE_TAG = "ce77bcb"
 # Demo dùng mốc thống kê 252 phiên, không cần artifact (Khải chốt 22/10); DLinear là challenger.
 DEFAULT_PREDICT_MODEL_VERSION = "baseline-q252"
 
