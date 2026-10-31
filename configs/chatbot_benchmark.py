@@ -47,6 +47,38 @@ QUESTION_SETS = {
             "set_config": "d2e1f478b852468b2ae7a41031763e644f0a8cddbb0bee76c9dbf7dc37c6b141",
         },
     },
+    # Hai bộ chỉ chạy dev cho prompt chatbot-haiku-v3 (Khải chốt trên PR #66, 30/10; điều kiện
+    # ở docs/experiments/chatbot-haiku-v3-dev-plan.md). Chỉ chạy --branch complex --run-type dev.
+    # Không bao giờ khóa: require_lock True mà locked_sha256 None nên lần chạy official dừng
+    # trước khi gọi Bedrock. Bộ v2 ở trên giữ nguyên, khóa SHA-256 của nó không đổi.
+    # v2-seen: đúng file câu hỏi và fixture của bộ v2 sau lần chạy chính thức 30/10. Bộ đã xem,
+    # nên kết quả lạc quan và không báo cáo là "đạt".
+    "v2-seen": {
+        "questions": {
+            "simple": "tests/chatbot/v2/nova_simple_questions.jsonl",
+            "complex": "tests/chatbot/v2/haiku_complex_questions.jsonl",
+        },
+        "fixtures_dir": "tests/chatbot/v2/fixtures",
+        "prompt_set": "v3",
+        "news_default_to": "2026-10-21",  # base_date của fixture v2
+        "require_lock": True,
+        "holdout": False,
+        "locked_sha256": None,
+    },
+    # a-types-haiku: 8 câu loại bài A (chào hỏi, khái niệm, ngoài phạm vi, tư vấn đầu tư) chạy
+    # qua Haiku, vì demo chưa có router và mọi câu đi complex. Câu lấy nguyên từ bộ v2 bài A.
+    "a-types-haiku": {
+        "questions": {
+            "simple": "tests/chatbot/v2/nova_simple_questions.jsonl",
+            "complex": "tests/chatbot/haiku-v3-dev/haiku_a_type_questions.jsonl",
+        },
+        "fixtures_dir": "tests/chatbot/v2/fixtures",  # chỉ dùng nếu Haiku gọi tool ngoài ý muốn
+        "prompt_set": "v3",
+        "news_default_to": "2026-10-21",
+        "require_lock": True,
+        "holdout": False,
+        "locked_sha256": None,
+    },
 }
 DEFAULT_QUESTION_SET = "v1"
 
@@ -80,6 +112,16 @@ PROMPT_SETS = {
             "complex": "docs/prompts/chatbot-haiku-v2.md",
         },
         "prompt_versions": {"simple": "chatbot-nova-v2", "complex": "chatbot-haiku-v2"},
+        "tool_format": "v2",
+    },
+    # v3: chỉ đổi prompt Haiku (Khải chốt trên PR #66, 30/10); Nova giữ prompt v2, tool giữ v2.
+    # set_config của bộ v2 chỉ băm PROMPT_SETS["v2"], nên thêm v3 không lệch khóa bộ v2.
+    "v3": {
+        "prompts": {
+            "simple": "docs/prompts/chatbot-nova-v2.md",
+            "complex": "docs/prompts/chatbot-haiku-v3.md",
+        },
+        "prompt_versions": {"simple": "chatbot-nova-v2", "complex": "chatbot-haiku-v3"},
         "tool_format": "v2",
     },
 }
