@@ -1,9 +1,9 @@
 # Hợp đồng dữ liệu Walk-forward Evaluation — CPAWS
 
-- **Trạng thái: đã duyệt cho MVP validation 2019; mục 5.5, mục 7, mục 10 (phase 2) còn chờ Tuấn**
+- **Trạng thái: đã duyệt cho MVP validation 2019; cập nhật Rolling MVP 2026-10-30 theo RFC [#45](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/45) v4.6 (PR [#65](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/65)); external import/PIT nâng cao vẫn phase 2.**
 - Ngày soạn: 2026-10-18; cập nhật review Khải PR #12: 2026-10-19. Làm việc trên source giải nén cục bộ, không xác minh trạng thái merge từ xa.
-- Phạm vi: hợp đồng đầu vào/đầu ra của hai chức năng sinh dự báo và đánh giá; không triển khai Python, không chọn hệ lưu trữ.
-- Chỉ file này được tạo/chỉnh sửa trong nhiệm vụ. Không thay ADR, API contract, Accuracy Schema, code hoặc gói metrics đã bàn giao.
+- Phạm vi: hợp đồng đầu vào/đầu ra sinh dự báo và đánh giá; bổ sung storage/lifecycle Rolling MVP tại §7 theo RFC #45 v4.6, không triển khai Python.
+- Bản cập nhật 30/10 chỉ đồng bộ hai Contract API/Walk-forward; không sửa ADR, Accuracy Schema, code, fingerprint K4 hoặc kết quả đã bàn giao. Các ghi chú source ở §2 và §14.2 là đối chiếu lịch sử khi soạn 19/10, không xác nhận tình trạng deploy hiện tại.
 
 ## 1. Mục tiêu, trạng thái và quy ước
 
@@ -22,7 +22,7 @@ Nhãn nguồn trong tài liệu:
 | **[YÊU CẦU]** | Thiết kế/bối cảnh nhóm cung cấp trong yêu cầu nhiệm vụ này. |
 | **[ĐỀ XUẤT]** | Quyết định cụ thể của bản Draft này, cần review trước khi triển khai. |
 
-Các thiết kế mới chưa có xác nhận ở mục 5–9 vẫn là **[ĐỀ XUẤT]**; quy tắc gắn [KHẢI12] là quyết định đã được review cung cấp, không mở lại để lựa chọn. Việc cập nhật không đồng nghĩa reviewer đã phê duyệt toàn bộ phiên bản tài liệu này.
+Riêng Rolling MVP tại §7 được cập nhật 2026-10-30 theo quyết định thiết kế RFC [#45](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/45) v4.6 (PR [#65](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/65)). Các thiết kế khác chưa có xác nhận ở mục 5–9 vẫn là **[ĐỀ XUẤT]**; quy tắc gắn [KHẢI12] là quyết định đã được review cung cấp, không mở lại để lựa chọn. Việc cập nhật không đồng nghĩa reviewer đã phê duyệt toàn bộ phiên bản tài liệu này.
 
 `date` là ngày phiên ISO `YYYY-MM-DD`, không múi giờ; `timestamp` là ISO 8601 có UTC (`Z`). `number` phải hữu hạn. `null` là chưa có/không xác minh được/không áp dụng theo trường, khác `0` và `false`. Không serialize NaN/Infinity thành số JSON; không thay missing bằng 0.
 
@@ -92,6 +92,8 @@ Publication metadata thiếu/không xác định không được suy cửa sổ 
 | Accuracy [AS10] | Một metric/model/asset/h/sample/khoảng đánh giá/lần đánh giá | Tổng hợp từ Detail, giữ schema PR #10; fit_id không thêm vào khóa |
 
 ## 5. Internal Forecasts Schema
+
+Schema nội bộ dưới đây giữ cho historical evaluation và external import. Rolling MVP đọc Forecasts production theo API Contract và eligibility §7; không bắt buộc tạo Fits/manifest phát hành mới hoặc mở rộng Forecasts production bằng toàn bộ cột nội bộ.
 
 ### 5.1. Trường và bất biến
 
@@ -176,7 +178,7 @@ Publication metadata phải xác định được từ nguồn/ngày và rule t�
 | `verified_backtest` | Phải có bằng chứng lịch sử snapshot/revisions và input as-of; không suy từ snapshot mới nhất hoặc publication rule. trained_at thực tế có thể sau ngày lịch sử, không sửa thành năm 2018. | Chế độ PIT nâng cao/phase 2 |
 | `verified_production` | Cần timestamp phát hành và bằng chứng dữ liệu/artifact tồn tại trước phát hành; created_at riêng lẻ không đủ. | Phase 2 |
 
-Với hai chế độ verified, giữ điều kiện mọi input/artifact cần thiết sẵn sàng tại thời điểm mô phỏng/phát hành và không mang revision tương lai; đó là tiêu chuẩn **mạnh hơn** publication-rule MVP. Tự khai verified nhưng thiếu bằng chứng thì từ chối xác nhận verified; không tự đổi nhãn. Không trộn provenance khác nhau vào cùng run tổng hợp. Các yêu cầu production/import/rolling_8w ở mục này và mục 7/10 còn cần Tuấn review giai đoạn 2, không chặn MVP publication-rule theo quyết định của Khải.
+Với hai chế độ verified, giữ điều kiện mọi input/artifact cần thiết sẵn sàng tại thời điểm mô phỏng/phát hành và không mang revision tương lai; đó là tiêu chuẩn **mạnh hơn** publication-rule MVP. Tự khai verified nhưng thiếu bằng chứng thì từ chối xác nhận verified; không tự đổi nhãn. Không trộn provenance khác nhau vào cùng run tổng hợp. External import/PIT nâng cao ở mục này và mục 10 vẫn cần review phase 2. Rolling MVP dùng eligibility/provenance riêng tại §7; không đổi điều kiện validation publication-rule hoặc tự gắn verified_production cho legacy.
 
 ## 6. Fits metadata
 
@@ -203,22 +205,99 @@ Baseline không tạo Forecasts hoặc Fits; không tạo fit_id=null/no_trainin
 
 Tương lai retrain: mỗi forecast tham chiếu fit có nhãn đã công bố không muộn hơn as_of_time tương ứng; production còn yêu cầu trained_at không muộn hơn phát hành. Một model_version nhiều fit_id hợp lệ nếu manifest chọn đúng fit mỗi origin. Không cấm máy móc mọi dữ liệu từ 2020 trong mọi chế độ tương lai; phải chốt trước giao thức retrain và ngăn dùng nhãn chưa sẵn sàng. MVP vẫn từ chối retrain_every khác None. Metadata chỉ là khai báo/audit, không chứng minh tuyệt đối quá trình fit không rò rỉ.
 
-## 7. Lịch ngày dự báo kỳ vọng
+## 7. Lịch ngày dự báo kỳ vọng và ngoại lệ Rolling MVP
 
-Cfg có `evaluation_start`, `evaluation_end`, `target_cutoff_date`, `evaluation_kind`, `horizons`, `assets`, `forecast_run_id` được chọn theo model_version và thời điểm evaluate `evaluation_as_of_time`. Theo **[REVIEW]**, `evaluation_kind` (`validation`, `test`, `rolling_8w`) và `target_cutoff_date` là **cột bắt buộc trong Accuracy và thuộc khóa logic**; không chỉ lưu trong cfg. Evaluate phải ghi đúng hai giá trị này trên mọi dòng kết quả. Giao tiếp các metadata cfg còn lại là đề xuất của Draft.
+**Cập nhật 2026-10-30 theo RFC [#45](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/45) v4.6 (PR [#65](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/65)).** Đây là cập nhật Contract cho `rolling_8w` MVP; **không xác nhận AWS đã triển khai**. Ngoại lệ dưới đây chỉ dành cho `rolling_8w` MVP, không nới provenance, manifest, common mask, Fits hay giao thức validation/test/import bên ngoài.
 
-| Chế độ | Tập kỳ vọng | Điều kiện |
-|---|---|---|
-| validation/test lịch sử | Mọi phiên tài sản trong khoảng ngày gốc đóng `[start,end]` × các h cấu hình (MVP 1..7) | Lấy từ lịch, **không lấy từ các ngày còn giá hoặc có Forecasts**; giữ origin cuối kỳ dù target vượt cutoff để đếm loại |
-| `rolling_8w` | Manifest phát hành production trong cửa sổ 8 tuần, có asset/base_date/h và nguồn model/run kỳ vọng | Không giả định phát hành mọi phiên. Cách neo 8 tuần, lịch phát hành và chính sách ingest/predict chưa có: **[CẦN KHẢI/TUẤN XÁC NHẬN]** |
+### 7.1. Validation/test lịch sử — giữ quy tắc hiện hành
 
-**Phạm vi [KHẢI12]:** MVP chỉ validation 2019 với model/scaler cố định và make_windows trên mọi phiên asset. `rolling_8w`, lịch phát hành thật, production import và các yêu cầu mở của Tuấn là **phase 2**, không là điều kiện chặn MVP. Giao thức test tương lai tiếp tục phải khóa trước khi dùng, không mở tập 2020+ ở nhiệm vụ này.
+Cfg có `evaluation_start`, `evaluation_end`, `target_cutoff_date`, `evaluation_kind`, `horizons`, `assets`, `forecast_run_id` theo model_version và `evaluation_as_of_time`. `evaluation_kind` và `target_cutoff_date` là cột bắt buộc, thuộc khóa logic Accuracy, không chỉ metadata cfg.
 
-Left join expected grid với Forecasts theo run/model/asset/base_date/h, lấy fit_id từ fit cố định đã khai cho asset trong MVP (lịch fit phase 2 khi retrain được hỗ trợ). Thiếu dòng → Detail tổng hợp status/reason=no_forecast_row; không suy fit từ dòng lân cận. Giữ counters riêng cho invalid_input_window, generation_error và no_forecast_row. make_windows trả valid=False vẫn tạo lần thử có lý do, không để join biến thành dòng vắng.
+Expected grid lịch sử là mọi phiên tài sản trong khoảng ngày gốc đóng `[start,end]` × h=1..7, lấy từ lịch, không từ các ngày còn giá/Forecasts. Giữ origin cuối kỳ dù target vượt cutoff để đếm loại. MVP validation 2019 dùng model/scaler cố định, make_windows trên mọi phiên; test 2020+ chỉ theo giao thức đã khóa.
 
-Forecasts ngoài khoảng đang chấm được bỏ qua có đếm; dòng sai lịch hoặc h không hợp lệ bị từ chối ở validation cấu trúc, không đổi base_date. Snapshot giá bắt đầu quá muộn để tái tạo warm-up/cửa sổ input là lỗi chuẩn bị dữ liệu cần báo rõ hoặc lần thử insufficient_input_history; không lặng lẽ cắt ngày bắt đầu đánh giá. Một số origin có baseline dưới 200 là loại từng điểm, không tự làm mất cả run.
+Left join grid với Forecasts theo run/model/asset/base_date/h; fit_id từ fit cố định khai cho asset (lịch fit riêng khi retrain được hỗ trợ). Thiếu dòng → Detail tổng hợp no_forecast_row, không suy fit từ dòng lân cận. Giữ counters invalid_input_window, generation_error và no_forecast_row; valid=False của make_windows vẫn là lần thử có lý do. Không tạo forecast thay thế.
 
-Thiếu manifest rolling_8w → không thể xác định no_forecast_row hoặc tuyên bố đủ coverage. Đề xuất từ chối báo cáo chính thức, chỉ cho chấm các dòng có sẵn dưới run thăm dò riêng có cảnh báo; không giả lập lịch production từ ingest cron.
+Forecasts ngoài khoảng chấm bỏ qua có đếm; sai lịch/h bị từ chối, không dịch ngày. Snapshot thiếu warm-up là lỗi chuẩn bị dữ liệu hoặc insufficient_input_history, không cắt ngày bắt đầu đánh giá ngầm. Baseline dưới 200 loại từng điểm theo common mask, không tự làm mất cả run. Giữ nguyên tất cả điều kiện lịch sử tại §§5–6, 8–12.
+
+### 7.2. Rolling window, Scheduler và expected schedule
+
+Rolling production chỉ `evaluation_kind=rolling_8w`, `sample=all`, 4 asset với h=1..7 theo lịch riêng (NYSE cho GLD/SLV; CME cho BZ=F/CL=F). Window dựa trên base_date, 56 ngày lịch UTC inclusive: `evaluation_start=window_start=job_utc_date-55 ngày`, `evaluation_end=window_end=job_utc_date`. Không co window theo effective date hoặc ngày thực có forecast; cutoff nhãn riêng asset.
+
+Job sau Predict, **`cron(45 13 ? * TUE-SAT *)` UTC**, 13:45 UTC / 20:45 Việt Nam, một run mỗi asset khi input READY. Lambda timeout 300 giây, Scheduler retry=0, không reserved concurrency; idempotency bằng run fingerprint/conditional writes, không dựa vào việc tránh chạy đồng thời. Snapshot/quality hoặc nguồn actual chưa READY → log và thoát, không COMPLETED/promote; lượt sau thử lại. Retry=0 không thay xử lý lỗi/Errors alarm. Snapshot hợp lệ đã đọc nhưng không có eligible observations là trường hợp khác, có thể COMPLETED với undefined đúng quy tắc.
+
+Expected schedule suy từ trading calendar của asset, lịch Predict TUE–SAT, ngoại lệ đã biết, từ kỳ base_date 26/10/2026 trong window/phạm vi champion có hiệu lực; deduplicate một kỳ asset/base_date, không đếm lại theo h hoặc invocation retry. Đây là lịch kỳ vọng, không phải bằng chứng Lambda đã ghi. **Không yêu cầu manifest phát hành riêng, không đọc CloudWatch logs thường kỳ và không có log-retention guard cho COMPLETED.**
+
+| Đại lượng | Mức đếm / quy tắc |
+|---|---|
+| `expected_count` | Số kỳ asset/base_date dự kiến trong phạm vi đã chọn; ghi phạm vi và calendar/schedule version vào META |
+| `published_count` | Số kỳ trong cùng tập expected có bản ghi Forecasts thực; sự hiện diện không tự chứng minh record đủ điều kiện chấm |
+| `missing_count` | Số kỳ expected không có bản ghi; `expected_count = published_count + missing_count` |
+| `n_obs` | Số cặp asset/base_date/h thực vào công thức metric; không phải số bản ghi hoặc số lần Lambda chạy |
+| `n_base_dates` | Số base_date khác nhau có ít nhất một cặp hợp lệ trong scope; gate overall dùng hợp base dates coverage |
+| `issuance_evidence_status` | `verified_eligible_rows` chỉ khi có cặp đã chấm với evidence; `no_eligible_rows` nếu completed không có cặp; API dùng `no_completed_run` khi chưa có completed run phù hợp |
+| `schedule_evidence_status` | `not_audited_mvp`; không gọi lịch expected là verified issuance |
+
+Counters publication tách khỏi eligibility: row hiện diện nhưng sample/sai model/chưa mature/unverified được audit riêng, không tự thành n_obs; row ngoài tập expected không nhập vào đẳng thức counters. **Trong META provenance/audit**, có thể lưu `excluded_count` = số bản ghi kỳ expected *đã phát hành nhưng bị loại khỏi eligibility ở cấp record* (ví dụ legacy không được duyệt), kèm breakdown reasons; không nhập vào `missing_count`, không đếm lặp theo 7 horizons, không bổ sung field vào JSON API v3.1 hoặc 28 METRIC. Record hợp lệ nhưng target chưa mature được audit riêng ở cấp horizon, không đánh đồng với không được phát hành. Thiếu row chỉ ghi `missing_record_unclassified`, không gán upstream failure hay skip đã xác minh, không tạo forecast/backfill, không mặc nhiên làm run thất bại. Logs/manifest lịch sử và external import vẫn theo phạm vi riêng, không hưởng ngoại lệ này.
+
+### 7.3. Champion, eligibility và cutover
+
+Nguồn authoritative: hai JSON env mappings `MODEL_VERSIONS` và `CHAMPION_EFFECTIVE_BASE_DATES` cùng khai tại `infra/app.py`, đủ bốn asset, truyền đồng nhất cho Predict/Rolling/API; CDK tests phải kiểm cả hai map. **Đối với champion ban đầu `baseline-q252`, `CHAMPION_EFFECTIVE_BASE_DATES` là `2026-10-26` cho gold/silver/brent/wti**, dựa trên CloudTrail `CreateFunction cpaws-dev-predict` lúc `2026-10-25T09:15:08Z` (PR #32), không có lần đổi `UpdateFunctionConfiguration` sau đó, và lượt phát hành theo lịch 27/10 12:15 UTC có `base_date=2026-10-26` (bằng chứng Tiến cung cấp tại review PR #65). Mapping này được Tiến đưa vào PR CDK S1a và cần kiểm khi deploy; mốc effective date khác với cutover PR #48 và không thay eligibility `created_at`/legacy. Khi đổi champion tiếp theo, model/effective date theo ADR/release, không lấy từ STATE. Predict ưu tiên MODEL_VERSIONS, chỉ fallback MODEL_VERSION khi map mới chưa cấu hình trong chuyển đổi; không đổi champion ngầm. Khi đổi riêng asset: chỉ chấm model mới từ effective base date, không trộn model cũ hoặc reset asset khác. Drain writer cũ khi rollout, API kiểm mapping để fail-closed.
+
+Mỗi cặp được chấm phải đáp ứng:
+
+1. Forecast production thực, `is_sample=false`, asset/target đúng (gold→GLD, silver→SLV, brent→BZ=F, wti→CL=F), model đúng hiệu lực; không sample/backfill. Base_date thuộc window và không sớm hơn CHAMPION_EFFECTIVE_BASE_DATES[asset].
+2. `created_at >= 2026-10-27T12:00:00Z` và `created_at < target_date T13:30:00Z` theo UTC ở từng h; đồng thời evidence chứng minh phát hành trước khi biết nhãn, input chỉ đến base_date và có thể công bố tại as-of. Mốc 27/10 là eligibility, không phải cutover; base_date có thể 26/10 nếu record đủ điều kiện.
+3. Đủ 7 q hữu hạn, không giảm, prob_up trong [0.05,0.95]; giữ q/prob_up nguồn, không normalize lại. `abs(prob_up_stored-prob_up_recomputed)>1e-6` chỉ log `prob_up_mismatch`, không loại chỉ vì mismatch. Kiểm shape/miền/q vẫn bắt buộc. Profile full-precision của validation 2019 không đổi.
+4. Sau cutover PR #48: conditional-write provenance và `input_snapshot_dt=YYYY-MM-DD` đúng `snap.dt` đã dùng, validate với snapshot/input-as-of. Có field chỉ là candidate hậu cutover, không chứng minh bất biến hoặc thời điểm phát hành.
+5. Trước cutover: chỉ từng record được duyệt theo `LEGACY_ACCEPT_WITH_EVIDENCE`; thiếu/sai field sau cutover không được tự hạ thành legacy.
+
+**Mốc deploy cutover PR #48 đã được Tiến cung cấp qua PR #68:** code `ce77bcb`, CloudFormation `PredictFunction UPDATE_COMPLETE` lúc **`2026-10-30T08:10:06Z`**. Đây là ranh giới deploy đã ghi nhận, khác `issued_at_min` 27/10 và champion effective `base_date=26/10`. **Smoke production đầu tiên dự kiến là lượt 30/10 lúc 12:15 UTC**, cần Tiến xác nhận ở PR #68 `written=4`, `already_published=0` và có `input_snapshot_dt` cho cả bốn asset trước khi đánh dấu kiểm chứng hành vi conditional write; cho đến khi có bằng chứng, không tự coi smoke test đã PASS. Lượt này có `base_date=2026-10-29`, là **hậu cutover**, bắt buộc `input_snapshot_dt` đúng snapshot/input-as-of và provenance phát hành hợp lệ; không được chuyển ngược sang legacy nếu thiếu field. Build/approve/merge hoặc `dry_run` không chứng minh ghi production. Thời điểm deploy và bằng chứng smoke phải lưu dưới dạng provenance/metadata có thể kiểm toán của evaluation run, không tự đặt tên attribute DynamoDB mới chưa được review.
+
+**Legacy policy đã chốt, từng record còn cần evidence:** kiểm asset/base_date/model_version/created_at, khung lịch 12:15–13:30 UTC, is_sample=false, không manual overwrite/reissue, input-as-of; ghi người xác nhận, thời điểm duyệt, audit reference/hash và danh sách accepted records trong provenance META. Chỉ record đã duyệt được miễn input_snapshot_dt; không bịa snapshot hoặc gắn immutable_verified hồi tố. Timestamp đúng lịch chưa đủ. Thiếu evidence → legacy_unverified/issuance_unverified và loại khỏi n_obs; fail-closed tương đương POST_CUTOVER_ONLY với record đó.
+
+Audit legacy riêng dự kiến Tiến cung cấp trước 02/11: **chỉ base_date 26–28/10/2026** (bốn asset, nếu có record), gồm created_at, CloudWatch Invocations/PREDICT_DONE, snapshot_dt/dry_run/written/model_version, đối chiếu input-as-of và lịch sử ghi. **Base_date 29/10**, phát hành 30/10 12:15 UTC, thuộc hậu cutover PR #48 nên không phải legacy; việc chứng thực lượt smoke vẫn đang chờ Tiến xác nhận tại PR #68. Đây là audit ngoại lệ một lần, **không** yêu cầu tạo manifest phát hành mới hay gọi CloudWatch mỗi lượt Rolling. Chưa có danh sách legacy records được duyệt trong gói tài liệu này.
+
+### 7.4. Actual, common mask, metric và display
+
+`y(t,h)=ln(P_target(target_date)/P_target(base_date))`; target_date là phiên thứ h sau base_date theo calendar riêng, không shift theo dòng có giá. Hai endpoint hữu hạn, dương, hợp lệ theo ADR và rejected đúng asset. Thiếu phiên giữa không tự vô hiệu target, phải đếm/log. Dùng GLD/SLV làm target kim loại, không dùng giá hiển thị quy đổi. Nhãn phải đã công bố ở evaluation_as_of_time và target_date<=target_cutoff_date riêng asset; không đọc tương lai để hoàn thiện cặp pending.
+
+Giữ common_mask §9.2 và baseline nhân quả hợp lệ (252 phiên, ít nhất 200) cho các metric nền; sign loại thêm y=0 hoặc q50=0. Không đổi mask để tăng coverage. `first_eligible_base_date` là base_date đầu có cặp thực sự chấm của champion trong scope, null nếu không có; không hardcode 27/10.
+
+Bốn metric nền coverage_80, width_80, sign_accuracy, up_rate × 7 horizons = **28 METRIC**. Overall trong META, không h=0. Giữ `width_80=mean(q90-q10)`, unit log_return; bổ sung derived `width_80_pct=mean_i[100 * (exp(q90_i)-exp(q10_i))]`, unit percent, cùng mask/n_obs với width_80. Tính từng cặp trước khi gộp, không dùng `100 * width_80` hoặc exp của trung bình q thay thế. Derived overall và by-horizon đóng băng trong `META.derived_metrics.width_80_pct`, cùng fingerprint/payload hash; không tăng thành 35 METRIC, không sửa Accuracy Schema.
+
+Overall coverage = tổng hits/tổng cặp; width/width_pct/sign/up dùng trọng số n_obs riêng từng metric. Distinct base dates overall là hợp ngày, không tổng các h. Dưới 20 distinct base_date có ít nhất một cặp coverage hợp lệ: **mọi metric overall** display_value=null/display_status=insufficient_data, giữ value/status tính toán. Khi đủ ngưỡng: metric ok được ready và display_value; metric không tính được vẫn null/display_status=undefined. Không có completed run đúng champion → not_ready. Tất cả per-h display_value=null/display_status=counts_only. Web chỉ dùng display fields, chỉ hiển thị width_80_pct cho độ rộng; không tự exp/chuyển log-width. Không cam kết ready trước 22/11 hoặc suy từ 20 phiên lịch. Cấu trúc JSON và disclaimer đầy đủ tại [API Contract](../api/contract.md), dùng fixtures v3.1 synthetic.
+
+### 7.5. Storage, lifecycle và concurrent writers
+
+Validation/test vẫn Parquet S3 `eval/`. Rolling champion dùng `cpaws-<env>-accuracy`, PK/SK String, không GSI/LSI/Scan hoặc TTL cho record công bố. Key động canonical-encode/length-prefix để tránh collision.
+
+| Item | PK | SK | Nội dung |
+|---|---|---|---|
+| STATE | ASSET#asset | STATE | Chỉ latest_run_pk/latest_run_id/latest_run_order = LATEST_COMPLETED |
+| META | RUN#asset#model_version#run_id | META | Status, fingerprints, snapshot/cutoff, model/effective date, eligibility/legacy evidence, 28 expected keys/hashes, aggregate/counts, derived_metrics |
+| METRIC | Cùng PK META | METRIC#sample#evaluation_kind#evaluation_start#evaluation_end#target_cutoff_date#Hh#metric | Một metric nền/h, payload_hash, schema logic hiện hành |
+
+`run_id = <job_utc_date>-<sha256(canonical(asset, MODEL_VERSIONS[asset], CHAMPION_EFFECTIVE_BASE_DATES[asset], job_date, revision, config_hash, immutable_snapshot_identity, target_cutoff_date, eligible_record_fingerprint))[:20]>`. Lưu fingerprint đầy đủ và derived payload/hash trong META. `run_order=<YYYYMMDD>#<revision_4_digits>` tăng đơn điệu; retry cùng input giữ revision/run_id. Correction snapshot/config/evaluation tạo revision/run mới, không ghi đè kết quả cũ. Không cần fingerprint của toàn bộ CloudWatch schedule logs.
+
+1. Khóa mapping/snapshot/cutoff/eligible records; tạo META RUNNING bằng conditional PutItem `attribute_not_exists(PK)`. Trùng full fingerprint: resume nếu chưa completed, hoặc xác nhận pointer/no-op nếu đã completed; khác → RUN_ID_CONFLICT.
+2. Ghi 28 METRIC bằng conditional PutItem trên từng PK/SK, không BatchWriteItem. Conditional failure: consistent GetItem so payload_hash/nội dung; giống no-op, khác IMMUTABLE_METRIC_CONFLICT. Không nhầm với Predict already-published không GetItem/so payload.
+3. META RUNNING→VALIDATING→COMPLETED bằng conditional UpdateItem; fingerprint/config/snapshot/evidence/metric hashes/derived payload bất biến. Strong-read xác nhận đủ 28 rows, counts, derived hash, actual/eligibility nhất quán và không còn lỗi tính/đọc/ghi/conflict. FAILED terminal, chạy lại cần revision mới.
+4. Chỉ sau COMPLETED mới conditional promote STATE: pointer chưa có, hoặc order mới lớn hơn, hoặc cùng order **và cùng run PK** cho idempotent retry. Cùng order khác run là conflict; không rollback. Crash trước completion không đổi pointer; crash sau completion trước promote được retry promote.
+5. API đọc STATE rồi Query đầy đủ run bằng strong reads; kiểm META COMPLETED/current champion/effective date/run order/28 hashes/derived/provenance; đọc lại pointer trước khi trả. Pointer đổi hoặc model mismatch → retry ngắn/not_ready, không trả sai champion. Monotonic order không tự giải quyết writer đời cũ chạy muộn; release phải drain writer cũ, đồng bộ hai mappings và test fail-closed theo asset.
+
+Không promote khi snapshot không nhất quán, lỗi tính/ghi chưa xử lý, thiếu rows, payload/fingerprint conflict hoặc provenance của cặp scoring không hợp lệ. **Không chặn COMPLETED** chỉ vì missing kỳ expected, thiếu CloudWatch/manifest audit, n_obs=0 hay chưa đủ 20 ngày. Với input đã đọc hợp lệ và common rỗng, ghi đủ 28 undefined/value=null/n_obs=0/no_evaluable_obs, derived null; không gắn verified_eligible_rows khi không có cặp.
+
+IAM: Rolling writer scoped Get/Query/Put/Update Accuracy, read Forecasts/clean/shadow, write chỉ shadow_eval; API reader chỉ Get/Query Accuracy, không Forecasts/S3/ghi/Scan. Predict không đọc Accuracy, không có champion release operator. IAM scope không thay conditional expressions. S3 ListBucket trên bucket ARN giới hạn request prefix clean/shadow; GetObject 403 mơ hồ không tự gọi missing: scoped ListObjectsV2(Prefix=key) để xác minh, nếu không xác minh giữ unverified/lỗi quyền. Không mở quyền toàn lake. No reserved concurrency không miễn kiểm concurrent writes.
+
+### 7.6. Shadow và phạm vi triển khai
+
+Theo ADR-0011, champion Accuracy và paired S1a là hai nhánh độc lập cùng lịch Rolling TUE–SAT 13:45 UTC đã được quyết định 30/10 cập nhật. Không train/retrain hoặc tự chuyển champion. S1a nguồn JSON `eval/shadow/s1a-l094/dt=<UTC>/<asset>.json`; dt là ngày chạy, không suy base_date từ key. Kiểm created_at và S3 LastModified/version/identity trước nhãn; không backfill.
+
+Paired mask là giao eligible champion/shadow/actual hợp lệ/cùng target definition, ghép `(asset,base_date,h,target_date,target_series)` và cùng snapshot/cutoff; **bắt buộc `shadow.input_snapshot_dt == champion.input_snapshot_dt`** khi ghép shadow hậu cutover. Predict PR #53 có thể ghi shadow mới ngay cả khi champion cùng `base_date` đã `already_published` (ví dụ lịch NYSE/CME lặp base 27/11, 26/12, 02/01), nên có thể tồn tại **nhiều shadow files với cùng base_date**. Chọn chính xác shadow object có snapshot khớp champion và issuance/provenance hợp lệ trước nhãn; **không có file khớp thì `shadow_missing`**, không ghép theo base_date hoặc S3 `dt` một cách tùy tiện và không đếm cặp hai lần. Counts riêng, không dùng overall champion thay paired sample. Tính pinball_skill/coverage_80/width_80 cho cả hai trên cùng cặp; baseline tự so bằng 0 khi denominator dương, không có cặp/denominator 0 giữ undefined/reason theo schema. Report Parquet nội bộ `eval/shadow_eval/run_id=<run_id>/`, phân biệt file theo asset/comparison_id; IfNoneMatch=* và checksum: retry cùng payload no-op, khác conflict. Không ghi report vào prefix input shadow. Shadow lỗi/thiếu không chặn champion COMPLETED, không cập nhật STATE, không public API hoặc tạo sample/evaluation_kind mới. Nếu champion asset đổi khỏi baseline-q252, S1a baseline không tự là challenger phù hợp: shadow_not_applicable_model_change/chờ ADR mới, asset khác độc lập.
+
+Tuấn phụ trách bảng/API/IAM; Long job/metrics/tests; Tiến CDK/image Lambda cpaws-dev-accuracy-job (image Predict, CMD handler riêng)/Scheduler/alarm Errors→SNS; Khải Predict mapping. Đây là trách nhiệm triển khai, không xác nhận source/deploy đã hoàn tất.
+
+**DM calendar-gap policy hoãn sau 22/11/2026 theo D13.** Accuracy Schema snapshot đã mô tả chính sách gap, nhưng bản cập nhật Rolling này không kích hoạt thay đổi DM-HAC, không sửa metrics.py/walk_forward.py, fingerprint K4 hoặc yêu cầu chạy lại CV/Validation. Giữ kết quả cũ; mọi triển khai gap thuộc công việc riêng sau mốc hoãn. §11 về DM/CI lịch sử giữ nguyên.
 
 ## 8. Detail Schema
 
@@ -293,7 +372,7 @@ Với dầu và metadata đủ: common_mask_excl_roll = common_mask_all AND NOT 
 
 ## 10. Ánh xạ với API/DynamoDB contract
 
-**[API]** Contract cục bộ là nguồn chuẩn; bảng dưới giữ để tham khảo tích hợp **production/import phase 2**, không sửa PK/SK hoặc JSON và không là điều kiện bắt buộc cho demo validation 2019. Tuấn vẫn cần review phần production ở mục 5.5, 7 và 10 sau MVP.
+**[API]** Contract cục bộ là nguồn chuẩn; bảng dưới giữ để tham khảo tích hợp **production/import phase 2**, không sửa PK/SK hoặc JSON và không là điều kiện bắt buộc cho demo validation 2019. External import vẫn cần Tuấn review; Rolling MVP áp dụng ngoại lệ §7 và response tại API Contract, không áp manifest import làm gate Rolling.
 
 | Trường API/DynamoDB | Trường nội bộ Walk-forward | Quy tắc |
 |---|---|---|
@@ -310,7 +389,7 @@ Với dầu và metadata đủ: common_mask_excl_roll = common_mask_all AND NOT 
 
 Adapter thêm forecast_run_id, fit_id (khi biết), provenance theo manifest. `fit_id`, crossed_raw, missing_reason và as_of_time mới không tự thành thuộc tính bắt buộc của DynamoDB. DynamoDB không có raw → crossed_raw=null; không suy false từ q không giảm. Một bản ghi h thành công không chứng minh những h/phiên khác đã được phát hành.
 
-**Làm tròn [API + ĐỀ XUẤT]:** DynamoDB lưu Decimal làm tròn 6 chữ số. Import giữ q/prob đã lưu, manifest ghi độ chính xác và nguồn; không tái tạo “q gốc” hoặc thay p bằng phép tính lại trên q làm tròn. Đề xuất profile `stored_rounded`: xác thực p nằm trong khoảng, chỉ cảnh báo khác biệt nội suy do rounding, gắn giới hạn đo lường trong run/report; mâu thuẫn thuật toán đã có chứng cứ vẫn bị từ chối. Ngưỡng nhận biết lỗi thuật toán so với rounding cần Tuấn/Khải chốt, chưa coi bản import tương đương backtest đầy đủ chính xác. Không trộn profile này với internal_full_precision trong một Accuracy run.
+**Làm tròn [API + ĐỀ XUẤT]:** DynamoDB lưu Decimal làm tròn 6 chữ số. Import giữ q/prob đã lưu, manifest ghi độ chính xác và nguồn; không tái tạo “q gốc” hoặc thay p bằng phép tính lại trên q làm tròn. Đề xuất profile `stored_rounded`: xác thực p nằm trong khoảng, chỉ cảnh báo khác biệt nội suy do rounding, gắn giới hạn đo lường trong run/report; mâu thuẫn thuật toán đã có chứng cứ vẫn bị từ chối. Ngưỡng nhận biết lỗi thuật toán so với rounding cần Tuấn/Khải chốt, chưa coi bản import tương đương backtest đầy đủ chính xác. Không trộn profile này với internal_full_precision trong một Accuracy run. Riêng Rolling MVP, ngưỡng mismatch >1e-6 chỉ log theo §7.3, không tự loại hoặc thay p; các quy tắc internal validation/import khác giữ nguyên.
 
 ## 11. Liên kết Accuracy Schema PR #10
 
@@ -421,7 +500,7 @@ Kiểm chứng số học đủ 7 mức: model loss từng tau = `[0.0015,0.002,
 | 24 | Return WTI hai đầu có giá <=0 dù clean chấp nhận giá âm | y=null/target_valid=false; không lấy log abs(price) | evaluate | MVP 2019 |
 | 25 | Mean baseline loss=0 với n_common>0 | Skill undefined/zero_denominator, giữ n_obs; loss/coverage khác vẫn có thể tính | evaluate | MVP 2019 |
 | 26 | crossing có raw nhưng target chưa có hoặc baseline thiếu | Vẫn tính crossing/all trong khoảng origin; unknown raw không biến false; dòng dầu/excl_roll là not_applicable/unsupported_sample | evaluate | Hồi quy hỗ trợ / phase 2 theo nguồn |
-| 27 | Thiếu manifest rolling_8w | Không tuyên bố đủ lịch/đếm missing chính thức; từ chối run chính thức hoặc run thăm dò có cảnh báo | evaluate/adapter | Hồi quy hỗ trợ / phase 2 theo nguồn |
+| 27 | Rolling MVP không có manifest/CloudWatch audit lịch, Forecasts thực có evidence; thử missing row và input chưa READY | Không cần manifest/log gate; missing chỉ đếm, không bịa nguyên nhân/forecast; input chưa READY không promote; input hợp lệ với 0 cặp có thể COMPLETED đủ 28 undefined và derived null theo §7 | evaluate/adapter | Rolling MVP theo RFC #45 v4.6; không đổi validation/test/import |
 | 28 | Hai run model có ngày missing khác nhau | DM ghép giao theo khóa ngày/h; không ghép theo vị trí vector | evaluate | MVP 2019 |
 | 29 | Skill từng dòng có baseline=0, nhưng baseline mean trên common>0 | Tính tỷ số hai mean; không lấy mean skill từng dòng hoặc bỏ dòng baseline=0 | evaluate | MVP 2019 |
 | 30 | Timestamp công bố bằng as_of_time; target publication bằng as_of_time | Input được dùng với <=; target ở ngưỡng bằng bị từ chối vì cần < | generate/evaluate | Hồi quy hỗ trợ / phase 2 theo nguồn |
@@ -436,9 +515,19 @@ Kiểm chứng số học đủ 7 mức: model loss từng tau = `[0.0015,0.002,
 | 39 | DM model–baseline hoặc hai model thật trong luồng demo, có p NaN | Loss baseline cùng Detail hoặc join hai model đúng lineage; lag h−1, uniform weights và HLN; Holm giữ 28/14 vị trí kể cả NaN, không bịa p | evaluate/Metrics PR #11 | MVP nếu demo dùng DM/Holm |
 | 40 | Fits validation thiếu trường bắt buộc, hoặc đổi fit/scaler trong 2019 | Tám trường mục 6 bắt buộc; max_training_label_available_at tùy chọn nhưng vẫn kiểm tra availability; commit từ workflow; không retrain/refit scaler trong 2019 | fits metadata/generate | MVP 2019 |
 
-Nhóm ID MVP Khải chỉ định được giữ nguyên: **1, 2, 4, 5, 8, 11, 12, 14, 15, 17, 18, 19, 23, 24, 25, 28, 29**. Theo review bổ sung, nhánh generate/validation nội bộ của **9, 10, 22** cũng thuộc MVP 2019; chỉ nhánh import production của các ID này thuộc phase 2. ID 36–40 chỉ bổ sung kiểm tra các quyết định mới về provenance, Feature Builder, CI/DM và Fits/model cố định; không đánh số lại 1–35. Nhãn hồi quy hỗ trợ/phase 2 không miễn các bất biến cấu trúc, publication hoặc leakage khi áp dụng trong MVP; import production/rolling_8w vẫn là phase 2.
+Nhóm ID MVP Khải chỉ định được giữ nguyên: **1, 2, 4, 5, 8, 11, 12, 14, 15, 17, 18, 19, 23, 24, 25, 28, 29**. Theo review bổ sung, nhánh generate/validation nội bộ của **9, 10, 22** cũng thuộc MVP 2019; chỉ nhánh import production của các ID này thuộc phase 2. ID 36–40 chỉ bổ sung kiểm tra các quyết định mới về provenance, Feature Builder, CI/DM và Fits/model cố định; không đánh số lại 1–35. Nhãn hồi quy hỗ trợ/phase 2 không miễn các bất biến cấu trúc, publication hoặc leakage khi áp dụng trong MVP; external import production vẫn phase 2; Rolling MVP theo §7, có bộ nghiệm thu riêng bên dưới.
 
 Các quyết định review đã chốt được ghi ở mục 14; bản cập nhật vẫn cần reviewer xác nhận. Hoàn thành triển khai về sau cần kiểm thử nhóm MVP và các bất biến áp dụng; tài liệu này không tuyên bố code walk-forward đã tồn tại hoặc đã vượt acceptance tests.
+
+### 13.1. Nghiệm thu bổ sung Rolling MVP (tài liệu; chưa tuyên bố đã chạy integration)
+
+- 0/19/20 distinct coverage base dates: cả 5 overall display fields cùng gate; undefined không ready; mọi h counts_only; fixtures v3.1 parse và disclaimer khớp forecast_format.DISCLAIMER.
+- Width_pct tính từng cặp q10/q90 bất đối xứng, gộp theo n_obs, cùng mask/width; kiểm META derived fingerprint và vẫn đúng 28 METRIC, không h=0.
+- Expected = published + missing trong cùng scope; row hiện diện nhưng unverified không vào n_obs; thiếu row/log không chặn completed; snapshot chưa READY khác common rỗng trên input đã READY.
+- Post-cutover thiếu/sai snapshot hoặc conditional provenance loại; legacy chỉ nhận danh sách audit đã duyệt, không dùng timestamp/field/dry_run làm bằng chứng đủ; kiểm cutover thực khác ngày dự kiến.
+- Retry same payload no-op, khác payload conflict; 27/28 rows không promote; crash trước/sau completion; pointer đổi trong lúc GET; cùng order khác run conflict; hai mappings mismatch fail-closed theo asset.
+- CDK kiểm cron TUE–SAT 13:45 UTC, timeout 300s, retry=0, không reserved concurrency; IAM reader deny writes/Scan/S3; Errors→SNS và input readiness.
+- Shadow missing/late/error không chặn champion; paired counts chỉ phần giao; report immutable đúng prefix; đổi riêng champion không dùng S1a baseline cho model mới. Không thực thi DM gap hoặc chạy lại K4 trong cập nhật này.
 
 ## 14. Quyết định đã chốt và phụ thuộc còn lại
 
@@ -462,12 +551,10 @@ Các quyết định review đã chốt được ghi ở mục 14; bản cập n
 |---|---|---|
 | Metrics PR #11 | Đối chiếu bản đã sửa uniform DM/HLN/Holm; snapshot cục bộ vẫn Bartlett. Bootstrap helper hữu hạn theo hàng chưa tự giữ lịch có missing; orchestration phải áp kế hoạch ngày chung trước khi tính replicate | Điều kiện tích hợp MVP cho CI pinball_skill; DM/Holm khi thuộc demo. Không sửa metrics hoặc tự triển khai công thức trong nhiệm vụ này |
 | Returns/Baselines PR #13; Feature Builder PR #14 | API đã đọc trực tiếp từ hai ZIP mới, nhưng local returns còn cũ, baselines/forecast_record/build chưa có; đưa đúng phiên bản vào luồng triển khai và xử lý UTC/NaT theo mục 3.1 | Phụ thuộc triển khai MVP, không còn câu hỏi về API hoặc yêu cầu cung cấp lại ZIP; PR #14 phụ thuộc PR #13 |
-| Accuracy PR #10 | File đích cục bộ chưa có; đồng bộ schema theo các cập nhật review đã cung cấp, giữ nguyên khóa/status đã chốt | Không định nghĩa lại schema trong hợp đồng Walk-forward |
-| Tuấn/Khải — mục 5.5, 7, 10 | Production import, rolling_8w/manifest, tolerance quantiles làm tròn và chứng cứ PIT nâng cao | Phase 2; không chặn MVP validation 2019 dùng publication rule |
+| Accuracy PR #10 | `docs/api/accuracy-schema.md` là tài liệu tham chiếu hiện có của repository về logical keys, metrics, status và `evaluation_kind`. Trạng thái merge của PR #10 không được xác nhận trong phạm vi cập nhật này. | Giữ nguyên schema đã chốt; không yêu cầu sửa hoặc định nghĩa lại Accuracy Schema trong cập nhật này |
+| Tuấn/Khải — mục 5.5, 7, 10 | External import, tolerance ngoài Rolling và PIT nâng cao vẫn phase 2; Rolling theo §7 không còn yêu cầu manifest phát hành | Không chặn validation 2019; Rolling cần implementation/IAM/CDK/smoke tests riêng, không xác nhận đã deploy |
 | Khải — tên reason thiếu raw ở mục 5.4 | Ưu tiên mã đã có của Accuracy Schema; chỉ nếu cần mã mới missing_raw_quantiles thì phải review tên trước khi dùng | Liên quan import thiếu raw phase 2; không tự thêm enum hoặc đổi status crossing đã chốt |
 
 Giữ nguyên mask/cutoff/status đã được xác nhận: common rỗng dùng undefined/no_evaluable_obs dù vì baseline thiếu; excluded_insufficient_baseline chỉ là log. Không mở lại baseline, boundary roll, CI configuration, họ Holm hoặc provenance MVP thành quyết định OPEN.
 
-Đề xuất commit message (chỉ văn bản): `docs(eval): align walk-forward contract with review decisions`.
 
-Mô tả cập nhật PR đề xuất (chỉ văn bản): Cập nhật Walk-forward Contract theo review Khải PR #12: baseline trong Detail, roll (base_date,target_date], CI pinball_skill và DM/Holm, publication-rule provenance, API PR #13/#14, Fits tối giản và một module triển khai. Giữ mask/cutoff/status/schema và ví dụ số học; đánh dấu acceptance MVP 2019, tách phase 2 và ghi rõ các phụ thuộc source chưa tích hợp. Bản cập nhật tiếp tục Draft để reviewer xác nhận.
