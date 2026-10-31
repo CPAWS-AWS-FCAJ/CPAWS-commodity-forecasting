@@ -3,7 +3,7 @@
 - Ngày: 24/10/2026
 - Người soạn: Phước
 - Người duyệt: Khải
-- Trạng thái: **Đã duyệt** (Khải, 25/10/2026), kèm các quyết định ở mục 7. Script đã sửa (mục 8) và sửa tiếp theo review PR #35 (mục 9). **Đã khóa SHA-256** ngày 29/10 (mục 11). Chưa chạy chính thức.
+- Trạng thái: **Đã duyệt** (Khải, 25/10/2026), kèm các quyết định ở mục 7. Script đã sửa (mục 8) và sửa tiếp theo review PR #35 (mục 9). **Đã khóa SHA-256** ngày 29/10 (mục 11). **Đã chạy chính thức 30/10: chưa đạt** (mục 12).
 - Căn cứ: ý kiến của Khải ngày 24/10: chạy lại trên cùng 60 câu cũ chỉ tính là lần chạy phát triển; trước 8/11 cần một bộ câu hỏi mới, chốt trước khi chạy. Kết quả và đề xuất của lần chạy 23/10 ở `docs/experiments/bedrock-model-test-2026-10.md`, mục 10.
 
 ## 1. Nguyên tắc
@@ -330,4 +330,19 @@ Không đổi prompt, tool hay cách chấm từng câu; chỉ đổi khóa và 
 | `set_config` | `d2e1f478b852468b2ae7a41031763e644f0a8cddbb0bee76c9dbf7dc37c6b141` |
 
 - **Sau khi khóa:** không sửa câu hỏi, fixture, prompt v2, `TOOL_CODE_PATHS` hay tham số chấm. Lần chạy official kiểm khóa trước khi tạo client Bedrock; lệch bất kỳ mục nào thì dừng.
-- **Còn lại:** chạy chính thức một lần (5/11, Phước chạy sau `aws login --profile cpaws-dev`); Phước chấm tay; Khải chấm lại 10 câu (seed 7) không dùng Claude.
+- ~~**Còn lại:** chạy chính thức một lần (5/11, Phước chạy sau `aws login --profile cpaws-dev`); Phước chấm tay; Khải chấm lại 10 câu (seed 7) không dùng Claude.~~ Xong 30/10 (mục 12).
+
+## 12. Kết quả lần chạy chính thức (30/10/2026)
+
+Báo cáo đầy đủ: [`chatbot-benchmark-v2-2026-10.md`](chatbot-benchmark-v2-2026-10.md). Kết quả ở `docs/experiments/results/chatbot-benchmark-2026-10-30-v2/`.
+
+- Chạy sớm hơn mốc 5/11, sau khi PR #61 (khóa) merge. Mỗi bài chạy một lần; khóa SHA-256 khớp.
+- **Chưa đạt:** Nova 21/30 (ngưỡng 27), Haiku 14/30 (ngưỡng 25). Không có vi phạm chính sách.
+- Khải chấm lại 10 câu seed 7 không dùng Claude. Hai người chấm khớp 7/10 ở kết luận rubric; điểm thống nhất theo chuẩn của Khải.
+- **Khải quyết (30/10, PR #66),** chi tiết ở mục "Quyết định của Khải" của báo cáo:
+  - đồng ý prompt `chatbot-haiku-v3` (file mới; Phước viết trước 2/11, Khải duyệt 3/11);
+  - đồng ý chạy dev trước 4/11 với điều kiện chốt trước khi chạy, quyết 5/11, không đạt thì demo dùng v2;
+  - cần kịch bản câu hỏi demo cố định;
+  - hoãn bộ v3 và lần chạy chính thức sau đến sau demo;
+  - rubric (a)–(d) dùng cho lần chấm sau;
+  - không làm router trước demo.
