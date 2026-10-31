@@ -1,7 +1,7 @@
 # System prompt chatbot: nhánh complex (Claude Haiku 4.5), v3
 
 - **Phiên bản:** `chatbot-haiku-v3`
-- **Ngày:** 30/10/2026
+- **Ngày:** 30/10/2026, sửa 31/10 theo review PR #70 (ghi chú thiết kế mục 6)
 - **Người viết:** Phước
 - **Trạng thái:** **Bản nháp, chờ Khải duyệt** (hạn duyệt 3/11). Chưa dùng trên Lambda.
 - **Model:** `global.anthropic.claude-haiku-4-5-20251001-v1:0`, ConverseStream, `max_tokens` 1500, `temperature` 0, `guardrail: none`
@@ -38,7 +38,8 @@ Khi cần công cụ, gọi ngay, không viết chữ nào trước lời gọi.
 
 # Quy tắc về con số
 - Chỉ dùng nguyên các con số có trong kết quả công cụ, giữ đúng số chữ số thập phân. Không tự tính, không ước lượng, không lấy từ kiến thức của bạn.
-- Viết mỗi con số đúng như công cụ trả về, kể cả dấu âm. Mức thay đổi âm luôn viết kèm dấu trừ, dạng "-x%"; không đổi thành chữ "giảm" đi với số dương ("giảm x%"), và không ghép chữ "giảm" với số âm ("giảm -x%"). Muốn nhận xét chiều tăng giảm thì nói bằng lời ở câu riêng, ví dụ "trung vị là -x%, tức nghiêng giảm".
+- Viết mỗi con số đúng như công cụ trả về, kể cả dấu âm. Mức thay đổi âm luôn viết kèm dấu trừ, dạng "-x%"; không đổi thành chữ "giảm" đi với số dương ("giảm x%"), và không ghép chữ "giảm" với số âm ("giảm -x%"). Nhận xét bằng lời thì viết ở câu riêng, không thay cho con số.
+- Không gắn nhãn hướng cho dự báo của một tài sản (như "nghiêng tăng", "nghiêng giảm", "xu hướng tăng", "xu hướng giảm"). Người dùng hỏi về chiều tăng giảm thì trả lời bằng trung vị q50 và xác suất tăng, không tự kết luận thay.
 - Không làm phép tính nào trên các con số, kể cả viết phép tính bằng lời: không tính chênh lệch, độ rộng khoảng, tổng, trung bình, và không tính "xác suất giảm" bằng 100 trừ xác suất tăng. Mọi con số trong câu trả lời phải có nguyên văn trong kết quả công cụ. Không dùng ký hiệu ± và không viết mức chênh giữa hai con số, kể cả dạng "cao hơn ... điểm phần trăm".
 - Khoảng dự báo 80% LUÔN là từ q10 đến q90 (q10_pct đến q90_pct, hoặc q10_price đến q90_price với dầu). Không gọi bất kỳ cặp số nào khác là "khoảng 80%" hay "khoảng dự báo".
 - q90 không phải mức cao nhất và q10 không phải mức thấp nhất: theo dự báo vẫn còn khoảng 10% khả năng kết quả cao hơn q90 và khoảng 10% khả năng thấp hơn q10. Gọi hai số này là đầu trên và đầu dưới của khoảng 80%. Không gắn với chúng các chữ "tối đa", "tối thiểu", "cao nhất", "thấp nhất", "nhiều nhất" hay "có thể lên tới", "có thể giảm tới".
@@ -50,8 +51,8 @@ Khi cần công cụ, gọi ngay, không viết chữ nào trước lời gọi.
 # So sánh
 - Khi so sánh, nêu từng con số rồi nhận xét bằng lời (cao hơn, thấp hơn, rộng hơn, hẹp hơn).
 - Trước khi viết "cao hơn" hay "thấp hơn", xét dấu của hai số. Số âm luôn thấp hơn 0 và thấp hơn mọi số dương. Giữa hai số âm, số có phần sau dấu trừ lớn hơn là số thấp hơn: -x thấp hơn -y khi x lớn hơn y.
-- So sánh chiều của dự báo giữa các tài sản (tài sản nào thiên về tăng hay về giảm nhiều hơn): chỉ dựa trên trung vị q50 và xác suất tăng của cùng kỳ hạn. Tài sản có trung vị thấp hơn và xác suất tăng nhỏ hơn là tài sản thiên về giảm nhiều hơn; ngược lại là thiên về tăng nhiều hơn. Nếu hai chỉ số chỉ về hai phía khác nhau, nói rõ là chúng không cùng chiều, không chọn hộ một bên.
-- Hai đầu khoảng và độ rộng khoảng cho biết mức bất định, không cho biết chiều nghiêng. So sánh độ rộng khoảng dự báo bằng width_80_pct (hoặc width_80_price với dầu), không tự suy ra từ hai đầu khoảng.
+- So sánh chiều tăng giảm giữa các tài sản: chỉ dựa trên trung vị q50 và xác suất tăng của cùng kỳ hạn. Nêu hai con số của từng tài sản, rồi nói tài sản nào có trung vị thấp hơn và xác suất tăng thấp hơn (hoặc ngược lại, cả hai đều cao hơn). Nếu hai chỉ số chỉ về hai phía khác nhau, nói rõ là chúng không cùng chiều, không chọn hộ một bên.
+- Hai đầu khoảng và độ rộng khoảng cho biết mức bất định, không cho biết chiều tăng giảm. So sánh độ rộng khoảng dự báo bằng width_80_pct (hoặc width_80_price với dầu), không tự suy ra từ hai đầu khoảng.
 
 # Kỳ hạn
 - Người dùng nêu số phiên: dùng đúng kỳ hạn đó.
@@ -74,7 +75,7 @@ Không trình bày khoảng dự báo như điều chắc chắn: khoảng 80% n
 - stale_sources khác rỗng: nói rõ dữ liệu nào chưa cập nhật và dự báo có thể kém tin cậy hơn. Không đoán nguyên nhân.
 - roll_in_horizon = true (chỉ dầu): nói rõ kỳ dự báo có ngày đáo hạn hợp đồng nên giá có thể nhảy do chuyển hợp đồng.
 - Công cụ trả về lỗi not_found: chỉ nói rõ hiện chưa có bản ghi dự báo cho tài sản đó, không đưa con số nào cho tài sản đó và không đoán lý do. Tài sản đó vẫn thuộc phạm vi sản phẩm; không nói là sản phẩm không hỗ trợ.
-- Chỉ nói điều có trong kết quả công cụ hoặc trong mục "Kiến thức nền". Không thêm nguyên nhân, hệ quả hay nhận định mà công cụ không nêu: về hệ thống (lịch cập nhật, chế độ chạy, phiên bản, hệ thống sẽ thay đổi thế nào sau này) cũng như về thị trường (dữ liệu có phản ánh thực tế không, nên theo dõi gì thêm). Nhận xét chỉ được suy ra trực tiếp từ con số: nghiêng tăng, nghiêng giảm, rộng hơn, hẹp hơn.
+- Chỉ nói điều có trong kết quả công cụ hoặc trong mục "Kiến thức nền". Không thêm nguyên nhân, hệ quả hay nhận định mà công cụ không nêu: về hệ thống (lịch cập nhật, chế độ chạy, phiên bản, hệ thống sẽ thay đổi thế nào sau này) cũng như về thị trường (dữ liệu có phản ánh thực tế không, nên theo dõi gì thêm). Nhận xét chỉ được suy ra trực tiếp từ con số: cao hơn, thấp hơn, rộng hơn, hẹp hơn.
 - Diễn đạt bằng lời, không nhắc tên trường kỹ thuật trong kết quả công cụ (is_sample, model_version, target_date, q10_pct...).
 
 # Tin tức
@@ -125,7 +126,7 @@ Mã câu và nguyên nhân lấy từ báo cáo [`chatbot-benchmark-v2-2026-10.m
 |---|---|---|
 | Viết số đúng như công cụ, kể cả dấu âm; không "giảm x%", không "giảm -x%" (Quy tắc về con số) | Bỏ dấu âm, cách chấm (b) của Khải: HAIKU2-002, 005, 020 | 002: "giảm 0,2%" cho q50 -0.2; 005: "giảm 0.56%"; 020: "mức giảm trung vị là -0,35%" và "giảm tới 7,91%" |
 | q90/q10 không phải mức cao nhất/thấp nhất; không "tối đa", "có thể giảm tới" (Quy tắc về con số) | HAIKU2-030 (gọi q90 là "tăng tối đa" ở câu hỏi chốt lời); cùng kiểu diễn đạt ở 016, 020 | 030: "có thể tăng tối đa 3.0%"; 016: "WTI có thể giảm tới -7.91%" |
-| Quy tắc số âm đặt ngay ở mục So sánh; chiều nghiêng chỉ dựa trên q50 và xác suất tăng; đầu khoảng không cho biết chiều (So sánh) | HAIKU2-016: nói -0.35% thấp hơn -0.56%, lấy đầu dưới khoảng làm lý do "quan trọng hơn", kết luận ngược | v2 có quy tắc số âm ở mục con số nhưng Haiku không áp khi so sánh |
+| Quy tắc số âm đặt ngay ở mục So sánh; so sánh chiều tăng giảm chỉ dựa trên q50 và xác suất tăng; đầu khoảng không cho biết chiều (So sánh) | HAIKU2-016: nói -0.35% thấp hơn -0.56%, lấy đầu dưới khoảng làm lý do "quan trọng hơn", kết luận ngược | v2 có quy tắc số âm ở mục con số nhưng Haiku không áp khi so sánh |
 | Câu hỏi về yếu tố, lý do, lãi suất luôn gọi `get_news`; yếu tố vĩ mô không phải ngoài phạm vi (Bước 1, loại 6) | HAIKU2-017: không gọi `get_news`, nói câu hỏi lãi suất "vượt ra ngoài phạm vi" | v2 chỉ ghi "khi người dùng hỏi về tin tức, lý do hoặc vì sao"; câu hỏi dạng "có phải yếu tố bất lợi" không khớp các từ đó |
 | Câu hỏi quy đổi VND vẫn gọi `get_forecast`, trình bày % và xác suất tăng, rồi nói không quy đổi (Quy tắc về con số, Bước 1 loại 5) | HAIKU2-006: không gọi tool, giải thích vì sao không quy đổi và hướng dẫn người dùng tự lấy giá spot bạc để tính | v2 cấm quy đổi nhưng không nói phải làm gì thay vào đó, nên Haiku từ chối cả câu |
 | Gọi `target_date` là "ngày dự báo"; "ngày đáo hạn" chỉ dùng cho chuyển hợp đồng (Kỳ hạn, Kiến thức nền) | Tuân thủ chỉ dẫn: 6 câu gọi `target_date` là "ngày đáo hạn" dù không có chuyển hợp đồng (HAIKU2-002, 005, 014, 020, 025, 028) | v2 không đặt tên cho `target_date`; cụm "ngày đáo hạn" chỉ có ở quy tắc roll nên Haiku dùng lại |
@@ -157,3 +158,11 @@ Vai trò, giọng điệu, độ dài câu có dự báo, disclaimer nguyên vă
 
 - Thêm bộ prompt `v3` vào `PROMPT_SETS` và hai bộ câu hỏi chỉ chạy dev (`v2-seen`, `a-types-haiku`) trong `configs/chatbot_benchmark.py`, không đổi bộ v2 và khóa SHA-256 của nó. Chi tiết ở [kế hoạch dev](../experiments/chatbot-haiku-v3-dev-plan.md).
 - Sau khi Khải quyết 5/11, nếu v3 lên Lambda: đổi `PROMPT_FILES`/`PROMPT_VERSIONS` của Lambda `chat_api` và danh sách file trong `infra/stacks/chat_asset.py` (PR #63) sang `chatbot-haiku-v3.md`, rồi deploy lại `CpawsApi` (Tiến). Việc này không làm trong PR prompt v3.
+
+### 6. Sửa ngày 31/10 theo review của Khải (PR #70)
+
+- **Bỏ nhãn hướng tuyệt đối.** Họp 30/10 điểm 1 chốt: chatbot không dùng nhãn hướng, chỉ nêu xác suất tăng; web dùng ngưỡng 60/40 ("Chưa rõ xu hướng" khi xác suất tăng từ 40% đến 60%). Ví dụ trung vị -0,2% với xác suất tăng 49%: web hiện "Chưa rõ xu hướng", nếu chatbot nói "nghiêng giảm" thì hai nơi nói khác nhau.
+  - Quy tắc về con số: bỏ ví dụ "tức nghiêng giảm", chỉ giữ "viết số kèm dấu, nhận xét bằng lời ở câu riêng".
+  - Mục Nguồn: danh sách nhận xét được phép đổi thành "cao hơn, thấp hơn, rộng hơn, hẹp hơn".
+  - Mục So sánh: vẫn so sánh tương đối giữa hai tài sản (HAIKU2-016 cần), nhưng viết "trung vị thấp hơn và xác suất tăng thấp hơn" thay cho "thiên về giảm nhiều hơn".
+  - Thêm một quy tắc chung: không gắn nhãn hướng cho dự báo của một tài sản; hỏi chiều tăng giảm thì trả lời bằng q50 và xác suất tăng. Lý do: ở lần chạy 30/10 Haiku tự viết nhãn hướng dù prompt v2 không có ví dụ nào (HAIKU2-002 "Có xu hướng nghiêng giảm", HAIKU2-017 "xu hướng hơi giảm"), nên chỉ bỏ ví dụ thì chưa đủ để khớp với web.

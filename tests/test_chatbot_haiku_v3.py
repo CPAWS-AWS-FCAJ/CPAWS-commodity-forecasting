@@ -115,6 +115,17 @@ def test_v3_prompt_contains_required_rules(rule):
     assert rule in CB.load_system_prompt(V3_PROMPT)
 
 
+def test_v3_prompt_uses_no_direction_labels():
+    """Khải review PR #70 (họp 30/10): chatbot không dùng nhãn hướng, chỉ nêu xác suất tăng, để
+    khớp web (ngưỡng 60/40). Cụm "nghiêng ..." chỉ được xuất hiện trong quy tắc cấm."""
+    text = CB.load_system_prompt(V3_PROMPT)
+    assert "Không gắn nhãn hướng" in text
+    for phrase in ("tức nghiêng", "thiên về", "nghiêng tăng, nghiêng giảm, rộng hơn"):
+        assert phrase not in text
+    lines = [ln for ln in text.splitlines() if "nghiêng" in ln]
+    assert all("Không gắn nhãn hướng" in ln for ln in lines), lines
+
+
 # ---------- hai bộ chỉ chạy dev ----------
 
 
