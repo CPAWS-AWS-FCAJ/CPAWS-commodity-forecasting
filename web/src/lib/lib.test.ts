@@ -4,10 +4,10 @@ import { ASSET_IDS } from "../api/types";
 import { formatDate, formatNumber, formatPrice, formatProbability, formatReturnPercent } from "./format";
 import {
   describeProbability,
-  edgeFromReturns,
   isStaleByDate,
   modelDisplayName,
   probUpFromQuantiles,
+  roundPercent,
   weekdaysSince,
 } from "./forecast";
 import { isPriceHidden } from "./assets";
@@ -63,22 +63,26 @@ describe("probability", () => {
     expect(probUpFromQuantiles(levels, [-0.07, -0.06, -0.05, -0.04, -0.03, -0.02, -0.01])).toBe(0.05);
   });
 
-  it("0 ngoài [q10, q90] → ghi 'trên 90%' / 'dưới 10%'", () => {
-    const up = edgeFromReturns(levels, [0.001, 0.002, 0.003, 0.004, 0.005, 0.006, 0.007]);
-    expect(up).toEqual({ zeroBelowQ10: true, zeroAboveQ90: false });
-    expect(describeProbability(0.95, up).headline).toBe("Khả năng tăng trên 90%");
-    expect(describeProbability(0.95, up).probUpLabel).toBe("trên 90%");
-
-    const down = edgeFromReturns(levels, [-0.007, -0.006, -0.005, -0.004, -0.003, -0.002, -0.001]);
-    expect(describeProbability(0.05, down).headline).toBe("Khả năng giảm trên 90%");
-    expect(describeProbability(0.05, down).probUpLabel).toBe("dưới 10%");
+  it("nhãn hướng so trên xác suất đã làm tròn 1% (ngưỡng 60/40)", () => {
+    expect(describeProbability(0.597)).toMatchObject({ lean: "up", label: "Nghiêng tăng", probUpLabel: "60%" });
+    expect(describeProbability(0.404)).toMatchObject({ lean: "down", label: "Nghiêng giảm", probUpLabel: "40%" });
+    expect(describeProbability(0.55)).toMatchObject({ lean: "flat", label: "Chưa rõ xu hướng", probUpLabel: "55%" });
+    expect(describeProbability(0.594).label).toBe("Chưa rõ xu hướng");
+    expect(describeProbability(0.406).label).toBe("Chưa rõ xu hướng");
+    expect(describeProbability(0.6).label).toBe("Nghiêng tăng");
+    expect(describeProbability(0.4).label).toBe("Nghiêng giảm");
   });
 
-  it("xác suất thường: tăng, giảm, ngang nhau", () => {
-    const none = { zeroBelowQ10: false, zeroAboveQ90: false };
-    expect(describeProbability(0.56, none).headline).toBe("Khả năng tăng 56%");
-    expect(describeProbability(0.44, none).headline).toBe("Khả năng giảm 56%");
-    expect(describeProbability(0.5, none).lean).toBe("flat");
+  it("chỉ đúng biên kẹp mới ghi '≥ 95%' / '≤ 5%'; 0,945 vẫn là 95%", () => {
+    expect(describeProbability(0.95).probUpLabel).toBe("≥ 95%");
+    expect(describeProbability(0.05).probUpLabel).toBe("≤ 5%");
+    expect(describeProbability(0.945).probUpLabel).toBe("95%");
+    expect(describeProbability(0.055).probUpLabel).toBe("6%");
+  });
+
+  it("làm tròn % khử sai số dấu phẩy động", () => {
+    expect(roundPercent(0.585)).toBe(59);
+    expect(roundPercent(0.725714)).toBe(73);
   });
 });
 

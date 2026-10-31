@@ -82,6 +82,83 @@ export interface HistoryResponse {
   points: PricePoint[];
 }
 
+/**
+ * GET /accuracy/{asset} (contract mục "Rolling Accuracy MVP"; fixtures tests/fixtures/accuracy/).
+ * Web chỉ đọc display_value/display_status và các trường đếm; `value` là số nội bộ, không dùng để
+ * hiển thị hay vượt ngưỡng.
+ */
+export const ACCURACY_DATA_STATUSES = ["not_ready", "collecting", "ready"] as const;
+export type AccuracyDataStatus = (typeof ACCURACY_DATA_STATUSES)[number];
+
+/** Enum đóng của display_status ở overall; by_horizon chỉ có "counts_only". */
+export const OVERALL_DISPLAY_STATUSES = ["not_ready", "insufficient_data", "ready", "undefined"] as const;
+export type OverallDisplayStatus = (typeof OVERALL_DISPLAY_STATUSES)[number];
+export const HORIZON_DISPLAY_STATUS = "counts_only";
+
+interface AccuracyMetricBase {
+  n_obs: number;
+  /** Trạng thái tính toán nội bộ (ok | undefined); không quyết định việc hiển thị. */
+  status: string;
+  display_value: number | null;
+  display_status: string;
+}
+
+export interface CoverageMetric extends AccuracyMetricBase {
+  covered_count: number;
+  n_base_dates: number;
+}
+
+export interface OverallCoverageMetric extends CoverageMetric {
+  /** Ngưỡng số base date để hiện số overall (hiện là 20). */
+  min_display_base_dates: number;
+}
+
+export interface ValueMetric extends AccuracyMetricBase {
+  value: number | null;
+  unit?: "log_return" | "percent";
+}
+
+export interface AccuracyMetrics<C extends CoverageMetric = CoverageMetric> {
+  coverage_80: C;
+  width_80: ValueMetric;
+  width_80_pct: ValueMetric;
+  sign_accuracy: ValueMetric;
+  up_rate: ValueMetric;
+}
+
+export interface AccuracyHorizon extends AccuracyMetrics {
+  h: number;
+}
+
+export interface AccuracyResponse {
+  asset: AssetId;
+  model_version: string;
+  evaluation_kind: "rolling_8w";
+  sample: "all";
+  run_id: string | null;
+  evaluated_at: string | null;
+  window: {
+    basis: "base_date";
+    days: number;
+    window_start: string | null;
+    window_end: string | null;
+    target_cutoff_date: string | null;
+    first_eligible_base_date: string | null;
+  };
+  evaluation_evidence: {
+    schedule_basis: string;
+    schedule_evidence_status: string;
+    issuance_evidence_status: string;
+    expected_count: number | null;
+    published_count: number | null;
+    missing_count: number | null;
+  };
+  overall: AccuracyMetrics<OverallCoverageMetric>;
+  by_horizon: AccuracyHorizon[];
+  data_status: string;
+  disclaimer: string;
+}
+
 export interface ApiErrorBody {
   error: string;
   message: string;

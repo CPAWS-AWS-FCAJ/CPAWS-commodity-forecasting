@@ -10,6 +10,7 @@ import { PriceRange } from "../components/PriceRange";
 import { ProbabilityBadge } from "../components/ProbabilityBadge";
 import { ReturnRange } from "../components/ReturnRange";
 import { QuantileTable } from "../components/QuantileTable";
+import { ReliabilityBlock } from "../components/ReliabilityBlock";
 import { ReturnFanChart } from "../components/ReturnFanChart";
 import { EmptyBlock, ErrorBlock, LoadingBlock } from "../components/StateViews";
 import { BaselineBadge, RollBadge, SampleBadge, StaleBadge } from "../components/StatusBadges";
@@ -19,7 +20,6 @@ import { buildFanData, buildReturnFanData } from "../lib/chartData";
 import { formatDate, formatDateTimeVn, formatNumber, formatPrice } from "../lib/format";
 import {
   BASELINE_Q252,
-  edgeFromReturns,
   findHorizon,
   isStaleByDate,
   modelDisplayName,
@@ -118,13 +118,7 @@ function AssetContent({ asset }: { asset: AssetId }) {
               </>
             ) : null}
 
-            <EmptyBlock title="Độ chính xác 4 tuần gần nhất">
-              Chưa có số liệu chạy thật. Xem trang{" "}
-              <Link to="/accuracy" className="text-forecast underline">
-                Độ chính xác
-              </Link>
-              .
-            </EmptyBlock>
+            <ReliabilityBlock asset={asset} showHorizons={mode === "advanced"} />
 
             <Notes asset={asset} detail={detail} />
           </div>
@@ -156,7 +150,6 @@ function Summary({
 }) {
   const horizon = findHorizon(detail, horizonDays) ?? detail.horizons[detail.horizons.length - 1];
   const options = BASIC_HORIZONS.filter((h) => findHorizon(detail, h));
-  const edge = edgeFromReturns(detail.quantile_levels, horizon.returns);
   const i10 = detail.quantile_levels.findIndex((l) => Math.abs(l - 0.1) < 1e-9);
   const i50 = detail.quantile_levels.findIndex((l) => Math.abs(l - 0.5) < 1e-9);
   const i90 = detail.quantile_levels.findIndex((l) => Math.abs(l - 0.9) < 1e-9);
@@ -206,12 +199,7 @@ function Summary({
       </div>
 
       <div className="mt-5 grid gap-6 sm:grid-cols-2">
-        <ProbabilityBadge
-          probUp={horizon.prob_up}
-          zeroBelowQ10={edge.zeroBelowQ10}
-          zeroAboveQ90={edge.zeroAboveQ90}
-          horizonDays={horizon.h}
-        />
+        <ProbabilityBadge probUp={horizon.prob_up} horizonDays={horizon.h} />
         {hidePrice ? (
           <ReturnRange
             low={horizon.returns[i10]}
