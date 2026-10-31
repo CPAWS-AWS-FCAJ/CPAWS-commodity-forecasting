@@ -13,7 +13,13 @@ import type {
   HorizonDetail,
   PriceUnit,
 } from "./types";
+import type { AccuracyResponse } from "./types";
+import type { SampleAccuracy } from "./config";
 import { probUpFromQuantiles } from "../lib/forecast";
+// Fixtures Accuracy của contract (PR #62), đều synthetic: dùng chung một nguồn với test backend.
+import accuracyNotReady from "../../../tests/fixtures/accuracy/not_ready.json";
+import accuracyCollecting from "../../../tests/fixtures/accuracy/collecting.json";
+import accuracyReady from "../../../tests/fixtures/accuracy/ready.json";
 
 const DISCLAIMER = "Dự báo mang tính tham khảo, không phải lời khuyên đầu tư.";
 const BASE_DATE = "2026-10-20"; // thứ Ba
@@ -160,6 +166,18 @@ export function sampleList(): ForecastListResponse {
     };
   });
   return { items, disclaimer: DISCLAIMER };
+}
+
+const ACCURACY_FIXTURES: Record<SampleAccuracy, unknown> = {
+  not_ready: accuracyNotReady,
+  collecting: accuracyCollecting,
+  ready: accuracyReady,
+};
+
+/** Fixture GET /accuracy (viết cho gold); đổi `asset` để dùng cho cả 4 tài sản. */
+export function sampleAccuracy(asset: AssetId, which: SampleAccuracy): AccuracyResponse {
+  if (!SPECS[asset]) throw new ApiError(400, "invalid_asset", "Mã tài sản không hợp lệ.");
+  return { ...(ACCURACY_FIXTURES[which] as AccuracyResponse), asset };
 }
 
 /** Bước ngẫu nhiên lùi từ giá cuối, 91 phiên kết thúc đúng tại BASE_DATE. */

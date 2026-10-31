@@ -3,6 +3,7 @@ import { MemoryRouter } from "react-router-dom";
 import { sampleDetail, sampleList } from "../api/sample";
 import { formatReturnPercent } from "../lib/format";
 import { AssetCard } from "./AssetCard";
+import { Disclaimer, DISCLAIMER_TEXT } from "./Disclaimer";
 import { PriceRange } from "./PriceRange";
 import { ProbabilityBadge } from "./ProbabilityBadge";
 import { QuantileTable } from "./QuantileTable";
@@ -10,22 +11,48 @@ import { ReturnRange } from "./ReturnRange";
 import { ModeToggle } from "./Toggles";
 
 describe("ProbabilityBadge", () => {
-  it("hiện mũi tên, chữ và xác suất tăng", () => {
-    render(<ProbabilityBadge probUp={0.56} horizonDays={7} />);
-    expect(screen.getByText(/Khả năng tăng 56%/)).toBeInTheDocument();
+  it("0,597 → 60% → 'Nghiêng tăng' kèm kỳ hạn và ▲", () => {
+    render(<ProbabilityBadge probUp={0.597} horizonDays={7} />);
+    expect(screen.getByText(/Nghiêng tăng/)).toBeInTheDocument();
+    expect(screen.getByText("· 7 phiên")).toBeInTheDocument();
     expect(screen.getByText(/▲/)).toBeInTheDocument();
-    expect(screen.getByRole("meter")).toHaveAttribute("aria-valuenow", "56");
+    expect(screen.getByText(/Xác suất giá tăng: 60%/)).toBeInTheDocument();
+    expect(screen.getByRole("meter")).toHaveAttribute("aria-valuenow", "60");
   });
 
-  it("hiện 'giảm' kèm mũi tên xuống khi xác suất tăng dưới 50%", () => {
-    render(<ProbabilityBadge probUp={0.4} horizonDays={3} />);
-    expect(screen.getByText(/Khả năng giảm 60%/)).toBeInTheDocument();
+  it("0,404 → 40% → 'Nghiêng giảm' kèm ▼", () => {
+    render(<ProbabilityBadge probUp={0.404} horizonDays={3} />);
+    expect(screen.getByText(/Nghiêng giảm/)).toBeInTheDocument();
+    expect(screen.getByText("· 3 phiên")).toBeInTheDocument();
     expect(screen.getByText(/▼/)).toBeInTheDocument();
   });
 
-  it("ghi 'trên 90%' khi cả khoảng 80% dương", () => {
-    render(<ProbabilityBadge probUp={0.95} zeroBelowQ10 horizonDays={7} />);
-    expect(screen.getByText(/Khả năng tăng trên 90%/)).toBeInTheDocument();
+  it("0,55 → 'Chưa rõ xu hướng', không có ▲ hay ▼", () => {
+    render(<ProbabilityBadge probUp={0.55} horizonDays={7} />);
+    expect(screen.getByText(/Chưa rõ xu hướng/)).toBeInTheDocument();
+    expect(screen.queryByText(/▲/)).toBeNull();
+    expect(screen.queryByText(/▼/)).toBeNull();
+    expect(screen.getByText(/Xác suất giá tăng: 55%/)).toBeInTheDocument();
+  });
+
+  it("biên kẹp 0,95 → '≥ 95%'; 0,945 → '95%'", () => {
+    const { unmount } = render(<ProbabilityBadge probUp={0.95} horizonDays={7} />);
+    expect(screen.getByText(/Xác suất giá tăng: ≥ 95%/)).toBeInTheDocument();
+    unmount();
+    render(<ProbabilityBadge probUp={0.945} horizonDays={7} />);
+    expect(screen.getByText("Xác suất giá tăng: 95% (vạch giữa = 50%)")).toBeInTheDocument();
+  });
+});
+
+describe("Disclaimer", () => {
+  it("hằng dự phòng đúng chuỗi DISCLAIMER của API", () => {
+    expect(DISCLAIMER_TEXT).toBe("Dự báo mang tính tham khảo, không phải lời khuyên đầu tư.");
+    expect(DISCLAIMER_TEXT).toBe(sampleList().disclaimer);
+  });
+
+  it("ưu tiên chuỗi từ response API", () => {
+    render(<Disclaimer text="Chuỗi từ API" />);
+    expect(screen.getByText("Chuỗi từ API")).toBeInTheDocument();
   });
 });
 
@@ -94,7 +121,18 @@ describe("AssetCard", () => {
     expect(screen.queryByText(/Khoảng giá 80%/)).not.toBeInTheDocument();
     expect(screen.queryByText("USD/oz")).not.toBeInTheDocument();
     expect(screen.getByText(/Thay đổi 80% sau 7 ngày/)).toBeInTheDocument();
-    expect(screen.getByText(/Khả năng (tăng|giảm)/)).toBeInTheDocument();
+    expect(screen.getByText(/Nghiêng tăng|Nghiêng giảm|Chưa rõ xu hướng/)).toBeInTheDocument();
+    expect(screen.getByText("· 7 phiên")).toBeInTheDocument();
+  });
+
+  it("thẻ trang chủ dùng prob_up của h = 7", () => {
+    render(
+      <MemoryRouter>
+        <AssetCard item={{ ...gold, h1: { ...gold.h1, prob_up: 0.3 }, h7: { ...gold.h7, prob_up: 0.62 } }} />
+      </MemoryRouter>,
+    );
+    expect(screen.getByText(/Nghiêng tăng/)).toBeInTheDocument();
+    expect(screen.getByText(/Xác suất giá tăng: 62%/)).toBeInTheDocument();
   });
 
   it("hiện nhãn 'Mốc thống kê 252 phiên' khi model_version là baseline-q252", () => {
