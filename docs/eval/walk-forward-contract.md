@@ -1,6 +1,6 @@
 # Hợp đồng dữ liệu Walk-forward Evaluation — CPAWS
 
-- **Trạng thái: đã duyệt cho MVP validation 2019; cập nhật Rolling MVP 2026-10-30 theo RFC [#45](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/45) v4.6 (PR [#65](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/65)); external import/PIT nâng cao vẫn phase 2.**
+- **Trạng thái: đã duyệt cho MVP validation 2019; cập nhật Rolling MVP 2026-10-30 theo RFC [#45](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/45) v4.6 (PR [#65](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/65)); bổ sung schema writer/API ngày 2026-10-31 theo review Khải/Tuấn; external import/PIT nâng cao vẫn phase 2.**
 - Ngày soạn: 2026-10-18; cập nhật review Khải PR #12: 2026-10-19. Làm việc trên source giải nén cục bộ, không xác minh trạng thái merge từ xa.
 - Phạm vi: hợp đồng đầu vào/đầu ra sinh dự báo và đánh giá; bổ sung storage/lifecycle Rolling MVP tại §7 theo RFC #45 v4.6, không triển khai Python.
 - Bản cập nhật 30/10 chỉ đồng bộ hai Contract API/Walk-forward; không sửa ADR, Accuracy Schema, code, fingerprint K4 hoặc kết quả đã bàn giao. Các ghi chú source ở §2 và §14.2 là đối chiếu lịch sử khi soạn 19/10, không xác nhận tình trạng deploy hiện tại.
@@ -251,11 +251,11 @@ Mỗi cặp được chấm phải đáp ứng:
 4. Sau cutover PR #48: conditional-write provenance và `input_snapshot_dt=YYYY-MM-DD` đúng `snap.dt` đã dùng, validate với snapshot/input-as-of. Có field chỉ là candidate hậu cutover, không chứng minh bất biến hoặc thời điểm phát hành.
 5. Trước cutover: chỉ từng record được duyệt theo `LEGACY_ACCEPT_WITH_EVIDENCE`; thiếu/sai field sau cutover không được tự hạ thành legacy.
 
-**Mốc deploy cutover PR #48 đã được Tiến cung cấp qua PR #68:** code `ce77bcb`, CloudFormation `PredictFunction UPDATE_COMPLETE` lúc **`2026-10-30T08:10:06Z`**. Đây là ranh giới deploy đã ghi nhận, khác `issued_at_min` 27/10 và champion effective `base_date=26/10`. **Smoke production đầu tiên dự kiến là lượt 30/10 lúc 12:15 UTC**, cần Tiến xác nhận ở PR #68 `written=4`, `already_published=0` và có `input_snapshot_dt` cho cả bốn asset trước khi đánh dấu kiểm chứng hành vi conditional write; cho đến khi có bằng chứng, không tự coi smoke test đã PASS. Lượt này có `base_date=2026-10-29`, là **hậu cutover**, bắt buộc `input_snapshot_dt` đúng snapshot/input-as-of và provenance phát hành hợp lệ; không được chuyển ngược sang legacy nếu thiếu field. Build/approve/merge hoặc `dry_run` không chứng minh ghi production. Thời điểm deploy và bằng chứng smoke phải lưu dưới dạng provenance/metadata có thể kiểm toán của evaluation run, không tự đặt tên attribute DynamoDB mới chưa được review.
+**Mốc deploy cutover PR #48 đã được Tiến cung cấp qua PR #68:** code `ce77bcb`, CloudFormation `PredictFunction UPDATE_COMPLETE` lúc **`2026-10-30T08:10:06Z`**. Đây là ranh giới deploy đã ghi nhận, khác `issued_at_min` 27/10 và champion effective `base_date=26/10`. **Theo xác nhận vận hành của Tiến/Khải tại PR #68, smoke test production 2026-10-30 lúc 12:15 UTC đã đạt `written=4`, `already_published=0` và có `input_snapshot_dt` ở cả bốn asset.** Đây là bằng chứng cho cutover Predict PR #48, không chứng minh Rolling writer hoặc Accuracy API đã deploy. Lượt này có `base_date=2026-10-29`, là **hậu cutover**, bắt buộc `input_snapshot_dt` đúng snapshot/input-as-of và provenance phát hành hợp lệ; không được chuyển ngược sang legacy nếu thiếu field. Build/approve/merge hoặc `dry_run` không chứng minh ghi production. Thời điểm deploy và bằng chứng smoke phải lưu dưới dạng provenance/metadata có thể kiểm toán của evaluation run, không tự đặt tên attribute DynamoDB mới chưa được review.
 
 **Legacy policy đã chốt, từng record còn cần evidence:** kiểm asset/base_date/model_version/created_at, khung lịch 12:15–13:30 UTC, is_sample=false, không manual overwrite/reissue, input-as-of; ghi người xác nhận, thời điểm duyệt, audit reference/hash và danh sách accepted records trong provenance META. Chỉ record đã duyệt được miễn input_snapshot_dt; không bịa snapshot hoặc gắn immutable_verified hồi tố. Timestamp đúng lịch chưa đủ. Thiếu evidence → legacy_unverified/issuance_unverified và loại khỏi n_obs; fail-closed tương đương POST_CUTOVER_ONLY với record đó.
 
-Audit legacy riêng dự kiến Tiến cung cấp trước 02/11: **chỉ base_date 26–28/10/2026** (bốn asset, nếu có record), gồm created_at, CloudWatch Invocations/PREDICT_DONE, snapshot_dt/dry_run/written/model_version, đối chiếu input-as-of và lịch sử ghi. **Base_date 29/10**, phát hành 30/10 12:15 UTC, thuộc hậu cutover PR #48 nên không phải legacy; việc chứng thực lượt smoke vẫn đang chờ Tiến xác nhận tại PR #68. Đây là audit ngoại lệ một lần, **không** yêu cầu tạo manifest phát hành mới hay gọi CloudWatch mỗi lượt Rolling. Chưa có danh sách legacy records được duyệt trong gói tài liệu này.
+Audit legacy riêng dự kiến Tiến cung cấp trước 02/11: **chỉ base_date 26–28/10/2026** (bốn asset, nếu có record), gồm created_at, CloudWatch Invocations/PREDICT_DONE, snapshot_dt/dry_run/written/model_version, đối chiếu input-as-of và lịch sử ghi. **Base_date 29/10**, phát hành 30/10 12:15 UTC, thuộc hậu cutover PR #48 nên không phải legacy; lượt smoke đã được Tiến/Khải xác nhận theo PR #68. Đây là audit ngoại lệ một lần, **không** yêu cầu tạo manifest phát hành mới hay gọi CloudWatch mỗi lượt Rolling. Chưa có danh sách legacy records được duyệt trong gói tài liệu này.
 
 ### 7.4. Actual, common mask, metric và display
 
@@ -269,7 +269,7 @@ Overall coverage = tổng hits/tổng cặp; width/width_pct/sign/up dùng trọ
 
 ### 7.5. Storage, lifecycle và concurrent writers
 
-Validation/test vẫn Parquet S3 `eval/`. Rolling champion dùng `cpaws-<env>-accuracy`, PK/SK String, không GSI/LSI/Scan hoặc TTL cho record công bố. Key động canonical-encode/length-prefix để tránh collision.
+Validation/test vẫn Parquet S3 `eval/`. Rolling champion dùng `cpaws-<env>-accuracy`, PK/SK String, không GSI/LSI/Scan hoặc TTL cho record công bố. Key động áp dụng **UTF-8 percent-encoding** theo `urllib.parse.quote(str(value), safe="-._~")` như writer Rolling r3; không dùng length-prefix. Chi tiết và ví dụ tại §7.5.1.
 
 | Item | PK | SK | Nội dung |
 |---|---|---|---|
@@ -277,17 +277,76 @@ Validation/test vẫn Parquet S3 `eval/`. Rolling champion dùng `cpaws-<env>-ac
 | META | RUN#asset#model_version#run_id | META | Status, fingerprints, snapshot/cutoff, model/effective date, eligibility/legacy evidence, 28 expected keys/hashes, aggregate/counts, derived_metrics |
 | METRIC | Cùng PK META | METRIC#sample#evaluation_kind#evaluation_start#evaluation_end#target_cutoff_date#Hh#metric | Một metric nền/h, payload_hash, schema logic hiện hành |
 
-`run_id = <job_utc_date>-<sha256(canonical(asset, MODEL_VERSIONS[asset], CHAMPION_EFFECTIVE_BASE_DATES[asset], job_date, revision, config_hash, immutable_snapshot_identity, target_cutoff_date, eligible_record_fingerprint))[:20]>`. Lưu fingerprint đầy đủ và derived payload/hash trong META. `run_order=<YYYYMMDD>#<revision_4_digits>` tăng đơn điệu; retry cùng input giữ revision/run_id. Correction snapshot/config/evaluation tạo revision/run mới, không ghi đè kết quả cũ. Không cần fingerprint của toàn bộ CloudWatch schedule logs.
+`run_id` theo writer r3 = `job_utc_date + "-" + sha256(canonical(identity))[:20]`, trong đó `identity` chứa model/effective date, revision, config hash, snapshot/cutoff, eligible-record fingerprint, source/audit/count fingerprint và evidence-config hash; xem chính xác §7.5.1. Lưu fingerprint đầy đủ và derived payload/hash trong META. `run_order=<YYYYMMDD>#<revision_4_digits>` tăng đơn điệu; retry cùng input giữ revision/run_id. Correction snapshot/config/evaluation tạo revision/run mới, không ghi đè kết quả cũ. Không cần fingerprint của toàn bộ CloudWatch schedule logs.
 
 1. Khóa mapping/snapshot/cutoff/eligible records; tạo META RUNNING bằng conditional PutItem `attribute_not_exists(PK)`. Trùng full fingerprint: resume nếu chưa completed, hoặc xác nhận pointer/no-op nếu đã completed; khác → RUN_ID_CONFLICT.
 2. Ghi 28 METRIC bằng conditional PutItem trên từng PK/SK, không BatchWriteItem. Conditional failure: consistent GetItem so payload_hash/nội dung; giống no-op, khác IMMUTABLE_METRIC_CONFLICT. Không nhầm với Predict already-published không GetItem/so payload.
 3. META RUNNING→VALIDATING→COMPLETED bằng conditional UpdateItem; fingerprint/config/snapshot/evidence/metric hashes/derived payload bất biến. Strong-read xác nhận đủ 28 rows, counts, derived hash, actual/eligibility nhất quán và không còn lỗi tính/đọc/ghi/conflict. FAILED terminal, chạy lại cần revision mới.
 4. Chỉ sau COMPLETED mới conditional promote STATE: pointer chưa có, hoặc order mới lớn hơn, hoặc cùng order **và cùng run PK** cho idempotent retry. Cùng order khác run là conflict; không rollback. Crash trước completion không đổi pointer; crash sau completion trước promote được retry promote.
-5. API đọc STATE rồi Query đầy đủ run bằng strong reads; kiểm META COMPLETED/current champion/effective date/run order/28 hashes/derived/provenance; đọc lại pointer trước khi trả. Pointer đổi hoặc model mismatch → retry ngắn/not_ready, không trả sai champion. Monotonic order không tự giải quyết writer đời cũ chạy muộn; release phải drain writer cũ, đồng bộ hai mappings và test fail-closed theo asset.
+5. API đọc STATE rồi Query đầy đủ run bằng strong reads; kiểm META COMPLETED/current champion/effective date/run order/28 hashes/derived/provenance; đọc lại pointer trước khi trả. **Pointer đã xác minh trỏ completed run của champion cũ** → `200 not_ready`; **pointer trỏ run lỗi META/hash/derived/provenance hoặc read không nhất quán** → retry ngắn có giới hạn, nếu vẫn lỗi trả `503 accuracy_unavailable` theo API Contract, không đánh tráo thành `not_ready`. Monotonic order không tự giải quyết writer đời cũ chạy muộn; release phải drain writer cũ, đồng bộ hai mappings và test fail-closed theo asset.
 
 Không promote khi snapshot không nhất quán, lỗi tính/ghi chưa xử lý, thiếu rows, payload/fingerprint conflict hoặc provenance của cặp scoring không hợp lệ. **Không chặn COMPLETED** chỉ vì missing kỳ expected, thiếu CloudWatch/manifest audit, n_obs=0 hay chưa đủ 20 ngày. Với input đã đọc hợp lệ và common rỗng, ghi đủ 28 undefined/value=null/n_obs=0/no_evaluable_obs, derived null; không gắn verified_eligible_rows khi không có cặp.
 
 IAM: Rolling writer scoped Get/Query/Put/Update Accuracy, read Forecasts/clean/shadow, write chỉ shadow_eval; API reader chỉ Get/Query Accuracy, không Forecasts/S3/ghi/Scan. Predict không đọc Accuracy, không có champion release operator. IAM scope không thay conditional expressions. S3 ListBucket trên bucket ARN giới hạn request prefix clean/shadow; GetObject 403 mơ hồ không tự gọi missing: scoped ListObjectsV2(Prefix=key) để xác minh, nếu không xác minh giữ unverified/lỗi quyền. Không mở quyền toàn lake. No reserved concurrency không miễn kiểm concurrent writes.
+
+#### 7.5.1. Khóa vật lý và thuật toán mã hóa thống nhất với Rolling writer r3
+
+**Nguồn đối chiếu implementation:** `src/eval/rolling_store.py` (`component`, `run_pk`, `metric_items`, `AccuracyStore.promote`) và `src/eval/rolling_accuracy.py` (`canonical`, `digest`) trong gói Rolling v4.6-r3 của Long. Mục này chốt wire format để Tuấn triển khai reader; **không phải bằng chứng code đã deploy**. Mọi PK/SK là DynamoDB `S` (String).
+
+- `component(v) = urllib.parse.quote(str(v), safe="-._~")`: encode UTF-8 theo percent-encoding; các ký tự chữ/số ASCII và `-._~` để nguyên; `# → %23`, `% → %25`, `/ → %2F`, khoảng trắng `→ %20`, Unicode được encode thành UTF-8 rồi `%HH` (hex uppercase theo Python). Không dùng length-prefix, không URL-encode toàn bộ khóa sau khi ghép.
+- `STATE`: `PK = "ASSET#" + component(asset)`, `SK = "STATE"`.
+- `RUN/META`: `PK = "RUN#" + "#".join(component(x) for x in (asset, model_version, run_id))`, `SK = "META"`.
+- `METRIC`: cùng RUN PK, `SK = "METRIC#" + "#".join(component(x) for x in ("all", "rolling_8w", evaluation_start, evaluation_end, target_cutoff_date, "H"+str(h), metric))`.
+- Ví dụ model `baseline-q252`, asset `gold`, run `2026-11-05-abcdef` ⇒ `RUN#gold#baseline-q252#2026-11-05-abcdef`; ký tự `#` trong một component giả định `model#v2` ⇒ `model%23v2` (không tạo segment mới). API **ưu tiên dùng nguyên `STATE.latest_run_pk` để Query**; khi kiểm/khôi phục khóa phải tái tạo bằng đúng `component`, không dùng thuật toán khác hoặc `Scan`.
+- `h` đúng các số nguyên `1..7`. 28 SK hợp lệ là tích Descartes của `H1`–`H7` với `coverage_80`, `width_80`, `sign_accuracy`, `up_rate`. Thứ tự phát sinh trong writer: h tăng dần, metric theo thứ tự trên; thứ tự trả về từ DynamoDB không dùng làm danh tính. Ví dụ `METRIC#all#rolling_8w#2026-09-11#2026-11-05#2026-11-04#H1#coverage_80`.
+
+`run_order` là `YYYYMMDD#rrrr` với revision 4 chữ số (`0000`–`9999`), kiểu `S`, so sánh lexicographic. `run_id` thực tế r3 có dạng `job_utc_date + "-" + sha256(canonical(identity))[:20]`; `identity` là map gồm `asset`, `model_version`, `effective`, `job_date`, `revision`, `config_hash`, `snapshot` (immutable actual snapshot identity), `target_cutoff_date`, `eligible_record_fingerprint`, `source_fingerprint` (records/audit/counts) và `evidence_config_hash` (thêm tại `rolling_job.py`). Không suy ID từ timestamp GET, không tự tái tạo run_id từ một tập trường thiếu provenance.
+
+#### 7.5.2. Physical DynamoDB item schema theo writer r3 (tên attribute và type)
+
+**DynamoDB types:** `S` String, `N` Number, `M` Map, `L` List, `NULL` Null, `BOOL` Boolean. Với `boto3.resource.Table`, writer đổi mọi Python `float` hữu hạn thành `Decimal(str(value))` trước PutItem; `int` thành `N`, `None` thành `NULL`, `bool` thành `BOOL`. Boto3 resource đọc `N` về `Decimal`; API chuyển thành JSON number hữu hạn khi dựng response, **không** dùng `float` Python trực tiếp trong PutItem, không NaN/Infinity. Không lẫn Number của Forecasts được làm tròn 6 chữ số với metric Accuracy lưu ở precision tính toán của writer.
+
+| Item | Attribute | Type / ý nghĩa theo code r3 |
+|---|---|---|
+| `STATE` | `PK`, `SK`, `latest_run_pk`, `latest_run_id`, `latest_run_order` | Tất cả `S`; **chỉ ba trường dữ liệu pointer** (ngoài PK/SK), không có champion/generation |
+| `META` | `PK`, `SK`, `run_id`, `run_order`, `asset`, `model_version`, `effective`, `evaluation_kind`, `sample`, `evaluated_at`, `config_hash`, `payload_hash`, `status` | Tất cả `S`; `effective` là ISO base date; `evaluated_at` là UTC timestamp; status `RUNNING/VALIDATING/COMPLETED/FAILED` |
+| `META` | `identity`, `implementation`, `window`, `evaluation_evidence`, `overall`, `derived_metrics`, `metric_hashes`, `actual_lineage` | `M`; chi tiết ở bảng bên dưới |
+| `META` | `by_horizon`, `audit`, `input_lineage` | `L` của `M`; by_horizon đủ bảy h, audit có thể rỗng |
+| `META` | `last_eligible_base_date` | `S` ISO date hoặc `NULL` |
+| `METRIC` | `PK`, `SK`, `run_id`, `config_hash`, `model_version`, `asset`, `sample`, `evaluation_kind`, `evaluation_start`, `evaluation_end`, `target_cutoff_date`, `metric`, `payload_hash` | `S`; khóa logic trên mỗi cặp h/metric |
+| `METRIC` | `h`, `n_obs` | `N` integer; `h=1..7`, `n_obs>=0` |
+| `METRIC` | `value`, `ci_low`, `ci_high` | `N` hoặc `NULL`; writer r3 hiện để hai trường CI là `NULL` |
+| `METRIC` | `status`, `undefined_reason` | `status` là `S` (`ok/undefined` theo implementation hiện tại); `undefined_reason` là `S` hoặc `NULL` |
+| `METRIC` | `covered_count`, `n_base_dates` | `N` integer **chỉ với metric `coverage_80`** |
+| `METRIC` | `unit` | `S="log_return"` **chỉ với `width_80`** |
+
+| `META` nested attribute | Type / structure chính xác |
+|---|---|
+| `window` | `M`: `basis:S="base_date"`, `days:N=56`, `window_start:S`, `window_end:S`, `target_cutoff_date:S`, `first_eligible_base_date:S/NULL` |
+| `evaluation_evidence` | `M`: `schedule_basis:S="trading_calendar_and_predict_schedule"`, `schedule_evidence_status:S="not_audited_mvp"`, `issuance_evidence_status:S="verified_eligible_rows"/"no_eligible_rows"`, `expected_count:N`, `published_count:N`, `missing_count:N` |
+| `overall` | `M`: **năm** metric maps `coverage_80`, `width_80`, `sign_accuracy`, `up_rate`, `width_80_pct` (derived cũng hiện diện ở đây) |
+| `by_horizon` | `L` của 7 map `{h:N, coverage_80:M, width_80:M, sign_accuracy:M, up_rate:M}`; **không có `width_80_pct` trong mỗi entry này** |
+| `derived_metrics.width_80_pct` | `M`: `overall:M` và `by_horizon:L` của 7 map `{h:N, value:N/NULL, n_obs:N, status:S, undefined_reason:S/NULL, unit:S="percent"}`. `overall` cũng là `{value, n_obs, status, undefined_reason, unit}` (không `h`). API ghép derived vào per-h response, không tự suy từ `width_80` |
+| Metric map trong `overall`/`by_horizon` | Chung: `value:N/NULL`, `n_obs:N`, `status:S`, `undefined_reason:S/NULL`; `coverage_80` thêm `covered_count:N`, `n_base_dates:N`; `width_80` thêm `unit:S="log_return"`; `width_80_pct` thêm `unit:S="percent"` (chỉ `overall`, `derived_metrics`) |
+| `metric_hashes` | `M`: **đúng 28 entries** `SK` đầy đủ → SHA-256 hex String của payload METRIC; phải có cùng tập key với 28 item thực, không thừa/thiếu |
+| `identity` | `M`: `asset:S`, `model_version:S`, `effective:S`, `job_date:S`, `revision:N`, `config_hash:S`, `snapshot:M`, `target_cutoff_date:S`, `eligible_record_fingerprint:S`, `source_fingerprint:S`, `evidence_config_hash:S` |
+| `implementation` | `M`: `code_sha256:M` (relative-path → sha256 String), `libraries:M` (library → version String), `publication_rules:M` (source rules) |
+| `actual_lineage` | `M`: snapshot identity `{dt:S, objects:L[M]}`; mỗi object có `bucket:S`, `key:S`, `etag:S`, `version_id:S/NULL`, `last_modified:S`, `sha256:S` |
+| `input_lineage` | `L[M]`: chứng cứ của các Forecasts đã qua vòng xác thực record; mỗi entry gồm `policy:S` (`POST_CUTOVER` hoặc `LEGACY_ACCEPT_WITH_EVIDENCE`), `approval:M`, `snapshot:M`, `record_digest:S` (các field phụ theo code) |
+| `audit` | `L[M]`: lý do missing/excluded/target pending/mismatch theo `base_date:S`, có thể có `h:N` và `reason:S`; **writer r3 chưa tạo `excluded_count` top-level** (không được reader bắt buộc trường này) |
+
+`META.by_horizon` chỉ có bốn metric gốc. `META.overall.width_80_pct` và `META.derived_metrics.width_80_pct.overall` có cùng dữ liệu tính toán; phần `derived_metrics.width_80_pct.by_horizon` là nguồn cho h=1..7. API không đưa `identity`, `metric_hashes`, provenance raw hoặc lifecycle nội bộ vào JSON public.
+
+#### 7.5.3. Canonical SHA-256, immutable checks và reader validation
+
+Writer r3 dùng `digest(x) = SHA256(canonical(x))`. `canonical` đệ quy sort keys của map, giữ thứ tự list, serialize UTF-8 JSON với `sort_keys=True`, `ensure_ascii=False`, `separators=(",", ":")`, `allow_nan=False`. Mỗi `int/float/Decimal` (trừ bool) được đổi thành `{ "$number": <Decimal(str(x)).normalize() dưới dạng fixed-point String> }` (zero thành `"0"`); nhờ vậy số đọc từ DynamoDB `Decimal` và số trước ghi có cùng dạng canonical. `NULL`, BOOL và String giữ kiểu JSON tương ứng.
+
+- `METRIC.payload_hash = digest(metric_item_trước_khi_thêm_payload_hash)`; bao gồm `PK`, `SK`, logical key, các metric fields và `ci_low/ci_high=NULL`.
+- `META.payload_hash = digest(meta_payload_trước_khi_thêm_payload_hash_và_status)`; `status` là trường lifecycle được thêm sau khi tính hash, không nằm trong hash gốc. `metric_hashes` và derived metrics **nằm trong payload META đã hash**.
+- Writer `AccuracyStore._verify()` Query strongly consistent đầy đủ partition, đối chiếu tập SK chính xác `META` + 28 item, canonical META **loại `status`** so với payload gốc và canonical từng METRIC item. API không có bản payload gốc để so như writer, nên cần **tự tính lại** SHA-256 của từng METRIC sau khi loại `payload_hash`, đối chiếu cả `row.payload_hash` và `META.metric_hashes[SK]`; với META, tự tính lại `digest(meta` bỏ `status` và `payload_hash`) và so `META.payload_hash`. Sau đó kiểm types/shape/invariants, `META.identity`/evidence/cutoff/model/effective, derived 7 horizons và counts; chỉ dùng run khi `COMPLETED`. Hash đúng tự thân **không chứng minh provenance hợp lệ** — phải kiểm các field bắt buộc theo contract.
+- API đọc `STATE` mạnh → Query toàn bộ RUN partition mạnh (LastEvaluatedKey đến hết) → xác minh → đọc lại `STATE` mạnh. Không có STATE/không có completed run champion mới → `200 not_ready`. STATE trỏ corrupt/incomplete/missing-run hoặc thiếu hash/provenance → retry một lần ngắn rồi **`503 accuracy_unavailable`**. Không trả `not_ready` giả khi integrity failure. Không có `Scan`, GSI hoặc IAM quyền ghi.
+
+**Phạm vi thay đổi:** Đây là đặc tả vật lý theo code writer r3 hiện có, không sửa Python hoặc cấu trúc public JSON v3.1, không ngầm xác nhận chính sách evidence đã được AWS kiểm chứng. Nếu implementation Rolling sau review đổi schema/hash, Long và Tuấn phải đồng bộ code và Contract bằng PR trước khi deploy; không tự tạo tên attribute mới.
 
 ### 7.6. Shadow và phạm vi triển khai
 
