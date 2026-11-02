@@ -377,7 +377,8 @@ def test_news_labels_table_matches_contract(templates):
 
 def test_forecasts_table_is_unchanged_by_news_labels(templates):
     tables = _items(templates["serving"], "AWS::DynamoDB::Table")
-    assert len(tables) == 2
+    # Forecasts, NewsLabels và chat-usage (tests/test_infra_chat_api.py kiểm bảng chat-usage)
+    assert len(tables) == 3
     forecasts = _table(templates["serving"], "cpaws-dev-forecasts")
     assert next(k for k, r in tables.items() if r is forecasts).startswith("ForecastsTable")
     assert forecasts["Properties"]["KeySchema"] == [

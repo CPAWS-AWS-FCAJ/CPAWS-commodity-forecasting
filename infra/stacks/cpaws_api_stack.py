@@ -1,4 +1,4 @@
-"""CDK stack for the CPAWS forecast REST API."""
+"""CDK stack for the CPAWS REST API: forecast read endpoints and POST /chat."""
 
 from pathlib import Path
 from typing import Any
@@ -12,9 +12,20 @@ from aws_cdk import aws_lambda as lambda_
 from aws_cdk import aws_logs as logs
 from constructs import Construct
 
+from .chat_asset import chat_asset_code
+from .shared import (
+    CHAT_INTERNAL_ERROR_LOG_TERMS,
+    CHAT_INTERNAL_ERRORS_METRIC,
+    CHAT_METRIC_NAMESPACE,
+    bedrock_global_invoke_statements,
+    chat_api_function_name,
+    chat_usage_table_name,
+    news_labels_read_statement,
+)
+
 
 class CpawsApiStack(Stack):
-    """Create the forecast API backed by Lambda and DynamoDB."""
+    """Create the forecast API and the chatbot endpoint, backed by Lambda, DynamoDB and Bedrock."""
 
     def __init__(
         self,
@@ -48,7 +59,9 @@ class CpawsApiStack(Stack):
             description="Read CPAWS forecast records from DynamoDB",
             runtime=lambda_.Runtime.PYTHON_3_12,
             handler="handler.handler",
-            code=lambda_.Code.from_asset(str(handler_dir)),
+            # Bỏ __pycache__/.pyc sinh ra khi chạy test trên máy: chúng làm đổi hash asset và
+            # khiến cdk diff báo đổi Code.S3Key dù code không đổi.
+            code=lambda_.Code.from_asset(str(handler_dir), exclude=["__pycache__", "*.pyc"]),
             timeout=Duration.seconds(10),
             memory_size=256,
             log_group=forecast_api_log_group,
@@ -80,7 +93,7 @@ class CpawsApiStack(Stack):
             ),
             default_cors_preflight_options=apigateway.CorsOptions(
                 allow_origins=cors_origins,
-                allow_methods=["GET", "OPTIONS"],
+                allow_methods=["GET", "POST", "OPTIONS"],
                 allow_headers=["Content-Type", "Authorization"],
             ),
         )
@@ -90,7 +103,7 @@ class CpawsApiStack(Stack):
         gateway_cors_headers = {
             "Access-Control-Allow-Origin": f"'{allowed_origin}'",
             "Access-Control-Allow-Headers": "'Content-Type,Authorization'",
-            "Access-Control-Allow-Methods": "'GET,OPTIONS'",
+            "Access-Control-Allow-Methods": "'GET,POST,OPTIONS'",
         }
 
         apigateway.GatewayResponse(
@@ -149,6 +162,85 @@ class CpawsApiStack(Stack):
                 "method.request.path.asset": True,
                 "method.request.querystring.date": False,
             },
+        )
+
+        # ---------- POST /chat (contract POST /chat, PR #41, #55) ----------
+        chat_log_group = logs.LogGroup(
+            self,
+            "ChatApiLogGroup",
+            retention=logs.RetentionDays.ONE_MONTH,
+            removal_policy=RemovalPolicy.RETAIN,
+        )
+
+        # Timeout 28 giây: API Gateway cắt ở 29 giây; handler tự trả 504 trước hạn chót tính từ
+        # requestTimeEpoch. Không đặt NEWS_TABLE_NAME: bảng NewsLabels chưa có collector, demo đọc
+        # tin gắn nhãn tay trong asset (docs/api/demo-news.md).
+        chat_lambda = lambda_.Function(
+            self,
+            "ChatApiHandler",
+            function_name=chat_api_function_name(env_name),
+            description="CPAWS chatbot: Bedrock Converse with forecast and news tools",
+            runtime=lambda_.Runtime.PYTHON_3_12,
+            handler="handler.handler",
+            code=chat_asset_code(),
+            timeout=Duration.seconds(28),
+            memory_size=512,
+            log_group=chat_log_group,
+            environment={
+                "FORECASTS_TABLE_NAME": forecasts_table.table_name,
+                "CHAT_USAGE_TABLE_NAME": chat_usage_table_name(env_name),
+                "CHAT_USER_DAILY_LIMIT": "20",
+                "CHAT_GLOBAL_DAILY_LIMIT": "100",
+                "NEWS_DIR": "/var/task/news",
+                "ALLOWED_ORIGIN": allowed_origin,
+            },
+        )
+
+        # Quyền tối thiểu theo bảng quyền trong contract; mỗi quyền trên đúng ARN, không "*".
+        chat_lambda.add_to_role_policy(
+            iam.PolicyStatement(
+                sid="ChatUsageCounter",
+                # TransactWriteItems kiểm quyền UpdateItem cho từng Update; GetItem đọc lại số lượt
+                actions=["dynamodb:UpdateItem", "dynamodb:GetItem"],
+                resources=[
+                    self.format_arn(
+                        service="dynamodb",
+                        resource="table",
+                        resource_name=chat_usage_table_name(env_name),
+                    )
+                ],
+            )
+        )
+        chat_lambda.add_to_role_policy(
+            iam.PolicyStatement(
+                sid="ForecastsRead",
+                actions=["dynamodb:Query"],
+                resources=[forecasts_table.table_arn],
+            )
+        )
+        chat_lambda.add_to_role_policy(news_labels_read_statement(self, env_name))
+        for statement in bedrock_global_invoke_statements(self):
+            chat_lambda.add_to_role_policy(statement)
+
+        # Handler bắt mọi exception và trả 500, nên đếm lỗi không lường trước từ log;
+        # alarm ở CpawsOps (cùng namespace + tên metric trong shared.py).
+        logs.MetricFilter(
+            self,
+            "ChatInternalErrorsFilter",
+            log_group=chat_log_group,
+            metric_namespace=CHAT_METRIC_NAMESPACE,
+            metric_name=CHAT_INTERNAL_ERRORS_METRIC,
+            metric_value="1",
+            filter_pattern=logs.FilterPattern.literal(
+                " ".join(f'?"{term}"' for term in CHAT_INTERNAL_ERROR_LOG_TERMS)
+            ),
+        )
+
+        api.root.add_resource("chat").add_method(
+            "POST",
+            apigateway.LambdaIntegration(chat_lambda, proxy=True),
+            authorization_type=apigateway.AuthorizationType.COGNITO,
+            authorizer=authorizer,
         )
 
         CfnOutput(
