@@ -42,10 +42,10 @@ Hạn chung: xong trước 20:00 ngày 7/11, sau đó tập dượt. Mục nào 
 |---|---|---|---|---|
 | 1 | Deploy PR #63: `CpawsServing`, `CpawsApi`, `CpawsOps`. **Đã xong 2/11** (Tiến báo) | Tiến (CDK), Tuấn (IAM) | 5/11 | `POST /chat` có token trả `200`, `branch: "complex"`, `prompt_version: "chatbot-haiku-v2"` |
 | 2 | Bản ghi `Forecasts` thật cho 4 tài sản | Khải, Tiến | 7/11 | `GET /forecasts` trả 4 tài sản, `is_sample: false` |
-| 3 | Làm mới bộ tin theo `docs/api/demo-news.md`, chạy `tests/test_demo_news.py`, merge, rồi deploy lại `CpawsApi` | Phước (tin), Tiến (deploy) | Tin: 6/11. Deploy: 7/11 | Câu 3 ở mục 4 có trích nguồn |
+| 3 | Làm mới bộ tin theo `docs/api/demo-news.md`, chạy `tests/test_demo_news.py`, merge. Sau đó Tiến deploy lại `CpawsApi`, gộp `-c allowed_origin=<domain>` nếu Amplify đã xong (Khải chốt 2/11). Deploy xong, Tiến thử các câu tin tức và gửi kết quả cho Phước | Phước (tin), Tiến (deploy, thử) | Tin: 6/11. Deploy: 7/11 | Hỏi 1 câu tin vàng có khoảng ngày chứa 7/10/2026: `get_news` trả ít nhất 1 tin (biên bản FOMC), câu trả lời có trích nguồn |
 | 4 | Web gọi `POST /chat`: hiện `answer` dạng văn bản thuần, link chỉ lấy từ `citations`, phân biệt hai loại `429` (contract, mục "Bảo mật" và "Lỗi"). Chạy web ở `localhost:5173`, hoặc Amplify nếu Tiến xong trước 7/11 | Tiến (web), Phước (review) | 6/11 | Hỏi được câu 1 trên web |
 | 5 | Hai tài khoản Cognito demo: một để tập dượt, một chỉ dùng ngày 8/11 | Tuấn | 6/11 | Đăng nhập được cả hai |
-| 6 | Tập dượt 7/11 bằng tài khoản tập dượt: hỏi đúng các câu ở mục 4, ghi `request_id`, lưu JSON response, quay video màn hình | Phước | 7/11 | Video, JSON và danh sách `request_id` trên máy trình bày |
+| 6 | Tập dượt 7/11 bằng tài khoản tập dượt, sau khi Tiến deploy lại (việc số 3): hỏi đúng các câu ở mục 4, ghi `request_id`, lưu JSON response, quay video màn hình | Phước | 7/11 | Video, JSON và danh sách `request_id` trên máy trình bày |
 | 7 | Mở sẵn tab: web, log group CloudWatch của Lambda chat, sơ đồ kiến trúc | Người trình bày | 8/11 | — |
 
 Giới hạn lượt hỏi: 20 lượt mỗi người và 100 lượt mỗi ngày cho cả hệ thống, reset lúc 00:00 giờ Việt Nam. Lỗi 5xx đã tính lượt thì không hoàn lại (contract, mục "Giới hạn lượt hỏi").
@@ -68,6 +68,8 @@ Không chiếu Account ID đầy đủ, ARN, ID token, tên bảng hay email cá
 | 14–15 | Phước | Slide | Việc sau demo: router, publish Guardrail, collector ghi `NewsLabels`, bộ câu benchmark v3, streaming |
 
 Câu nhắc khi trình bày:
+
+- **Chỉ gõ vào chatbot đúng các câu trong kịch bản** (mục 4). Khải ghi chú khi approve PR #76: v2 vẫn trả lời câu ngoài phạm vi kiểu "dự đoán trong ngày". Khán giả hỏi ngoài kịch bản thì người trình bày trả lời bằng lời, không gõ câu đó vào chatbot.
 
 - Con số là **dự báo có khoảng**, luôn kèm xác suất tăng và câu "Dự báo mang tính tham khảo, không phải lời khuyên đầu tư."
 - Vàng và bạc là dự báo dựa trên GLD/SLV (chuỗi đại diện), chỉ nêu % và xác suất tăng, không nêu giá.
@@ -96,7 +98,7 @@ Nguyên tắc chọn câu:
 | 1 | "Dầu Brent 3 phiên nữa được dự báo thế nào?" | Dự báo một tài sản | Bài B, 30/10 |
 | 2 | "Tuần tới, vàng hay bạc có xác suất tăng cao hơn?" | So sánh hai tài sản | Bài B, 30/10 |
 | 3 | "Vì sao vàng có thể biến động thời gian gần đây? Xem giúp mình các tin tức từ 7/10/2026 tới nay." | Tin tức, "vì sao" | Bài B, 30/10 |
-| 3b | (Đề xuất bỏ, chờ Khải) "Mấy hôm nay có tin gì mới về dầu WTI không?" | Tin tức, khoảng rỗng | Bài B, 30/10. Thử trên AWS 2/11: hỏi lại, chưa khớp kỳ vọng |
+| 3b | "Mấy hôm nay có tin gì mới về dầu WTI không?" | Tin tức, khoảng rỗng | Bài B, 30/10. Thử câu cùng loại trên AWS 2/11: nói thẳng không có tin đáng kể. Khải chốt giữ |
 | 4 | "Xem giúp mình dự báo dầu WTI tuần tới, rồi cho biết mình có nên bán ra không." | Thông tin kèm tư vấn đầu tư (bài B, phải gọi `get_forecast`) | Bài B, 30/10: HAIKU2-028, 029 đạt |
 | 5 | "Mình đang giữ ít bạc, có nên bán bớt không?" | Chỉ xin lời khuyên đầu tư, không kèm dự báo | Loại A, 2/11: giữ (HAIKU3A-007, 008) |
 
@@ -195,17 +197,17 @@ Câu 4 có cả phần thông tin nên phải gọi `get_forecast`, không thu�
   - Chỉ một tin nên câu trả lời ngắn. Đó là dữ liệu thật, không thêm tin hay nâng điểm cho dài.
   - Sau khi deploy bộ tin mới, chạy thử ở máy cục bộ (lệnh ở mục 5) để biết trước câu 3 sẽ trích những tin nào.
 
-### Câu 3b. Không có tin thì nói thẳng (đề xuất bỏ, chờ Khải)
+### Câu 3b. Không có tin thì nói thẳng
 
 - **Context:** `asset: wti`.
 - **Điểm cần thấy:** không nêu ngày nên dùng khoảng mặc định. Sau khi làm mới, WTI không có tin mức 2 nào (mục 5), vì vậy câu trả lời đúng là **không tìm thấy tin đáng kể** trong khoảng đó, không bịa tin, không hỏi lại. `citations` rỗng.
-- **Vì sao chọn câu này:** cho team thấy chatbot không lấp chỗ trống khi bộ tin rỗng.
-- **Đã thử trên AWS ngày 2/11** (Tiến báo): câu hỏi tin WTI không nêu ngày gọi `get_news` và nhận 0 tin. Nhưng chatbot **trả lời chung chung rồi hỏi lại**, không nói thẳng là không có tin đáng kể. **Kết quả này chưa khớp kỳ vọng.**
-  - Prompt v2 dặn: người dùng không nêu khoảng ngày thì dùng mặc định của công cụ, không hỏi lại (`chatbot-haiku-v2.md`, dòng quy tắc dùng tool; lỗi cũ HAIKU-021).
+- **Vì sao chọn câu này:** cho team thấy chatbot không lấp chỗ trống khi bộ tin rỗng. Khải chốt giữ ngày 2/11: WTI không còn tin mức 2 trở lên, nên kịch bản cần một câu cho thấy chatbot nói "không có tin đáng kể".
+- **Đã thử trên AWS ngày 2/11, lúc 15:06** (Tiến gửi nguyên văn). Câu thử là "Có tin tức gần đây nào ảnh hưởng tới giá dầu WTI không?", khác câu 3b nhưng cùng loại; Haiku, prompt v2, chỉ gọi `get_news`.
+  - Câu trả lời nói rõ không tìm thấy tin đáng kể nào về WTI trong 7 ngày gần đây (26/10–02/11/2026) với mức tác động từ trung bình trở lên, không bịa tin.
+  - Câu cuối mời xem dự báo WTI; đây là lời mời, không phải hỏi lại để lấy thêm thông tin.
+  - Điểm trừ nhỏ: câu đầu chỉ báo là sắp đi tìm tin.
   - Ngày 8/11, tin dầu duy nhất dự kiến trong 1–8/11 là WPSR 4/11, thường chỉ mức 1, và không nâng nhãn để lọt ngưỡng. Vì vậy ngày demo vẫn sẽ là 0 tin.
-- **Đề xuất: bỏ câu này khỏi phần hỏi trực tiếp.** Chỉ giữ khi Tiến gửi nguyên văn câu trả lời ngày 2/11 (kèm `request_id`), Khải xem và đồng ý (mục 9).
-- **Rủi ro nếu giữ:**
-  - chatbot hỏi lại hoặc trả lời chung chung như lần thử ngày 2/11;
+- **Rủi ro:**
   - câu trả lời tự thêm nhận định không có trong tool (HAIKU2-022, 024);
   - người xem hiểu "0 tin" là lỗi. Người trình bày nói trước: câu này cố ý hỏi khoảng không có tin để xem chatbot có bịa không.
   - Ngưỡng mặc định của `get_news` mà đổi trước demo thì xem lại câu này và câu 3.
@@ -248,7 +250,7 @@ Bộ tin trên `developer`, tra ngày 29/10. Ký hiệu `2/bearish` là `impact_
 | 2026-10-21T14:30:00Z | WPSR, tuần kết thúc 16/10 | 0 | 0 | 1/bullish | 1/bullish |
 | 2026-10-07T18:00:00Z | Biên bản FOMC 15–16/9 | 2/bearish | 2/bearish | 0 | 0 |
 
-Đã chốt sửa khi làm mới ngày 6/11 (Phước đồng ý):
+Đã chốt sửa khi làm mới ngày 6/11 (Phước đồng ý; Khải xác nhận hai nhãn sửa đúng quy ước):
 
 - FOMC 28/10: vàng và bạc hạ từ 2/bearish xuống **1/bearish**.
 - WPSR 21/10: Brent và WTI đổi từ 1/bullish sang **1/mixed**, vẫn mức 1 nên vẫn bị lọc ở mặc định.
@@ -265,9 +267,9 @@ Bộ tin trên `developer`, tra ngày 29/10. Ký hiệu `2/bearish` là `impact_
 Cách xử lý:
 
 1. **Câu "vì sao" luôn nêu ngày bắt đầu có tin, kèm năm** (câu 3): từ 7/10/2026 thì lấy được biên bản FOMC (đăng 7/10). Bắt đầu từ 28/10 trở đi thì không còn tin vàng, bạc nào ở mức 2.
-2. **Trả rỗng là kết quả đúng của công cụ**, nhưng câu trả lời phải nói thẳng là không có tin đáng kể, không hỏi lại. Lần thử ngày 2/11 chatbot hỏi lại, nên câu 3b đang đề xuất bỏ.
-3. **Không sửa dữ liệu để tin hiện ra:** không đổi `published_at`, không nâng `impact_score`. Làm vậy là sai sự thật.
-4. Làm mới bộ tin xong phải **deploy lại `CpawsApi`**, vì file JSON nằm trong gói Lambda. Kiểm trước khi tập dượt bằng lệnh chạy ở máy cục bộ (Git Bash, gốc repo):
+2. **Trả rỗng là kết quả đúng** (câu 3b): câu trả lời phải nói thẳng là không có tin đáng kể, không bịa tin. Lần thử trên AWS ngày 2/11 cho kết quả đúng như vậy.
+3. **Không sửa dữ liệu để tin hiện ra:** không đổi `published_at`, không nâng `impact_score`. Làm vậy là sai sự thật. **Giữ ngưỡng mặc định** `min_impact = 2` và 7 ngày; câu hỏi tin tức nêu rõ khoảng ngày (Tiến, Khải đồng ý 2/11).
+4. Làm mới bộ tin xong phải **deploy lại `CpawsApi`** (Tiến, 7/11), vì file JSON nằm trong gói Lambda. Sau deploy, hỏi 1 câu tin vàng có khoảng ngày chứa 7/10/2026 trên AWS: `get_news` phải trả ít nhất 1 tin. Kiểm trước bằng lệnh chạy ở máy cục bộ (Git Bash, gốc repo):
 
    ```bash
    python -c "from src.chatbot import news as N; print(N.get_news({'asset': 'gold', 'from_date': '2026-10-07'}, N.JsonFileNewsRepository('infra/lambda/chat_api/news')))"
@@ -311,6 +313,7 @@ Không so sánh Nova với Haiku: hai model làm hai việc khác nhau, chạy t
 | Vàng/bạc trễ phiên (GLD/SLV chưa có phiên mới) | Chạy lại ingest tay sau vài giờ, khi nguồn đã có phiên mới; vẫn chưa có thì giữ bản ghi cũ. Chatbot phải nêu đúng ngày cơ sở, và nói dữ liệu chưa cập nhật nếu `stale_sources` khác rỗng |
 | Câu trả lời sai (bỏ dấu âm, thiếu phần bắt buộc, nhãn "nghiêng") | Nói thật, ghi `request_id`, chỉ vào mục 6: đây là loại lỗi benchmark đã ghi. Không chữa lời thay chatbot |
 | Mất mạng | Video tập dượt |
+| Khán giả muốn hỏi thử câu ngoài kịch bản | Không gõ câu đó vào chatbot. Người trình bày trả lời bằng lời (mục 8), ghi lại câu hỏi để thử sau buổi bằng tài khoản tập dượt (Khải, ghi chú ở PR #76) |
 
 ## 8. Câu hỏi team có thể hỏi
 
@@ -318,7 +321,7 @@ Không so sánh Nova với Haiku: hai model làm hai việc khác nhau, chạy t
 |---|---|
 | Sao mọi câu đi Haiku? | Router chưa có và không làm trước demo (Khải, PR #66). Đắt hơn Nova nhưng đúng chính sách; khoảng 0,012 USD/câu |
 | Sao demo dùng prompt v2, không dùng v3? | Khải chốt ngày 2/11: Lambda giữ nguyên v2 đã khóa. v3 đã merge (PR #70) nhưng chưa đóng gói vào Lambda |
-| Sao không hỏi thử câu ngoài phạm vi hay câu khái niệm? | Lần chạy dev 8 câu loại A với v2 ngày 2/11: câu dự đoán trong phiên chiều nay vẫn gọi `get_forecast` và trả lời bằng dự báo h = 1; câu "mốc thống kê 252 phiên" gọi `get_forecast` 4 lần. Theo cách Khải chốt, hai loại này bỏ khỏi demo. Câu khái niệm thì người trình bày trả lời |
+| Sao không hỏi thử câu ngoài phạm vi hay câu khái niệm? | Lần chạy dev 8 câu loại A với v2 ngày 2/11: câu dự đoán trong phiên chiều nay vẫn gọi `get_forecast` và trả lời bằng dự báo h = 1; câu "mốc thống kê 252 phiên" gọi `get_forecast` 4 lần. Theo cách Khải chốt, hai loại này bỏ khỏi demo. Lúc demo chỉ gõ câu trong kịch bản; câu ngoài kịch bản, kể cả câu khái niệm, người trình bày trả lời bằng lời (Khải, ghi chú ở PR #76) |
 | Sao không có chữ chạy dần (streaming)? | Chọn trả một lần (Tiến, Tuấn chốt 27/10) để giữ Cognito authorizer và Lambda Python. p90 của bài B ngày 30/10 là 5.733 ms, xa dưới mốc 29 giây |
 | Chatbot lấy số từ đâu? | Chỉ từ `get_forecast`, đọc thẳng bảng `Forecasts` bằng cùng hàm định dạng với `GET /forecasts/{asset}`, nên số khớp trang dự báo. `forecasts_used` cho web biết bản ghi nào đã dùng |
 | Link trong câu trả lời có tin được không? | `citations` chỉ gồm tin do `get_news` trả trong lượt đó và có link xuất hiện trong `answer`. Server không lấy link từ chữ model tự viết |
@@ -334,8 +337,8 @@ Không so sánh Nova với Haiku: hai model làm hai việc khác nhau, chạy t
 
 1. Khải duyệt bộ câu sau khi lọc theo loại A (PR #76): bỏ câu ngoài phạm vi, giữ câu 0 (tùy chọn), thêm câu 5.
 2. Có dùng câu 0 không, tùy thời lượng.
-3. Câu 3b (tin WTI không nêu ngày, kỳ vọng 0 tin): **đề xuất bỏ**. Lần thử trên AWS ngày 2/11 (Tiến báo), chatbot nhận 0 tin nhưng trả lời chung chung rồi hỏi lại, trái quy tắc "không hỏi lại" của prompt v2. Muốn giữ thì Tiến gửi nguyên văn câu trả lời kèm `request_id` để Khải xem trước khi chốt.
-4. Có đổi ngưỡng mặc định của `get_news` (7 ngày, `min_impact = 2`) trước demo không (Phước, Khải). Đổi thì xem lại câu 3 và 3b.
+3. ~~Giữ hay bỏ câu 3b~~: **đã chốt giữ** (Khải, 2/11). WTI không còn tin mức 2 trở lên, nên kịch bản cần một câu cho thấy chatbot nói "không có tin đáng kể".
+4. ~~Đổi ngưỡng mặc định của `get_news`~~: **đã chốt giữ** `min_impact = 2`; câu hỏi tin tức nêu rõ khoảng ngày (Tiến, Khải, 2/11).
 5. Thời lượng và người trình bày từng phần (mục 3 đang giả định Phước trình bày, Tiến giữ máy).
 6. Web chạy ở `localhost:5173` hay Amplify (Tiến, trước 7/11). Amplify thì deploy `CpawsApi` với `-c allowed_origin=<domain>`.
 
