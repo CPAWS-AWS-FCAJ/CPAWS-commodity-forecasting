@@ -32,60 +32,49 @@ export function probUpFromQuantiles(levels: readonly number[], returns: readonly
 
 export type Lean = "up" | "down" | "flat";
 
+/** Ngưỡng nhãn hướng (skill forecast-display), so trên xác suất tăng đã làm tròn đến 1%. */
+export const LEAN_UP_PERCENT = 60;
+export const LEAN_DOWN_PERCENT = 40;
+
+export const LEAN_LABEL: Record<Lean, string> = {
+  up: "Nghiêng tăng",
+  down: "Nghiêng giảm",
+  flat: "Chưa rõ xu hướng",
+};
+
 export interface ProbabilityText {
   lean: Lean;
-  /** Dòng chính, ví dụ "Khả năng tăng 56%". */
-  headline: string;
-  /** Xác suất tăng đúng như quy tắc hiển thị, ví dụ "56%" hoặc "trên 90%". */
+  /** Nhãn hướng: "Nghiêng tăng", "Nghiêng giảm" hoặc "Chưa rõ xu hướng". */
+  label: string;
+  /** Xác suất tăng đúng như quy tắc hiển thị, ví dụ "56%", "≥ 95%" hoặc "≤ 5%". */
   probUpLabel: string;
+  /** Xác suất tăng đã làm tròn đến 1%: số người dùng thấy, cũng là số dùng để so ngưỡng. */
+  percent: number;
   /** Phần trăm vẽ trên thanh 0–100% (xác suất tăng). */
   barPercent: number;
 }
 
+/** Làm tròn xác suất đến 1%; toFixed khử sai số dấu phẩy động (0,585 × 100 = 58,4999…). */
+export function roundPercent(probability: number): number {
+  return Math.round(Number((probability * 100).toFixed(9)));
+}
+
 /**
- * Quy tắc skill forecast-display: nếu 0 nằm ngoài [q10, q90] thì ghi "trên 90%" / "dưới 10%",
- * không bịa con số chính xác hơn.
- * - zeroBelowQ10: q10 > 0 (cả khoảng 80% đều dương) → xác suất tăng trên 90%.
- * - zeroAboveQ90: q90 < 0 (cả khoảng 80% đều âm) → xác suất tăng dưới 10%.
+ * Luôn dùng `prob_up` của API, không tự suy từ q10/q90. Nhãn hướng so trên số đã làm tròn để nhãn
+ * và con số hiển thị không mâu thuẫn (0,597 → 60% → "Nghiêng tăng"). Chỉ đúng biên kẹp 0,95 / 0,05
+ * mới ghi "≥ 95%" / "≤ 5%"; 0,945 vẫn là "95%".
  */
-export function describeProbability(
-  probUp: number,
-  edge: { zeroBelowQ10: boolean; zeroAboveQ90: boolean },
-): ProbabilityText {
-  if (edge.zeroBelowQ10) {
-    return { lean: "up", headline: "Khả năng tăng trên 90%", probUpLabel: "trên 90%", barPercent: 95 };
-  }
-  if (edge.zeroAboveQ90) {
-    return { lean: "down", headline: "Khả năng giảm trên 90%", probUpLabel: "dưới 10%", barPercent: 5 };
-  }
-  const percent = Math.round(probUp * 100);
-  if (percent > 50) {
-    return { lean: "up", headline: `Khả năng tăng ${percent}%`, probUpLabel: `${percent}%`, barPercent: percent };
-  }
-  if (percent < 50) {
-    return {
-      lean: "down",
-      headline: `Khả năng giảm ${100 - percent}%`,
-      probUpLabel: `${percent}%`,
-      barPercent: percent,
-    };
-  }
-  return { lean: "flat", headline: "Tăng hay giảm ngang nhau (50%)", probUpLabel: "50%", barPercent: 50 };
+export function describeProbability(probUp: number): ProbabilityText {
+  const percent = roundPercent(probUp);
+  const lean: Lean =
+    percent >= LEAN_UP_PERCENT ? "up" : percent <= LEAN_DOWN_PERCENT ? "down" : "flat";
+  const probUpLabel =
+    probUp >= PROB_MAX ? "≥ 95%" : probUp <= PROB_MIN ? "≤ 5%" : `${percent}%`;
+  return { lean, label: LEAN_LABEL[lean], probUpLabel, percent, barPercent: percent };
 }
 
 export function quantileIndex(levels: readonly number[], level: number): number {
   return levels.findIndex((value) => Math.abs(value - level) < 1e-9);
-}
-
-/** Điều kiện biên (0 ngoài [q10, q90]) tính từ log return của một mức h. */
-export function edgeFromReturns(
-  levels: readonly number[],
-  returns: readonly number[],
-): { zeroBelowQ10: boolean; zeroAboveQ90: boolean } {
-  const i10 = quantileIndex(levels, 0.1);
-  const i90 = quantileIndex(levels, 0.9);
-  if (i10 < 0 || i90 < 0) return { zeroBelowQ10: false, zeroAboveQ90: false };
-  return { zeroBelowQ10: returns[i10] > 0, zeroAboveQ90: returns[i90] < 0 };
 }
 
 export interface HorizonView {
@@ -118,7 +107,7 @@ export function horizonView(detail: ForecastDetail, horizon: HorizonDetail): Hor
     returnMid: horizon.returns[i50],
     returnHigh: horizon.returns[i90],
     probUp: horizon.prob_up,
-    probability: describeProbability(horizon.prob_up, edgeFromReturns(levels, horizon.returns)),
+    probability: describeProbability(horizon.prob_up),
   };
 }
 

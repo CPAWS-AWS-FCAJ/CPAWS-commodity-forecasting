@@ -6,27 +6,23 @@ const COLOR: Record<Lean, string> = { up: "text-up", down: "text-down", flat: "t
 const FILL: Record<Lean, string> = { up: "bg-up", down: "bg-down", flat: "bg-muted" };
 
 interface Props {
+  /** `prob_up` của API cho đúng mức h đang hiển thị. */
   probUp: number;
-  /** 0 nằm ngoài [q10, q90] → ghi "trên 90%" thay vì con số chính xác. */
-  zeroBelowQ10?: boolean;
-  zeroAboveQ90?: boolean;
   horizonDays: number;
 }
 
-/** Khả năng tăng/giảm: mũi tên + chữ + thanh 0–100% có vạch 50% (không chỉ dựa vào màu). */
-export function ProbabilityBadge({
-  probUp,
-  zeroBelowQ10 = false,
-  zeroAboveQ90 = false,
-  horizonDays,
-}: Props) {
-  const text = describeProbability(probUp, { zeroBelowQ10, zeroAboveQ90 });
+/**
+ * Nhãn hướng kèm kỳ hạn + xác suất tăng + thanh 0–100% có vạch 50% (không chỉ dựa vào màu).
+ * Mũi tên và màu theo cùng ngưỡng 60/40 với nhãn.
+ */
+export function ProbabilityBadge({ probUp, horizonDays }: Props) {
+  const text = describeProbability(probUp);
   return (
     <div>
       <p className={`text-lg font-semibold ${COLOR[text.lean]}`}>
         <span aria-hidden="true">{ARROW[text.lean]} </span>
-        {text.headline}{" "}
-        <span className="whitespace-nowrap text-sm font-normal text-muted">({horizonDays} ngày)</span>
+        {text.label}{" "}
+        <span className="whitespace-nowrap text-sm font-normal text-muted">· {horizonDays} phiên</span>
       </p>
       <div
         role="meter"

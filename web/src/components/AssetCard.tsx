@@ -12,7 +12,7 @@ interface Props {
   hidePrice?: boolean;
 }
 
-/** Thẻ sản phẩm ở trang chủ: giá cuối, khả năng tăng/giảm 7 ngày và khoảng giá 80%. */
+/** Thẻ sản phẩm ở trang chủ: giá cuối, nhãn hướng + xác suất tăng h = 7 và khoảng giá 80%. */
 export function AssetCard({ item, hidePrice = false }: Props) {
   const meta = ASSETS[item.asset];
   const unit = item.price_unit;
@@ -43,12 +43,7 @@ export function AssetCard({ item, hidePrice = false }: Props) {
       )}
 
       <div className="mt-4">
-        <ProbabilityBadge
-          probUp={item.h7.prob_up}
-          zeroBelowQ10={item.h7.p10 > item.last_price}
-          zeroAboveQ90={item.h7.p90 < item.last_price}
-          horizonDays={7}
-        />
+        <ProbabilityBadge probUp={item.h7.prob_up} horizonDays={7} />
       </div>
       {hidePrice ? (
         <p className="tabular mt-4 text-sm">

@@ -1,27 +1,21 @@
-import { EmptyBlock } from "../components/StateViews";
+import { ASSET_IDS } from "../api/types";
+import { ReliabilityBlock } from "../components/ReliabilityBlock";
+import { ASSETS } from "../lib/assets";
 
-// KHUNG trang độ chính xác. GET /accuracy/{asset} do Long làm ở tuần 3 (docs/api/contract.md, mục "Thêm sau").
-// Cố ý KHÔNG hiển thị số liệu mẫu ở đây: chưa có kết quả chạy thật thì không bịa con số độ chính xác.
+// Độ tin cậy rolling_8w của champion hiện hành theo GET /accuracy/{asset} (docs/api/contract.md).
+// Chỉ hiện số khi API cho phép (display_status = ready); trạng thái đang thu thập phải hiện đúng.
 const METRICS: { name: string; meaning: string }[] = [
   {
-    name: "Pinball skill",
-    meaning: "1 − pinball loss của mô hình / của mốc 252 phiên. Lớn hơn 0 nghĩa là tốt hơn mốc so sánh.",
+    name: "Giá thực tế nằm trong khoảng 80%",
+    meaning: "Tỷ lệ lần giá thực tế nằm trong khoảng dự báo 80% (q10–q90), kèm số cặp đã chấm. Gần 80% là đạt.",
   },
   {
-    name: "Độ phủ khoảng 80% (coverage_80)",
-    meaning: "Tỷ lệ lần giá trị thực nằm trong [q10, q90]; mục tiêu 80%. Đi kèm độ rộng khoảng.",
+    name: "Độ rộng khoảng 80%",
+    meaning: "Độ rộng trung bình của khoảng 80%, tính theo % giá. Hẹp hơn mà vẫn phủ gần 80% là tốt hơn.",
   },
   {
-    name: "Brier skill",
-    meaning: "So Brier score của xác suất tăng với tần suất tăng 252 phiên gần nhất. Lớn hơn 0 là tốt hơn.",
-  },
-  {
-    name: "Tỷ lệ đúng chiều (sign_accuracy)",
-    meaning: "Chỉ có ý nghĩa khi đọc cùng tỷ lệ phiên tăng thực tế (up_rate).",
-  },
-  {
-    name: "Tỷ lệ MAE so với naive",
-    meaning: "MAE của trung vị / MAE của naive (return = 0). Nhỏ hơn 1 là tốt hơn naive.",
+    name: "Đúng chiều tăng/giảm",
+    meaning: "Tỷ lệ lần trung vị dự báo cùng chiều với giá thực tế. Luôn đọc cùng tỷ lệ phiên tăng thực tế.",
   },
 ];
 
@@ -30,18 +24,17 @@ export default function Accuracy() {
     <div>
       <h1 className="text-2xl font-bold">Độ chính xác</h1>
       <p className="mt-1 max-w-2xl text-sm text-muted">
-        Đánh giá trên 8 tuần gần nhất của dự báo chạy thật, tính riêng từng h trên log return và luôn so với
-        naive. Không dùng MAPE trên mức giá.
+        Đối chiếu dự báo chạy thật với giá thực tế trong 8 tuần gần nhất, tính trên log return, gộp 7 mức h.
+        Không dùng sai số trên mức giá như MAPE.
       </p>
 
-      <div className="mt-6">
-        <EmptyBlock title="Chưa có dữ liệu chạy thật">
-          Số liệu sẽ hiển thị khi endpoint /accuracy sẵn sàng (dự kiến tuần 3) và hệ thống đã tích lũy dự
-          báo đủ lâu để so với giá thực.
-        </EmptyBlock>
+      <div className="mt-6 grid gap-4 lg:grid-cols-2">
+        {ASSET_IDS.map((asset) => (
+          <ReliabilityBlock key={asset} asset={asset} title={ASSETS[asset].name} showHorizons />
+        ))}
       </div>
 
-      <h2 className="mt-8 text-lg font-semibold">Các chỉ số sẽ hiển thị</h2>
+      <h2 className="mt-8 text-lg font-semibold">Cách đọc các chỉ số</h2>
       <dl className="mt-3 divide-y divide-line rounded-lg border border-line bg-white">
         {METRICS.map((metric) => (
           <div key={metric.name} className="px-4 py-3">
