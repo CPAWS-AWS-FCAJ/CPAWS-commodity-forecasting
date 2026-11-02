@@ -12,6 +12,7 @@ vi.mock("../api/config", () => ({
     useSample: true,
     historyAvailable: true,
     sampleAccuracy: "collecting",
+    accuracyApiEnabled: true,
     get showMetalPrices() {
       return flags.show;
     },

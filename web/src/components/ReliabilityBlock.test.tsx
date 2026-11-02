@@ -6,7 +6,7 @@ import type { AccuracyResponse } from "../api/types";
 import { AccuracyFormatError, assertAccuracyStatuses } from "../lib/accuracy";
 import { ReliabilityBlock } from "./ReliabilityBlock";
 
-const flags = vi.hoisted(() => ({ useSample: true, sampleAccuracy: "collecting" }));
+const flags = vi.hoisted(() => ({ useSample: true, sampleAccuracy: "collecting", accuracyApi: true }));
 vi.mock("../api/config", () => ({
   config: {
     apiUrl: "https://api.example.test",
@@ -15,6 +15,9 @@ vi.mock("../api/config", () => ({
     },
     get sampleAccuracy() {
       return flags.sampleAccuracy;
+    },
+    get accuracyApiEnabled() {
+      return flags.accuracyApi;
     },
     historyAvailable: false,
     showMetalPrices: false,
@@ -43,6 +46,7 @@ function pickFixture(which: "not_ready" | "collecting" | "ready") {
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  flags.accuracyApi = true;
 });
 
 describe("ReliabilityBlock với fixtures Accuracy", () => {
@@ -120,6 +124,17 @@ describe("ReliabilityBlock với fixtures Accuracy", () => {
     mount();
     expect(await screen.findByText("Không tải được dữ liệu")).toBeInTheDocument();
     expect(screen.getByText(/data_status = almost_ready/)).toBeInTheDocument();
+  });
+
+  it("API thật chưa bật VITE_ACCURACY_API: không gọi /accuracy, hiện 'Chưa có kết quả đánh giá'", () => {
+    flags.useSample = false;
+    flags.accuracyApi = false;
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    mount();
+    expect(screen.getByText("Chưa có kết quả đánh giá")).toBeInTheDocument();
+    expect(screen.queryByText(/Đang tải độ tin cậy/)).not.toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
 
