@@ -1,0 +1,356 @@
+{
+  "asset": "gold",
+  "model_version": "baseline-q252",
+  "evaluation_kind": "rolling_8w",
+  "sample": "all",
+  "run_id": null,
+  "evaluated_at": null,
+  "window": {
+    "basis": "base_date",
+    "days": 56,
+    "window_start": null,
+    "window_end": null,
+    "target_cutoff_date": null,
+    "first_eligible_base_date": null
+  },
+  "evaluation_evidence": {
+    "schedule_basis": "trading_calendar_and_predict_schedule",
+    "schedule_evidence_status": "not_audited_mvp",
+    "issuance_evidence_status": "no_completed_run",
+    "expected_count": null,
+    "published_count": null,
+    "missing_count": null
+  },
+  "overall": {
+    "coverage_80": {
+      "covered_count": 0,
+      "n_obs": 0,
+      "n_base_dates": 0,
+      "min_display_base_dates": 20,
+      "display_value": null,
+      "status": "undefined",
+      "display_status": "not_ready"
+    },
+    "width_80": {
+      "value": null,
+      "n_obs": 0,
+      "unit": "log_return",
+      "status": "undefined",
+      "display_value": null,
+      "display_status": "not_ready"
+    },
+    "sign_accuracy": {
+      "value": null,
+      "n_obs": 0,
+      "status": "undefined",
+      "display_value": null,
+      "display_status": "not_ready"
+    },
+    "up_rate": {
+      "value": null,
+      "n_obs": 0,
+      "status": "undefined",
+      "display_value": null,
+      "display_status": "not_ready"
+    },
+    "width_80_pct": {
+      "value": null,
+      "n_obs": 0,
+      "unit": "percent",
+      "status": "undefined",
+      "display_value": null,
+      "display_status": "not_ready"
+    }
+  },
+  "by_horizon": [
+    {
+      "h": 1,
+      "coverage_80": {
+        "covered_count": 0,
+        "n_obs": 0,
+        "display_value": null,
+        "display_status": "counts_only",
+        "n_base_dates": 0,
+        "status": "undefined"
+      },
+      "width_80": {
+        "value": null,
+        "n_obs": 0,
+        "unit": "log_return",
+        "status": "undefined",
+        "display_value": null,
+        "display_status": "counts_only"
+      },
+      "sign_accuracy": {
+        "value": null,
+        "n_obs": 0,
+        "status": "undefined",
+        "display_value": null,
+        "display_status": "counts_only"
+      },
+      "up_rate": {
+        "value": null,
+        "n_obs": 0,
+        "status": "undefined",
+        "display_value": null,
+        "display_status": "counts_only"
+      },
+      "width_80_pct": {
+        "value": null,
+        "n_obs": 0,
+        "unit": "percent",
+        "status": "undefined",
+        "display_value": null,
+        "display_status": "counts_only"
+      }
+    },
+    {
+      "h": 2,
+      "coverage_80": {
+        "covered_count": 0,
+        "n_obs": 0,
+        "display_value": null,
+        "display_status": "counts_only",
+        "n_base_dates": 0,
+        "status": "undefined"
+      },
+      "width_80": {
+        "value": null,
+        "n_obs": 0,
+        "unit": "log_return",
+        "status": "undefined",
+        "display_value": null,
+        "display_status": "counts_only"
+      },
+      "sign_accuracy": {
+        "value": null,
+        "n_obs": 0,
+        "status": "undefined",
+        "display_value": null,
+        "display_status": "counts_only"
+      },
+      "up_rate": {
+        "value": null,
+        "n_obs": 0,
+        "status": "undefined",
+        "display_value": null,
+        "display_status": "counts_only"
+      },
+      "width_80_pct": {
+        "value": null,
+        "n_obs": 0,
+        "unit": "percent",
+        "status": "undefined",
+        "display_value": null,
+        "display_status": "counts_only"
+      }
+    },
+    {
+      "h": 3,
+      "coverage_80": {
+        "covered_count": 0,
+        "n_obs": 0,
+        "display_value": null,
+        "display_status": "counts_only",
+        "n_base_dates": 0,
+        "status": "undefined"
+      },
+      "width_80": {
+        "value": null,
+        "n_obs": 0,
+        "unit": "log_return",
+        "status": "undefined",
+        "display_value": null,
+        "display_status": "counts_only"
+      },
+      "sign_accuracy": {
+        "value": null,
+        "n_obs": 0,
+        "status": "undefined",
+        "display_value": null,
+        "display_status": "counts_only"
+      },
+      "up_rate": {
+        "value": null,
+        "n_obs": 0,
+        "status": "undefined",
+        "display_value": null,
+        "display_status": "counts_only"
+      },
+      "width_80_pct": {
+        "value": null,
+        "n_obs": 0,
+        "unit": "percent",
+        "status": "undefined",
+        "display_value": null,
+        "display_status": "counts_only"
+      }
+    },
+    {
+      "h": 4,
+      "coverage_80": {
+        "covered_count": 0,
+        "n_obs": 0,
+        "display_value": null,
+        "display_status": "counts_only",
+        "n_base_dates": 0,
+        "status": "undefined"
+      },
+      "width_80": {
+        "value": null,
+        "n_obs": 0,
+        "unit": "log_return",
+        "status": "undefined",
+        "display_value": null,
+        "display_status": "counts_only"
+      },
+      "sign_accuracy": {
+        "value": null,
+        "n_obs": 0,
+        "status": "undefined",
+        "display_value": null,
+        "display_status": "counts_only"
+      },
+      "up_rate": {
+        "value": null,
+        "n_obs": 0,
+        "status": "undefined",
+        "display_value": null,
+        "display_status": "counts_only"
+      },
+      "width_80_pct": {
+        "value": null,
+        "n_obs": 0,
+        "unit": "percent",
+        "status": "undefined",
+        "display_value": null,
+        "display_status": "counts_only"
+      }
+    },
+    {
+      "h": 5,
+      "coverage_80": {
+        "covered_count": 0,
+        "n_obs": 0,
+        "display_value": null,
+        "display_status": "counts_only",
+        "n_base_dates": 0,
+        "status": "undefined"
+      },
+      "width_80": {
+        "value": null,
+        "n_obs": 0,
+        "unit": "log_return",
+        "status": "undefined",
+        "display_value": null,
+        "display_status": "counts_only"
+      },
+      "sign_accuracy": {
+        "value": null,
+        "n_obs": 0,
+        "status": "undefined",
+        "display_value": null,
+        "display_status": "counts_only"
+      },
+      "up_rate": {
+        "value": null,
+        "n_obs": 0,
+        "status": "undefined",
+        "display_value": null,
+        "display_status": "counts_only"
+      },
+      "width_80_pct": {
+        "value": null,
+        "n_obs": 0,
+        "unit": "percent",
+        "status": "undefined",
+        "display_value": null,
+        "display_status": "counts_only"
+      }
+    },
+    {
+      "h": 6,
+      "coverage_80": {
+        "covered_count": 0,
+        "n_obs": 0,
+        "display_value": null,
+        "display_status": "counts_only",
+        "n_base_dates": 0,
+        "status": "undefined"
+      },
+      "width_80": {
+        "value": null,
+        "n_obs": 0,
+        "unit": "log_return",
+        "status": "undefined",
+        "display_value": null,
+        "display_status": "counts_only"
+      },
+      "sign_accuracy": {
+        "value": null,
+        "n_obs": 0,
+        "status": "undefined",
+        "display_value": null,
+        "display_status": "counts_only"
+      },
+      "up_rate": {
+        "value": null,
+        "n_obs": 0,
+        "status": "undefined",
+        "display_value": null,
+        "display_status": "counts_only"
+      },
+      "width_80_pct": {
+        "value": null,
+        "n_obs": 0,
+        "unit": "percent",
+        "status": "undefined",
+        "display_value": null,
+        "display_status": "counts_only"
+      }
+    },
+    {
+      "h": 7,
+      "coverage_80": {
+        "covered_count": 0,
+        "n_obs": 0,
+        "display_value": null,
+        "display_status": "counts_only",
+        "n_base_dates": 0,
+        "status": "undefined"
+      },
+      "width_80": {
+        "value": null,
+        "n_obs": 0,
+        "unit": "log_return",
+        "status": "undefined",
+        "display_value": null,
+        "display_status": "counts_only"
+      },
+      "sign_accuracy": {
+        "value": null,
+        "n_obs": 0,
+        "status": "undefined",
+        "display_value": null,
+        "display_status": "counts_only"
+      },
+      "up_rate": {
+        "value": null,
+        "n_obs": 0,
+        "status": "undefined",
+        "display_value": null,
+        "display_status": "counts_only"
+      },
+      "width_80_pct": {
+        "value": null,
+        "n_obs": 0,
+        "unit": "percent",
+        "status": "undefined",
+        "display_value": null,
+        "display_status": "counts_only"
+      }
+    }
+  ],
+  "data_status": "not_ready",
+  "disclaimer": "Dự báo mang tính tham khảo, không phải lời khuyên đầu tư."
+}

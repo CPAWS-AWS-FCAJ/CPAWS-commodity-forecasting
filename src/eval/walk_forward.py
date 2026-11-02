@@ -2,6 +2,10 @@
 
 Only local NumPy inference and evaluation. No training, cloud clients or imports
 from production predict. Dates are exchange sessions; timestamps are UTC.
+
+evaluation_kind "cross_validation" (2016-2018) is an internal K4 evaluation only
+(docs/experiments/k4-plan.md section 8): its results are written under eval/k4/ and
+never to the Accuracy table, docs/api/accuracy-schema.md or production.
 """
 
 from __future__ import annotations
@@ -62,6 +66,13 @@ REASONS = {
     "invalid_input_window": {"input_nan", "insufficient_input_history", "input_not_available"},
     "generation_error": {"model_exception", "invalid_model_output", "upstream_failure"},
 }
+# Fixed evaluation periods. "cross_validation" pools the K4 folds 2016-2018 (base dates inside,
+# one target cutoff), docs/experiments/k4-plan.md sections 2 and 8. It is internal to K4: results
+# go to eval/k4/ only, never to the Accuracy table/schema or production.
+PERIODS = {
+    "validation": ("2019-01-01", "2019-12-31", "2019-12-31"),
+    "cross_validation": ("2016-01-01", "2018-12-31", "2018-12-31"),
+}
 
 
 @dataclass(frozen=True)
@@ -83,11 +94,12 @@ class EvaluationConfig:
     evaluation_as_of_time: str | None = None
 
     def __post_init__(self):
+        start, end, cutoff = PERIODS.get(self.evaluation_kind, PERIODS["validation"])
         fixed = {
-            "evaluation_kind": "validation",
-            "evaluation_start": "2019-01-01",
-            "evaluation_end": "2019-12-31",
-            "target_cutoff_date": "2019-12-31",
+            "evaluation_kind": self.evaluation_kind if self.evaluation_kind in PERIODS else None,
+            "evaluation_start": start,
+            "evaluation_end": end,
+            "target_cutoff_date": cutoff,
             "window": 60,
             "block_length": 20,
             "n_bootstrap": 1000,
@@ -97,7 +109,8 @@ class EvaluationConfig:
         }
         if any(getattr(self, k) != v for k, v in fixed.items()):
             raise ValueError(
-                "only fixed validation 2019 / window60 / bootstrap20x1000 / 95% / no retrain is supported"
+                "only fixed validation 2019 or cross-validation 2016-2018 / window60 / "
+                "bootstrap20x1000 / 95% / no retrain is supported"
             )
         if any(
             not isinstance(getattr(self, k), str) or not getattr(self, k).strip()
@@ -465,6 +478,26 @@ def _validate_forecasts(forecasts, p, r, fits, cfg):
     return f, {"deduplicated_identical": dedup, "ignored_outside_origins": ignored}
 
 
+def roll_window(cfg):
+    """Session span for expiry/roll dates: one month before evaluation_start to one month after
+    the day following evaluation_end (validation 2019: 2018-12-01 .. 2020-02-01, as before)."""
+    lo = pd.Timestamp(cfg.evaluation_start) - pd.DateOffset(months=1)
+    hi = pd.Timestamp(cfg.evaluation_end) + pd.Timedelta(days=1) + pd.DateOffset(months=1)
+    return _day(lo), _day(hi)
+
+
+def roll_calendar(asset, cfg):
+    """Contract expiries from evaluation_start and calendar roll days over roll_window(cfg)."""
+    lo, hi = roll_window(cfg)
+    expiry = (calendars.cl_expiries if asset == "wti" else calendars.bz_expiries)(
+        cfg.evaluation_start, hi
+    )
+    roll = calendars.roll_days(
+        ASSETS[asset].roll_rule, calendars.sessions(ASSETS[asset].calendar, lo, hi)
+    )
+    return expiry, roll
+
+
 def _asset_context(p, r, asset, cfg):
     part = p.loc[p.asset == asset].copy().sort_values("date")
     invalid = set(r.loc[r.asset == asset, "date"])
@@ -486,13 +519,7 @@ def _asset_context(p, r, asset, cfg):
     roll = None
     if asset in ("brent", "wti"):
         try:
-            expiry = (calendars.cl_expiries if asset == "wti" else calendars.bz_expiries)(
-                cfg.evaluation_start, "2020-02-01"
-            )
-            roll = calendars.roll_days(
-                ASSETS[asset].roll_rule,
-                calendars.sessions(ASSETS[asset].calendar, "2018-12-01", "2020-02-01"),
-            )
+            expiry, roll = roll_calendar(asset, cfg)
             if "flag" in indexed:
                 supplied = [
                     pd.Timestamp(d)

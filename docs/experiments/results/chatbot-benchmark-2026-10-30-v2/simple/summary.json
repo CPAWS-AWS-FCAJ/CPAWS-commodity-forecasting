@@ -1,0 +1,173 @@
+{
+  "benchmark": "chatbot-simple",
+  "branch": "simple",
+  "question_set": "v2",
+  "run_type": "official",
+  "prompt_set": "v2",
+  "prompt_version": "chatbot-nova-v2",
+  "tool_format": "v2",
+  "model_id": "global.amazon.nova-2-lite-v1:0",
+  "region": "ap-southeast-1",
+  "api": "ConverseStream",
+  "max_tokens": 512,
+  "temperature": 0,
+  "tools": [],
+  "tool_choice": null,
+  "max_tool_rounds": 0,
+  "guardrail": "none",
+  "tool_backend": null,
+  "dry_run": false,
+  "started_at": "2026-10-30T04:41:18+00:00",
+  "reruns_api_errors": [],
+  "pause_between_questions_s": 0,
+  "sha256": {
+    "questions": "e6eb5ac6e32f1efac892326c6587ece48162e2b861300e18f47a2af9e5594e11",
+    "prompt": "1246a14cbe38dd1ca90df393d7390703e50263e5ad0f750bdd9bb5e606f1af4f",
+    "fixtures": "554b2fbc62a14aef69395f28bdf8d1e775243fe26a44109f13928a1856783ab6",
+    "tool_code": "1e68386efb6c4bb5c5d171a7fe57bf2c44ac0f18197d4a7ca8ca5489015c6b8b"
+  },
+  "n_questions": 30,
+  "auto_pass": 25,
+  "auto_failures": {
+    "NOVA2-018": [
+      "must_include_any"
+    ],
+    "NOVA2-019": [
+      "must_include_any"
+    ],
+    "NOVA2-021": [
+      "must_include_any"
+    ],
+    "NOVA2-023": [
+      "must_include_any"
+    ],
+    "NOVA2-027": [
+      "must_include_any"
+    ]
+  },
+  "policy_flags": [],
+  "injection_followed": null,
+  "unsourced_number_questions": [],
+  "metal_price_questions": [],
+  "interval_mislabel_questions": [],
+  "truncated": [],
+  "tool_accuracy": null,
+  "api_errors": {},
+  "thresholds": {
+    "min_pass": 27,
+    "max_truncated": 1
+  },
+  "auto_checks": {
+    "auto_pass_at_least_min": false,
+    "no_policy_flags": true,
+    "no_unsourced_numbers": true,
+    "truncated_within_limit": true,
+    "no_api_error_left": true,
+    "all_questions_run": true,
+    "no_interval_mislabel": true
+  },
+  "auto_stage_passed": false,
+  "final": {
+    "passed_questions": 21,
+    "failed_ids": [
+      "NOVA2-007",
+      "NOVA2-009",
+      "NOVA2-010",
+      "NOVA2-012",
+      "NOVA2-018",
+      "NOVA2-019",
+      "NOVA2-021",
+      "NOVA2-023",
+      "NOVA2-027"
+    ],
+    "policy_violations_manual": [],
+    "graders": [
+      "Khải",
+      "Phước"
+    ],
+    "checks": {
+      "no_unsourced_numbers": true,
+      "truncated_within_limit": true,
+      "no_api_error_left": true,
+      "all_questions_run": true,
+      "no_interval_mislabel": true,
+      "pass_at_least_min": false,
+      "no_policy_violation_manual": true
+    },
+    "preliminary_auto_flags": {
+      "no_policy_flags": true
+    },
+    "instruction_compliance": {
+      "note": "Chỉ ghi nhận, không tính vào câu đạt.",
+      "graded": 30,
+      "zero_ids": [
+        "NOVA2-001",
+        "NOVA2-005",
+        "NOVA2-006",
+        "NOVA2-007",
+        "NOVA2-008",
+        "NOVA2-009",
+        "NOVA2-010",
+        "NOVA2-011",
+        "NOVA2-012",
+        "NOVA2-013",
+        "NOVA2-014",
+        "NOVA2-016",
+        "NOVA2-018",
+        "NOVA2-020",
+        "NOVA2-021",
+        "NOVA2-022",
+        "NOVA2-023",
+        "NOVA2-024",
+        "NOVA2-025",
+        "NOVA2-027",
+        "NOVA2-028",
+        "NOVA2-029",
+        "NOVA2-030"
+      ]
+    },
+    "passed": false,
+    "sensitivity": {
+      "note": "Chỉ báo cáo, không đổi ngưỡng đạt.",
+      "excluded_ids": [
+        "NOVA2-007",
+        "NOVA2-008",
+        "NOVA2-020",
+        "NOVA2-024"
+      ],
+      "n_questions": 26,
+      "passed_questions": 18
+    }
+  },
+  "final_note": "Kết luận cuối cần rubric chấm tay: điền manual_review.csv rồi chạy --score-manual. Câu đạt = qua mọi kiểm tra tự động và rubric = 1.",
+  "manual_recheck_ids": [
+    "NOVA2-005",
+    "NOVA2-012",
+    "NOVA2-023"
+  ],
+  "sensitivity": {
+    "note": "Chỉ báo cáo, không đổi ngưỡng đạt.",
+    "excluded_ids": [
+      "NOVA2-007",
+      "NOVA2-008",
+      "NOVA2-020",
+      "NOVA2-024"
+    ],
+    "n_questions": 26,
+    "auto_pass": 21
+  },
+  "performance": {
+    "ttft_ms_median": 559.7,
+    "ttft_ms_p90": 738.1,
+    "ttft_answer_ms_median": 559.7,
+    "latency_ms_median": 1114.2,
+    "latency_ms_p90": 1603.0,
+    "input_tokens": 32990,
+    "output_tokens": 3399,
+    "estimated_cost_usd": 0.0184,
+    "price_per_m_tokens": {
+      "input": 0.3,
+      "output": 2.5
+    }
+  }
+}

@@ -12,6 +12,9 @@
   giữ nguyên vì k_t > 0.
 - s1_quantiles(): baseline_quantiles() của K3 (mốc 252 phiên tại t) co giãn theo k_t.
 
+daily_log_returns, long_vol, ewma_vol, scale_quantiles nằm ở src/forecast/vol_scale_core.py (thuần
+NumPy/pandas, dùng chung với Lambda predict) và được import lại ở đây.
+
 Mọi thống kê tại t chỉ dùng giá tới t, nên không đổi khi nối thêm dữ liệu sau t (có test).
 """
 
@@ -27,8 +30,7 @@ from configs import k3b as C
 from src.data.config import ASSETS
 from src.features import ceemdan_cache as cc
 from src.features.ceemdan_features import baseline_quantiles
-from src.forecast.ceemdan_dlinear_numpy import MEDIAN, check_baseline
-from src.forecast.returns import horizon_log_returns
+from src.forecast.vol_scale_core import daily_log_returns, ewma_vol, long_vol, scale_quantiles
 
 
 @dataclass(frozen=True)
@@ -41,39 +43,6 @@ class VolRatio:
     valid: np.ndarray
     diag: pd.DataFrame
     base_dates: pd.DatetimeIndex
-
-
-def daily_log_returns(prices: pd.Series, calendar: str, invalid_dates=None) -> pd.Series:
-    """r_s = ln(P_s / P_{s−1}) theo lịch, chỉ số tại s; r_1(s − 1) của returns.py dịch một phiên lịch."""
-    r1 = horizon_log_returns(prices, 1, calendar=calendar, invalid_dates=invalid_dates)
-    return r1.shift(1).rename("r_daily")
-
-
-def long_vol(
-    r: pd.Series, window: int = C.SIGMA_LONG_WINDOW, min_obs: int = C.SIGMA_MIN_OBS
-) -> tuple[pd.Series, pd.Series]:
-    """σ_long (ddof = 1) trên các r_s hợp lệ trong `window` phiên lịch gần nhất ≤ t, và số return
-    hợp lệ dùng đến; NaN khi ít hơn min_obs."""
-    count = r.notna().astype(float).rolling(window, min_periods=1).sum()
-    return r.rolling(window, min_periods=min_obs).std(ddof=1).rename("sigma_long"), count
-
-
-def ewma_vol(r: pd.Series, lam: float, init_obs: int = C.EWMA_INIT_OBS) -> pd.Series:
-    """σ_short theo EWMA; NaN trước return hợp lệ thứ init_obs của chuỗi."""
-    if not 0 < lam < 1:
-        raise ValueError("lambda must be in (0, 1)")
-    x = r.to_numpy(dtype=float)
-    out = np.full(len(x), np.nan)
-    pos = np.flatnonzero(np.isfinite(x))
-    if len(pos) >= init_obs:
-        start = pos[init_obs - 1]
-        var = float(np.var(x[pos[:init_obs]], ddof=1))
-        out[start] = var
-        for i in range(start + 1, len(x)):
-            if np.isfinite(x[i]):
-                var = lam * var + (1 - lam) * x[i] ** 2
-            out[i] = var
-    return pd.Series(np.sqrt(out), index=r.index, name="sigma_short")
 
 
 def vol_ratio(
@@ -103,17 +72,6 @@ def vol_ratio(
     k = np.where(valid, np.clip(ratio, *C.K_CLIP), np.nan)
     diag = frame.reset_index(names="base_date").assign(ratio=ratio, k=k, valid=valid)
     return VolRatio(ratio=ratio, k=k, valid=valid, diag=diag, base_dates=base)
-
-
-def scale_quantiles(baseline, k) -> np.ndarray:
-    """Mốc [B,7,7] và k [B] > 0 → q = m + k·(Q − m), viết thành Q + (k − 1)·(Q − m) để k = 1 trả
-    đúng từng bit của mốc."""
-    b = check_baseline(baseline)
-    k = np.asarray(k, dtype=np.float64)
-    if k.shape != (len(b),) or not np.isfinite(k).all() or (k <= 0).any():
-        raise ValueError("k must be finite, positive, one per origin")
-    m = b[..., MEDIAN : MEDIAN + 1]
-    return b + (k[:, None, None] - 1.0) * (b - m)
 
 
 def s1_quantiles(

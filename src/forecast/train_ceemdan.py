@@ -92,16 +92,16 @@ def config_id(window: int, max_imf: int, seq_len: int) -> str:
 # ---------- dữ liệu (chỉ đọc) ----------
 
 
-def read_clean(lake: Path, dt: str) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Bản clean cắt tại CUTOFF ngay khi đọc; chỉ giữ 4 tài sản."""
-    directory = lake / "clean" / "prices" / f"dt={dt}"
-    cut = pd.Timestamp(G.CUTOFF)
+def read_clean(lake: Path, dt: str, cutoff: str = G.CUTOFF) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Bản clean cắt tại cutoff (mặc định CUTOFF của K3) ngay khi đọc; chỉ giữ 4 tài sản."""
+    directory = Path(lake) / "clean" / "prices" / f"dt={dt}"
+    cut = pd.Timestamp(cutoff)
     flt = [("date", "<=", cut)]
     prices = pd.read_parquet(directory / "prices.parquet", filters=flt)
     rejected = pd.read_parquet(directory / "rejected.parquet", filters=flt)
     for name, df in (("prices", prices), ("rejected", rejected)):
         if len(df) and pd.Timestamp(df["date"].max()) > cut:
-            raise StopRun(f"{name}: read data after {G.CUTOFF}")
+            raise StopRun(f"{name}: read data after {cutoff}")
     prices = prices[prices["asset"].isin(G.ASSETS)].reset_index(drop=True)
     rejected = rejected[rejected["asset"].isin(G.ASSETS)].reset_index(drop=True)
     return prices, rejected
@@ -506,11 +506,14 @@ def evaluation_config(model_version: str) -> wf.EvaluationConfig:
     )
 
 
-def evaluate(model_version: str, forecasts: dict, p, r) -> dict:
+def evaluate(
+    model_version: str, forecasts: dict, p, r, cfg: wf.EvaluationConfig | None = None
+) -> dict:
     """Forecasts {asset: (base_dates, q đã chuẩn hóa [n,7,7], crossed [n,7])} → Detail/Accuracy/DM
-    bằng _make_detail + _summarize của walk_forward (không viết lại công thức nào)."""
+    bằng _make_detail + _summarize của walk_forward (không viết lại công thức nào). cfg mặc định
+    là validation 2019 của K3; K4 truyền cấu hình cross_validation."""
     t0 = time.perf_counter()
-    cfg = evaluation_config(model_version)
+    cfg = evaluation_config(model_version) if cfg is None else cfg
     rows = []
     for asset in wf.ASSET_NAMES:
         base, q, crossed = forecasts[asset]
