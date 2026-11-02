@@ -47,7 +47,7 @@ export function AssetCard({ item, hidePrice = false }: Props) {
       </div>
       {hidePrice ? (
         <p className="tabular mt-4 text-sm">
-          Thay đổi 80% sau 7 ngày:{" "}
+          Thay đổi 80% sau 7 phiên:{" "}
           <span className="font-medium">
             {formatReturnPercent(Math.log(item.h7.p10 / item.last_price))} đến{" "}
             {formatReturnPercent(Math.log(item.h7.p90 / item.last_price))}
@@ -55,7 +55,7 @@ export function AssetCard({ item, hidePrice = false }: Props) {
         </p>
       ) : (
         <p className="tabular mt-4 text-sm">
-          Khoảng giá 80% sau 7 ngày:{" "}
+          Khoảng giá 80% sau 7 phiên:{" "}
           <span className="font-medium">
             {formatPrice(item.asset, item.h7.p10, "USD")}–{formatPrice(item.asset, item.h7.p90, "USD")} {unit}
           </span>

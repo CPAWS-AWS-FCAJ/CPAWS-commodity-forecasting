@@ -41,8 +41,15 @@ describe("format", () => {
 
   it("xác suất làm tròn 1%, return có dấu", () => {
     expect(formatProbability(0.5649)).toBe("56%");
-    expect(formatReturnPercent(0.003)).toBe("+0,30%");
-    expect(formatReturnPercent(-0.021)).toBe("−2,10%");
+    expect(formatReturnPercent(0.003)).toBe("+0,3%");
+    expect(formatReturnPercent(-0.021)).toBe("−2,1%");
+    expect(formatReturnPercent(0.003, 2)).toBe("+0,30%");
+  });
+
+  it("% thay đổi làm tròn về 0 thì không ghi dấu", () => {
+    expect(formatReturnPercent(0.0004)).toBe("0,0%");
+    expect(formatReturnPercent(-0.0004)).toBe("0,0%");
+    expect(formatReturnPercent(0.0004, 2)).toBe("+0,04%");
   });
 
   it("định dạng ngày không lệch múi giờ", () => {

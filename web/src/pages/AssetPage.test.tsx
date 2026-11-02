@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import AssetPage from "./AssetPage";
 import Home from "./Home";
@@ -79,10 +79,34 @@ describe("trang sản phẩm và trang chủ với cờ VITE_SHOW_METAL_PRICES",
     expect(screen.getByRole("button", { name: "VND" })).toBeInTheDocument();
   });
 
+  it("dải 7 thẻ h = 1…7; bấm thẻ h = 5 thì phần tóm tắt đổi theo", async () => {
+    flags.show = false;
+    mount("/asset/wti", "basic");
+    const cards = await screen.findAllByRole("button", { name: /^Sau \d phiên:/ });
+    expect(cards.map((card) => card.getAttribute("aria-label")?.match(/^Sau (\d)/)?.[1])).toEqual([
+      "1", "2", "3", "4", "5", "6", "7",
+    ]);
+    expect(cards[6]).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(cards[4]);
+    expect(cards[4]).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText(/Sau 5 phiên, nhiều khả năng/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "7 phiên" })).toHaveAttribute("aria-pressed", "false");
+    fireEvent.click(screen.getByRole("button", { name: "1 phiên" }));
+    expect(cards[0]).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("vàng, cờ tắt: thẻ chỉ có %, không có đơn vị giá", async () => {
+    flags.show = false;
+    mount("/asset/gold", "basic");
+    const cards = await screen.findAllByRole("button", { name: /^Sau \d phiên:/ });
+    expect(cards).toHaveLength(7);
+    for (const card of cards) expect(card.textContent).not.toMatch(/USD|VND/);
+  });
+
   it("trang chủ, cờ tắt: vàng/bạc ẩn giá, dầu giữ giá", async () => {
     flags.show = false;
     mount("/", "basic");
-    expect((await screen.findAllByText(/Thay đổi 80% sau 7 ngày/)).length).toBe(2);
-    expect(screen.getAllByText(/Khoảng giá 80% sau 7 ngày/).length).toBe(2);
+    expect((await screen.findAllByText(/Thay đổi 80% sau 7 phiên/)).length).toBe(2);
+    expect(screen.getAllByText(/Khoảng giá 80% sau 7 phiên/).length).toBe(2);
   });
 });

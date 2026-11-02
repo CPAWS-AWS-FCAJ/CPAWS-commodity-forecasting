@@ -13,7 +13,7 @@ export function ReturnRange({ low, mid, high, horizonDays }: Props) {
   return (
     <div>
       <p className="text-sm text-muted">
-        Sau {horizonDays} ngày, mức thay đổi nhiều khả năng nằm trong khoảng (80%)
+        Sau {horizonDays} phiên, mức thay đổi nhiều khả năng nằm trong khoảng (80%)
       </p>
       <p className="tabular mt-1 text-xl font-semibold">
         {formatReturnPercent(low)} đến {formatReturnPercent(high)}

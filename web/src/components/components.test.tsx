@@ -111,7 +111,7 @@ describe("AssetCard", () => {
   it("hiện giá cuối và khoảng giá khi không ẩn giá", () => {
     renderCard(false);
     expect(screen.getByText(/Giá cuối ngày/)).toBeInTheDocument();
-    expect(screen.getByText(/Khoảng giá 80% sau 7 ngày/)).toBeInTheDocument();
+    expect(screen.getByText(/Khoảng giá 80% sau 7 phiên/)).toBeInTheDocument();
     expect(screen.getByText("USD/oz")).toBeInTheDocument();
   });
 
@@ -120,7 +120,7 @@ describe("AssetCard", () => {
     expect(screen.queryByText(/Giá cuối ngày/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Khoảng giá 80%/)).not.toBeInTheDocument();
     expect(screen.queryByText("USD/oz")).not.toBeInTheDocument();
-    expect(screen.getByText(/Thay đổi 80% sau 7 ngày/)).toBeInTheDocument();
+    expect(screen.getByText(/Thay đổi 80% sau 7 phiên/)).toBeInTheDocument();
     expect(screen.getByText(/Nghiêng tăng|Nghiêng giảm|Chưa rõ xu hướng/)).toBeInTheDocument();
     expect(screen.getByText("· 7 phiên")).toBeInTheDocument();
   });
@@ -162,7 +162,7 @@ describe("ReturnRange", () => {
     expect(
       screen.getByText(`${formatReturnPercent(-0.0123)} đến ${formatReturnPercent(0.0145)}`),
     ).toBeInTheDocument();
-    expect(screen.getByText(/Sau 7 ngày/)).toBeInTheDocument();
+    expect(screen.getByText(/Sau 7 phiên/)).toBeInTheDocument();
     expect(screen.queryByText(/USD|VND/)).not.toBeInTheDocument();
   });
 });
