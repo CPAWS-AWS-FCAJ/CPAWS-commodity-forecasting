@@ -114,7 +114,10 @@ def test_handler_reads_news_dir(monkeypatch):
     monkeypatch.setenv("NEWS_DIR", str(NEWS_DIR))
     repo = handler.news_repository()
     assert isinstance(repo, N.JsonFileNewsRepository)
-    res = N.get_news({"asset": "gold", "to_date": "2026-10-29"}, repo)
+    # min_impact mặc định (2): FOMC 28/10 là 1/bearish nên bị lọc, chỉ còn biên bản 7/10
+    # (câu 3 của kịch bản demo hỏi tin vàng "từ 7/10/2026 tới nay")
+    res = N.get_news({"asset": "gold", "from_date": "2026-10-01", "to_date": "2026-10-29"}, repo)
+    assert res["min_impact"] == 2
     assert [it["link"] for it in res["items"]] == [
-        "https://www.federalreserve.gov/newsevents/pressreleases/monetary20261028a.htm"
+        "https://www.federalreserve.gov/monetarypolicy/fomcminutes20260916.htm"
     ]
