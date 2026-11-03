@@ -139,6 +139,8 @@ class Config:
 
 def expected_dates(cfg: Config) -> list[str]:
     """One base session per next-calendar-day Predict opportunity, never per invocation."""
+    # First production Predict base date confirmed by the team. This floor does not
+    # replace CHAMPION_EFFECTIVE_BASE_DATES or establish legacy eligibility.
     start = max(cfg.start, cfg.effective, "2026-10-26")
     dates = calendars.sessions(ASSETS[cfg.asset].calendar, start, cfg.job_date)
     result = []
