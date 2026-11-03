@@ -33,7 +33,9 @@ export function ReliabilityBlock({ asset, title = "Độ tin cậy 8 tuần gầ
         {config.useSample ? <SampleBadge /> : null}
       </div>
       <div className="mt-3">
-        {accuracy.isPending ? <LoadingBlock label="Đang tải độ tin cậy…" /> : null}
+        {/* VITE_ACCURACY_API=false (route /accuracy chưa deploy): cùng chữ với not_ready, không gọi API */}
+        {config.accuracyApiEnabled ? null : <p className="text-sm text-muted">Chưa có kết quả đánh giá</p>}
+        {config.accuracyApiEnabled && accuracy.isPending ? <LoadingBlock label="Đang tải độ tin cậy…" /> : null}
         {accuracy.isError ? (
           isAccuracyUnavailable(accuracy.error) ? (
             <p role="status" className="text-sm text-muted">

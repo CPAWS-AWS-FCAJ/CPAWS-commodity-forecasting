@@ -10,7 +10,7 @@ export default function Home() {
     <div>
       <h1 className="text-2xl font-bold">Dự báo giá vàng, bạc và dầu</h1>
       <p className="mt-1 max-w-2xl text-sm text-muted">
-        Khoảng giá nhiều khả năng và xác suất tăng trong 1–7 ngày tới. Mô hình dự báo log return rồi quy
+        Khoảng giá nhiều khả năng và xác suất tăng trong 1–7 phiên giao dịch tới. Mô hình dự báo log return rồi quy
         đổi sang khoảng giá, nên luôn có khoảng và xác suất đi kèm, không chỉ một con số.
       </p>
 

@@ -2,10 +2,11 @@ import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { config } from "../api/config";
 import { isAssetId } from "../api/types";
-import type { AssetId } from "../api/types";
+import type { AssetId, ForecastDetail } from "../api/types";
 import { useForecast, useHistory } from "../api/hooks";
 import { ChatPanel } from "../components/ChatPanel";
 import { FanChart } from "../components/FanChart";
+import { HorizonCards } from "../components/HorizonCards";
 import { PriceRange } from "../components/PriceRange";
 import { ProbabilityBadge } from "../components/ProbabilityBadge";
 import { ReturnRange } from "../components/ReturnRange";
@@ -97,6 +98,15 @@ function AssetContent({ asset }: { asset: AssetId }) {
               hidePrice={hidePrice}
             />
 
+            <HorizonCards
+              asset={asset}
+              detail={detail}
+              currency={currency}
+              hidePrice={hidePrice}
+              selected={selectedHorizon(detail, horizonDays)}
+              onSelect={setHorizonDays}
+            />
+
             {!hidePrice && (!config.historyAvailable || history.isError) ? (
               <EmptyBlock title="Chưa có lịch sử giá">
                 Biểu đồ dưới đây chỉ vẽ phần dự báo vì API chưa có endpoint lịch sử giá.
@@ -148,7 +158,8 @@ function Summary({
   advanced: boolean;
   hidePrice: boolean;
 }) {
-  const horizon = findHorizon(detail, horizonDays) ?? detail.horizons[detail.horizons.length - 1];
+  const horizon =
+    findHorizon(detail, selectedHorizon(detail, horizonDays)) ?? detail.horizons[detail.horizons.length - 1];
   const options = BASIC_HORIZONS.filter((h) => findHorizon(detail, h));
   const i10 = detail.quantile_levels.findIndex((l) => Math.abs(l - 0.1) < 1e-9);
   const i50 = detail.quantile_levels.findIndex((l) => Math.abs(l - 0.5) < 1e-9);
@@ -223,6 +234,11 @@ function Summary({
       {footer ? <p className="mt-4 text-xs text-muted">{footer}</p> : null}
     </section>
   );
+}
+
+/** h đang chọn nếu bản ghi có mức đó, không thì mức cuối (h = 7) để tóm tắt và dải thẻ khớp nhau. */
+function selectedHorizon(detail: ForecastDetail, horizonDays: number): number {
+  return findHorizon(detail, horizonDays)?.h ?? detail.horizons[detail.horizons.length - 1].h;
 }
 
 /** "Mốc thống kê 252 phiên (baseline-q252)" hoặc "mô hình <mã>" khi không có tên riêng. */
