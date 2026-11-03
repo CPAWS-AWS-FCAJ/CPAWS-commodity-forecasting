@@ -1,6 +1,6 @@
 # Kịch bản demo chatbot nội bộ team (8/11/2026)
 
-- Người soạn: Phước. Soạn 30/10/2026, cập nhật 2/11/2026. Trạng thái: **bản nháp, chờ Khải duyệt**.
+- Người soạn: Phước. Soạn 30/10/2026, cập nhật 3/11/2026. Trạng thái: **Khải đã duyệt (3/11)**.
 - Thay cho kịch bản demo MVP 25/10 (PR #31, đã đóng ngày 29/10, nhánh `docs/demo-mvp-2026-10-25`). Phần còn dùng được của PR #31 và các góp ý của Khải ngày 24/10 đã chuyển sang đây, xem [Phụ lục](#phụ-lục-phần-lấy-từ-pr-31).
 - Mục tiêu: cả team thấy chatbot trả lời thật qua `POST /chat` trên AWS. Số liệu lấy từ tool, tin có trích nguồn, có câu "không phải lời khuyên đầu tư", và chatbot từ chối tư vấn đầu tư.
 - Thời lượng đề xuất: 15 phút demo, 10 phút hỏi đáp. Ngày 8/11/2026 là Chủ nhật.
@@ -44,7 +44,7 @@ Hạn chung: xong trước 20:00 ngày 7/11, sau đó tập dượt. Mục nào 
 | 2 | Bản ghi `Forecasts` thật cho 4 tài sản | Khải, Tiến | 7/11 | `GET /forecasts` trả 4 tài sản, `is_sample: false` |
 | 3 | Làm mới bộ tin theo `docs/api/demo-news.md`, chạy `tests/test_demo_news.py`, merge. Sau đó Tiến deploy lại `CpawsApi`, gộp `-c allowed_origin=<domain>` nếu Amplify đã xong (Khải chốt 2/11). Deploy xong, Tiến thử các câu tin tức và gửi kết quả cho Phước | Phước (tin), Tiến (deploy, thử) | Tin: 6/11. Deploy: 7/11 | Hỏi 1 câu tin vàng có khoảng ngày chứa 7/10/2026: `get_news` trả ít nhất 1 tin (biên bản FOMC), câu trả lời có trích nguồn |
 | 4 | Web gọi `POST /chat`: hiện `answer` dạng văn bản thuần, link chỉ lấy từ `citations`, phân biệt hai loại `429` (contract, mục "Bảo mật" và "Lỗi"). Chạy web ở `localhost:5173`, hoặc Amplify nếu Tiến xong trước 7/11 | Tiến (web), Phước (review) | 6/11 | Hỏi được câu 1 trên web |
-| 5 | Hai tài khoản Cognito demo: một để tập dượt, một chỉ dùng ngày 8/11 | Tuấn | 6/11 | Đăng nhập được cả hai |
+| 5 | Hai tài khoản Cognito demo: một để tập dượt, một chỉ dùng ngày 8/11. Tuấn đang hỏng laptop: đến 5/11 chưa xong thì Tiến tạo hộ nếu có quyền, Tuấn xác nhận sau (Khải, 3/11) | Tuấn (Tiến dự phòng) | 6/11 | Đăng nhập được cả hai |
 | 6 | Tập dượt 7/11 bằng tài khoản tập dượt, sau khi Tiến deploy lại (việc số 3): hỏi đúng các câu ở mục 4, ghi `request_id`, lưu JSON response, quay video màn hình | Phước | 7/11 | Video, JSON và danh sách `request_id` trên máy trình bày |
 | 7 | Mở sẵn tab: web, log group CloudWatch của Lambda chat, sơ đồ kiến trúc | Người trình bày | 8/11 | — |
 
@@ -74,7 +74,7 @@ Câu nhắc khi trình bày:
 - Con số là **dự báo có khoảng**, luôn kèm xác suất tăng và câu "Dự báo mang tính tham khảo, không phải lời khuyên đầu tư."
 - Vàng và bạc là dự báo dựa trên GLD/SLV (chuỗi đại diện), chỉ nêu % và xác suất tăng, không nêu giá.
 - Bản ghi `baseline-q252` là mốc thống kê 252 phiên, không phải mô hình dự báo.
-- Khi trình bày chỉ nêu xác suất tăng, không dùng nhãn "nghiêng tăng" hay "nghiêng giảm". Nhãn hướng chỉ có trên web, theo ngưỡng 60/40 (họp 30/10 điểm 1, ghi ở `chatbot-haiku-v3.md` mục ghi chú thiết kế; code web ở nhánh `feat/web-forecast-display`, chưa merge). **Prompt v2 không cấm nhãn hướng**, nên chatbot có thể tự nói "nghiêng". Khi đó người trình bày nói rõ đó là lỗi đã biết.
+- Khi trình bày chỉ nêu xác suất tăng, không dùng nhãn "nghiêng tăng" hay "nghiêng giảm". Nhãn hướng chỉ có trên web, theo ngưỡng 60/40 (họp 30/10 điểm 1, ghi ở `chatbot-haiku-v3.md` mục ghi chú thiết kế; code web đã merge ở PR #73, `web/src/lib/forecast.ts`). **Prompt v2 không cấm nhãn hướng**, nên chatbot có thể tự nói "nghiêng". Khi đó người trình bày nói rõ đó là lỗi đã biết.
 - Tin chỉ là yếu tố có thể ảnh hưởng. Dự báo không dùng tin tức.
 
 ## 4. Câu hỏi demo theo thứ tự trình bày
@@ -335,12 +335,12 @@ Không so sánh Nova với Haiku: hai model làm hai việc khác nhau, chạy t
 
 ## 9. Việc cần chốt
 
-1. Khải duyệt bộ câu sau khi lọc theo loại A (PR #76): bỏ câu ngoài phạm vi, giữ câu 0 (tùy chọn), thêm câu 5.
-2. Có dùng câu 0 không, tùy thời lượng.
+1. ~~Khải duyệt bộ câu sau khi lọc theo loại A (PR #76)~~: **đã duyệt** (Khải, 3/11): bỏ câu ngoài phạm vi, giữ câu 0 (tùy chọn), thêm câu 5.
+2. ~~Có dùng câu 0 không~~: **tùy thời lượng**; thiếu giờ thì cắt câu 0 đầu tiên (Khải, 3/11).
 3. ~~Giữ hay bỏ câu 3b~~: **đã chốt giữ** (Khải, 2/11). WTI không còn tin mức 2 trở lên, nên kịch bản cần một câu cho thấy chatbot nói "không có tin đáng kể".
 4. ~~Đổi ngưỡng mặc định của `get_news`~~: **đã chốt giữ** `min_impact = 2`; câu hỏi tin tức nêu rõ khoảng ngày (Tiến, Khải, 2/11).
-5. Thời lượng và người trình bày từng phần (mục 3 đang giả định Phước trình bày, Tiến giữ máy).
-6. Web chạy ở `localhost:5173` hay Amplify (Tiến, trước 7/11). Amplify thì deploy `CpawsApi` với `-c allowed_origin=<domain>`.
+5. ~~Người trình bày~~: **đã chốt** Phước trình bày, Tiến giữ máy như mục 3 (Khải, 3/11).
+6. ~~Web chạy ở `localhost:5173` hay Amplify~~: **đã chốt** mặc định `localhost:5173`; chỉ dùng Amplify nếu Tiến deploy và thử xong trước 7/11 (Khải, 3/11). Amplify thì deploy `CpawsApi` với `-c allowed_origin=<domain>`.
 
 ## Phụ lục: phần lấy từ PR #31
 
@@ -351,7 +351,7 @@ PR #31 là kịch bản demo MVP 25/10. Khải đề nghị đóng (comment ngà
 | 1. EIA key ghi "sẽ lưu ở SSM (chưa cấu hình)"; "14 bảng ghi" thành `written=14` | Không nhắc, vì buổi này không trình bày ingest |
 | 2. Số benchmark chỉ lấy từ file đã có trong repo | Áp dụng cho mọi số ở mục 6, có dẫn file. Không dùng số dev của v3, vì demo dùng v2 |
 | 3. Câu về MAPE, bỏ RMSE | Áp dụng ở mục 8, dùng đúng câu Khải viết |
-| 4. `VITE_SHOW_METAL_PRICES=false` | Chatbot cùng quy tắc với web: vàng/bạc chỉ nêu % và xác suất tăng (câu 2, mục 8). `web/.env.example` đang để `true`, nên Tiến kiểm cấu hình khi chạy web demo |
+| 4. `VITE_SHOW_METAL_PRICES=false` | Chatbot cùng quy tắc với web: vàng/bạc chỉ nêu % và xác suất tăng (câu 2, mục 8). Sau PR #73, `web/.env.example` đã để `false`. Tiến chỉ cần kiểm `.env.local` của máy demo không bật lại `true` |
 | 5. Xóa bản ghi mẫu không gấp, vì bản thật có `base_date` mới hơn sẽ che bản mẫu | Áp dụng gián tiếp: `forecasts_used` phải có `is_sample: false` (câu 1). Thấy `true` thì chatbot phải nói "dữ liệu mẫu" và cần kiểm lại bảng `Forecasts` |
 | 6. Ingest tay khi GLD/SLV trễ phiên | Áp dụng ở mục 7 |
 
