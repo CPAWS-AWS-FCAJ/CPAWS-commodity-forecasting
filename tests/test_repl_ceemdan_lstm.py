@@ -183,3 +183,141 @@ def test_config_constants():
     assert C.N_COMPONENTS == len(C.COMPONENTS) == C.MAX_IMF + 1
     assert np.isclose(sum(C.SPLIT), 1.0)
     assert C.EVAL[1] == C.CUTOFF and C.TRAIN[1] < C.EVAL[0]
+
+
+# ---------- bước 2: mẫu, chuẩn hóa, phân vị, LSTM ----------
+
+
+def _full_series(drop=()) -> D.AssetSeries:
+    """Chuỗi tổng hợp 2012-01 → 2018-12-31 trên lịch NYSE, có thể bỏ vài dòng (phiên thiếu)."""
+    dates = calendars.sessions("NYSE", C.WARMUP_START, C.CUTOFF)
+    dates = dates.difference(pd.DatetimeIndex(drop))
+    rng = np.random.default_rng(1)
+    values = 100 * np.exp(np.cumsum(rng.normal(0, 0.01, len(dates))))
+    return D.AssetSeries("gold", "NYSE", dates, values)
+
+
+def _fake_tables(s: D.AssetSeries) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Bảng R-causal và R-full giả, cùng định dạng bước 1 (thành phần = giá × tỷ trọng cố định)."""
+    w = np.array([0.1, 0.2, 0.3, 0.4])
+    full = pd.DataFrame(
+        {"date": s.dates} | {n: s.values * w[j] for j, n in enumerate(C.COMPONENTS)}
+    )
+    rows = np.flatnonzero(s.dates >= pd.Timestamp(C.CAUSAL_START))
+    causal = pd.DataFrame(
+        {
+            "end_date": s.dates[rows],
+            "n_imf": 4,
+            "price_hash": "x",
+        }
+    )
+    for j, n in enumerate(C.COMPONENTS):
+        causal[n] = [s.values[t - C.SEQ_LEN + 1 : t + 1] * w[j] * 1.01 for t in rows]
+    return causal, full
+
+
+DROPPED = ("2015-03-10", "2017-06-14")  # phiên thiếu dòng giá: t trước đó không có target
+
+
+@pytest.fixture(scope="module")
+def samples():
+    from src.experiments.repl_ceemdan_lstm.dataset import build_samples
+
+    s = _full_series(DROPPED)
+    causal, full = _fake_tables(s)
+    return build_samples(s, causal, full)
+
+
+def test_samples_targets_stay_inside_their_segment(samples):
+    sm = samples
+    cut = pd.Timestamp(C.CUTOFF)
+    for name, (start, end) in sm.segment_bounds.items():
+        m = sm.mask(name)
+        assert m.any()
+        assert (sm.origins[m] >= start).all() and (sm.origins[m] <= end).all()
+        assert (sm.target_dates[m] <= end).all()  # target không lấn sang đoạn sau
+    ev = sm.mask("eval")
+    assert (sm.origins[ev] >= pd.Timestamp(C.EVAL[0])).all()
+    assert (sm.origins[ev] <= pd.Timestamp(C.EVAL[1])).all()
+    assert (sm.target_dates[ev] <= cut).all()
+    assert sm.origins[ev].min() == pd.Timestamp("2017-01-03")
+    assert sm.origins[ev].max() == pd.Timestamp("2018-12-28")
+    # 2018-12-31: t + 1 sau CUTOFF; ngày trước phiên thiếu: không có target
+    assert sm.reason[sm.origins == pd.Timestamp("2018-12-31")][0] == "t + 1 sau CUTOFF"
+    for d in ("2015-03-09", "2017-06-13"):
+        i = np.flatnonzero(sm.origins == pd.Timestamp(d))[0]
+        assert sm.segment[i] == "" and sm.reason[i] == "t + 1 không có giá hợp lệ"
+    used = sm.segment != ""
+    assert np.isfinite(sm.r_next[used]).all()
+    for v in ("r_raw", "r_full", "r_causal"):
+        assert np.isfinite(sm.X[v][used]).all() and np.isfinite(sm.Y[v][used]).all()
+    # target R-causal = giá trị cuối của cửa sổ kết thúc tại t + 1
+    i = np.flatnonzero(sm.mask("fit"))[5]
+    j = np.flatnonzero(sm.origins == sm.target_dates[i])[0]
+    np.testing.assert_array_equal(sm.Y["r_causal"][i], sm.X["r_causal"][j, -1, :])
+
+
+def test_scaler_sees_only_fit_segment(samples):
+    from src.experiments.repl_ceemdan_lstm.dataset import fit_scalers
+
+    sm = samples
+    X = sm.X["r_causal"].copy()
+    base = fit_scalers(X, sm.segment)
+    other = np.isin(sm.segment, ["early_stop", "calib", "eval"])
+    X[other] *= 7.0
+    X[other] += 3.0
+    assert fit_scalers(X, sm.segment) == base
+    X[sm.mask("fit")] += 1.0
+    assert fit_scalers(X, sm.segment) != base
+
+
+def test_quantiles_depend_only_on_calibration_residuals():
+    from src.experiments.repl_ceemdan_lstm.evaluate import calibrated_quantiles
+
+    rng = np.random.default_rng(0)
+    r_hat = rng.normal(0, 0.01, 50)
+    res = rng.normal(0, 0.02, 120)
+    q = calibrated_quantiles(r_hat, res)
+    assert q.shape == (50, 7)
+    assert (np.diff(q, axis=1) >= 0).all()
+    np.testing.assert_allclose(
+        q - r_hat[:, None],
+        np.tile(np.quantile(res, [0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95]), (50, 1)),
+    )
+    # đổi r̂ (đoạn eval) không đổi phần cộng thêm; đổi phần dư calib thì đổi
+    q2 = calibrated_quantiles(r_hat + 1.0, res)
+    np.testing.assert_allclose(q2 - (r_hat + 1.0)[:, None], q - r_hat[:, None])
+    q3 = calibrated_quantiles(r_hat, res * 2)
+    assert not np.allclose(q3, q)
+
+
+def test_nonpositive_price_forecast_is_counted_not_replaced():
+    from src.experiments.repl_ceemdan_lstm.evaluate import to_returns
+
+    p_hat = np.array([101.0, -3.0, 0.0, np.nan, 99.0])
+    p_t = np.full(5, 100.0)
+    before = p_hat.copy()
+    r_hat, err = to_returns(p_hat, p_t)
+    assert err.tolist() == [False, True, True, False, False]
+    assert np.isnan(r_hat[[1, 2, 3]]).all()
+    np.testing.assert_allclose(r_hat[[0, 4]], np.log([1.01, 0.99]))
+    np.testing.assert_array_equal(p_hat, before)
+
+
+def test_same_seed_training_is_bit_identical_on_cpu():
+    torch = pytest.importorskip("torch")
+    from src.experiments.repl_ceemdan_lstm.model import predict, train_lstm
+
+    rng = np.random.default_rng(3)
+    x = rng.normal(size=(150, C.SEQ_LEN))
+    y = x[:, -1] * 0.5 + rng.normal(0, 0.1, 150)
+    params = C.LSTM | {"max_epochs": 4, "patience": 2}
+    dev = torch.device("cpu")
+    runs = [train_lstm(x[:100], y[:100], x[100:], y[100:], 0, dev, params) for _ in range(2)]
+    (m1, i1), (m2, i2) = runs
+    for a, b in zip(m1.state_dict().values(), m2.state_dict().values(), strict=True):
+        assert torch.equal(a, b)
+    assert i1.best_epoch == i2.best_epoch
+    np.testing.assert_array_equal(predict(m1, x, dev), predict(m2, x, dev))
+    m3, _ = train_lstm(x[:100], y[:100], x[100:], y[100:], 1, dev, params)
+    assert not torch.equal(m1.head.weight, m3.head.weight)
