@@ -180,23 +180,55 @@ Người vận hành được cấp quyền chuẩn bị dữ liệu gốc ở k
    pre_cutover_verified chỉ được đặt true sau khi owner kiểm bằng chứng; không suy từ timestamp.
    Có thể cung cấp snapshot_digest đã lưu độc lập để đối chiếu. Không đưa raw logs vào file này.
 3. Chuẩn bị `snapshot-bundle.json`: bucket, prefix (nếu có), objects. Mỗi object có key S3 gốc,
-   path tương đối trong thư mục bundle, etag, version_id (null nếu nguồn không có),
-   last_modified UTC **gốc**, sha256 của bytes gốc. Bundle chứa đủ quality.json,
-   prices.parquet và rejected.parquet tại các key clean/prices/dt=... mà Sources.snapshot đọc.
-   Không lấy timestamp file tải xuống thay LastModified, không bịa ETag/version hay sửa bytes.
-   Công cụ kiểm SHA-256 bytes rồi dùng nguyên Sources.snapshot() để dựng identity.
+   path tương đối trong thư mục bundle, `etag`, `version_id`, `last_modified` UTC **gốc** và
+   SHA-256 của **bytes gốc**. Bundle phải chứa đủ `quality.json`, `prices.parquet` và
+   `rejected.parquet` tại các key `clean/prices/dt=...` mà `Sources.snapshot()` đọc.
+   Không lấy timestamp file tải xuống thay `LastModified`, không bịa ETag/VersionId hoặc sửa bytes.
+   Công cụ kiểm SHA-256 bytes rồi dùng cùng cấu trúc identity của `Sources.snapshot()` để tính digest.
 
-Ví dụ hình dạng manifest (placeholder cần thay bằng metadata thật, không phải evidence):
+   **Bắt buộc đối với `cpaws-dev-lake` đang bật S3 Versioning:** lấy chính xác `ETag`,
+   `VersionId` và `LastModified` của **từng object thực tế** bằng `aws s3api head-object`.
+   Không điền `version_id: null` như một giá trị mặc định hoặc chỉ vì chưa tra metadata.
+   Giữ `etag` **bao gồm cặp dấu ngoặc kép** trong giá trị S3 trả về; khi viết JSON, escape
+   dấu ngoặc kép bên trong chuỗi (ví dụ `"etag": "\"abc123\""`). Bỏ dấu ngoặc kép
+   hoặc thay `VersionId` bằng `null` sẽ đổi `snapshot.identity`, làm
+   `snapshot_digest` khác digest Lambda tính và loại record bằng
+   `legacy_snapshot_binding_mismatch`.
+
+   Lệnh lấy metadata cho từng key (thay `<DT>` và `<object>` bằng giá trị thực):
+
+   ```bash
+   aws s3api head-object \
+     --bucket cpaws-dev-lake \
+     --key 'clean/prices/dt=<DT>/<object>' \
+     --query '{ETag:ETag,VersionId:VersionId,LastModified:LastModified}' \
+     --output json
+   ```
+
+   Lặp lại cho `quality.json`, `prices.parquet`, `rejected.parquet` của **mỗi** snapshot
+   được tham chiếu. `head-object` không có `--version-id` chỉ trả bản hiện hành: nếu object
+   đã bị ghi đè, phải đối chiếu audit và lịch sử phiên bản để xác định **đúng VersionId**
+   của snapshot phát hành, không coi bản hiện tại là bản cũ. Với source runtime hiện hành,
+   việc đọc snapshot mặc định không tự chọn một VersionId lịch sử; nếu không đối chiếu được
+   identity của bundle với snapshot mà Lambda thật sự đọc thì **fail-closed**, không approve.
+
+   **Retention:** `cpaws-dev-lake` có `noncurrent_version_expiration = 30 ngày`.
+   Nếu snapshot gốc của base_date 26–28/10 bị overwrite, bản cũ có thể bị xóa sau khoảng
+   30 ngày **kể từ khi trở thành noncurrent**, không phải mặc định 30 ngày từ base_date.
+   Xuất bundle, lưu bytes và metadata gốc trong kho riêng có retention phù hợp **sớm**;
+   kiểm tra quyền truy xuất bản cũ trước khi hết hạn. Không commit bundle vào repository.
+
+Ví dụ hình dạng manifest (placeholder, không phải evidence đã xác minh; thêm các object còn lại):
 
 ```json
 {
-  "bucket": "<private-lake>",
+  "bucket": "cpaws-dev-lake",
   "objects": [
     {
       "key": "clean/prices/dt=<issued-snapshot-date>/quality.json",
       "path": "quality.json",
-      "etag": "<original-etag>",
-      "version_id": null,
+      "etag": "\"<original-etag-without-surrounding-quotes>\"",
+      "version_id": "<actual-VersionId-from-head-object>",
       "last_modified": "<original-UTC-timestamp>",
       "sha256": "<raw-object-sha256>"
     }
@@ -235,8 +267,34 @@ Digest của bản log đã lọc không phải digest của DynamoDB item đầ
 
 ## 7. Dry-run trước deployment
 
-Owner chuẩn bị hai champion mappings và evidence đã duyệt theo §2–3, kiểm image/handler trước
-khi chạy. Event cho handler hiện có (chỉ vận hành sau khi được cấp quyền):
+**Thứ tự thực hiện để đo được mismatch** (không yêu cầu legacy approval trước bước đo):
+
+1. **Duyệt `release` trước**, với bằng chứng triển khai/smoke và `cutover_at` thật, đúng
+   schema §3 (`approved`, `approved_by`, `approved_at`, `reference`, `conditional_write=true`,
+   `input_asof_checked=true`). Release đã duyệt cho phép kiểm provenance các record hậu
+   cutover (ví dụ base_date từ 29/10), **không** tự approve record legacy.
+2. **Chạy dry-run đủ bốn asset** với release evidence hợp lệ, thu các diagnostics và đo
+   `base_price_revision_mismatch` trên các record hậu cutover vượt qua provenance. Với
+   evidence `{}`, `records_passing_provenance=0`, mẫu số bằng 0 và `rate=null`:
+   kết quả này **không trả lời** câu hỏi về tỷ lệ mismatch. Không được diễn giải `null`
+   thành 0% hoặc kết luận không có revision mismatch.
+3. **Xử lý legacy evidence sau**: xuất bundle/metadata §6, kiểm toàn bộ item và nguồn gốc
+   của những record base_date 26–28/10, duyệt riêng từng entry hợp lệ vào `legacy[]`.
+   Khi đủ evidence có thể chạy lại chẩn đoán theo một **run có identity khác**, có kiểm soát
+   as-of/revision và audit, không ghi đè kết quả đã công bố.
+4. **Trước khi bật Scheduler**, nhóm Khải/Tuấn/Tiến/Long xem số mismatch và quyết định
+   xử lý nguồn nếu cần. Scheduler do Tiến tạo ở trạng thái **disabled** và chỉ kích hoạt
+   sau dry-run bốn asset, kiểm IAM/image/resources và thống nhất phương án mismatch.
+
+**Điều kiện thời gian:** mỗi approval phải có `approved_at <= cfg.as_of`, với
+`cfg.as_of = job_utc_date T13:45:00Z`. Nếu release được duyệt trong ngày D thì
+chỉ dùng job_utc_date **không sớm hơn D** và thực thi sau **13:45 UTC**
+(20:45 Việt Nam) để tránh `release_provenance_unverified`. Với approval sau
+13:45 UTC ngày D, lượt D không đủ điều kiện; chọn ngày đánh giá sau đó. Không
+sửa lùi `approved_at` hoặc dùng dữ liệu đến sau `as_of` để ép vượt điều kiện.
+
+Owner chuẩn bị hai champion mappings, release evidence đã duyệt và image/handler theo
+§2–3 trước khi chạy. Event cho handler hiện có (chỉ vận hành sau khi được cấp quyền):
 
 ```json
 {"assets":["gold","silver","brent","wti"],"dry_run":true}
@@ -251,7 +309,8 @@ Dry-run không publish Accuracy, không promote STATE và không ghi shadow repo
 - reason_counts và record_exclusions/pair_exclusions/warnings/schedule tách cấp đếm.
   Không cộng các loại này để suy số record bị loại; prob_up_mismatch chỉ là cảnh báo.
 - base_price_revision_mismatch.count là số cặp bị loại vì lý do đó; denominator là
-  **7 × records_passing_provenance**, bao gồm target pending, loại record đã fail provenance.
+  **7 × records_passing_provenance**: bao gồm các horizon chưa mature/target pending,
+  nhưng **không bao gồm** record bị loại ngay ở bước provenance.
   rate=count/denominator; null khi denominator=0 hoặc chưa đánh giá được nguồn.
   Đây không phải tỷ lệ lỗi trên riêng các target mature.
 - source_status/evidence_status cho biết readiness riêng; số chưa thể tính giữ null.
@@ -263,6 +322,10 @@ Nếu mismatch đáng kể, dừng kết luận sẵn sàng, đưa Khải/Tuấn
 nhóm phải quyết định cách xử lý nguồn trước deployment. Không tự đặt tolerance, sửa forecast,
 đổi common mask hoặc backfill để tăng n_obs. Không đặt ngưỡng tỷ lệ mới trong handoff.
 Diagnostics chỉ nằm ở kết quả dry-run, không thêm field vào META/METRIC/public API.
+Trong lần dry-run đầu, ghi thêm **Duration** và **Max Memory Used** từ Lambda/CloudWatch:
+`Sources` được dựng riêng theo asset và có thể phải đọc nhiều snapshot đầu vào (ước tính
+khoảng 40 snapshot/asset khi window đủ 56 ngày). Cấu hình 1024 MB / 300 giây cần đo
+trên dữ liệu thật, không coi việc import image/test offline là xác nhận hiệu năng.
 
 ## 8. Kiểm thử và ownership
 
@@ -283,7 +346,7 @@ Synthetic tests/fakes không thay staging integration, IAM deny tests hoặc ful
 | Long | CLI candidate, diagnostics, regression tests; phối hợp đánh giá mismatch, không tự duyệt evidence |
 | Khải/Tiến | Full legacy items và audit 12 record; snapshot gốc/binding; approval thực; release cutover/smoke và hai mappings đồng bộ |
 | Tuấn | API reader theo hai Contract, META/METRIC hashes/derived và integrity failure; DynamoDB/IAM/concurrency staging |
-| Tiến | Image đóng gói module, handler riêng, Scheduler/timeout/retry/alarm, S3 permissions/403 và snapshot retention |
+| Tiến | Image COPY nguyên `src/eval/`, handler riêng; Scheduler để disabled đến sau dry-run và quyết định mismatch; đo Duration/Max Memory thực tế (1024 MB/300 s chưa được xác nhận), timeout/retry/alarm, S3 permissions/403 và snapshot retention |
 
 Release config phải theo evidence deploy/smoke đã được duyệt; mốc trong Contract không tự biến
 candidate thành approved. Production dry-run bốn asset, IAM/S3/DynamoDB thật và deployment vẫn
