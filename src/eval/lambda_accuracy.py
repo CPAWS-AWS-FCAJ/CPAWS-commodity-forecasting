@@ -43,6 +43,9 @@ def parse_config(event, env, now):
         or any(a not in ASSET_NAMES for a in names)
     ):
         raise ValueError("invalid assets")
+    for name in ("MODEL_VERSIONS", "CHAMPION_EFFECTIVE_BASE_DATES"):
+        if not env.get(name, "").strip():
+            raise ValueError("missing " + name)
     models = json.loads(env["MODEL_VERSIONS"])
     effective = json.loads(env["CHAMPION_EFFECTIVE_BASE_DATES"])
     if (
