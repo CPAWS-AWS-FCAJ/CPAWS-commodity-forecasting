@@ -96,9 +96,16 @@ Không dùng cache ADR-0007 (cache có cả 2019, và kiểm mẫu không thay �
 
 ## 8. Ghi trước khi chạy
 
-- `CLEAN_DT` và SHA-256 bản clean: …
-- `cfg_hash` CEEMDAN, thời gian tách lại và kết quả kiểm chéo với cache (mục 3.3): …
-- Commit chạy: …
+_Điền sau khi chạy (3/11/2026), theo manifest `data/eval/repl-ceemdan-lstm/manifest.json` và `results/summary.json`._
+
+- `CLEAN_DT` và SHA-256 bản clean: `2026-10-22`.
+  - `prices.parquet`: `6f58febf999fc2ba9f148e4efc68e24300c6adc5fdd967418b001c2a310a818c`
+  - `rejected.parquet`: `aba4b9f0e19d1389b2136a80c4312be761bd629130ac5b1df31d9128fcaa2998`
+- `cfg_hash` CEEMDAN, thời gian tách lại và kết quả kiểm chéo với cache (mục 3.3):
+  - `cfg_hash` `4c3229533ae3` (khớp `w252` K3);
+  - tách lại R-causal và R-full mất 1.630 s (khoảng 27 phút) với 8 tiến trình;
+  - kiểm chéo cache: 5.026/5.026 cửa sổ chung trùng từng bit (0 lệch `price_hash`, 0 lệch `n_imf`, sai lệch thành phần lớn nhất 0).
+- Commit chạy: tách CEEMDAN `507a6d8`; train và đo `fff4f32` (commit sạch).
 
 ## 9. Sửa đổi
 
