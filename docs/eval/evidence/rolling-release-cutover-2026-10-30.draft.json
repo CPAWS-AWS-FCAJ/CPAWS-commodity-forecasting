@@ -1,0 +1,12 @@
+{
+  "release": {
+    "approved": false,
+    "approved_by": null,
+    "approved_at": null,
+    "reference": "PENDING_VERIFIED_DEPLOY_SMOKE_REFERENCE",
+    "cutover_at": "2026-10-30T08:10:06Z",
+    "conditional_write": true,
+    "input_asof_checked": true
+  },
+  "legacy": []
+}
