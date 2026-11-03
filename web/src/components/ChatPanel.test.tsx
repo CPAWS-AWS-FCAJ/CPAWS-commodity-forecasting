@@ -82,6 +82,8 @@ describe("ChatPanel", () => {
     });
     expect(screen.getByText("Phiên tới có tăng không?")).toBeInTheDocument();
     expect(screen.getByText("Còn 17/20 lượt hôm nay")).toBeInTheDocument();
+    expect(screen.getByText("Mã tra cứu: req-1")).toBeInTheDocument();
+    expect(screen.getByText(/làm mới lúc 00:00 ngày 04\/11/)).toBeInTheDocument();
     // answer đã có disclaimer thì không lặp lại dòng disclaimer riêng
     expect(screen.getAllByText(new RegExp(DISCLAIMER))).toHaveLength(1);
   });
@@ -130,7 +132,8 @@ describe("ChatPanel", () => {
     expect(links[0]).toHaveAttribute("target", "_blank");
     expect(links[0]).toHaveAttribute("rel", "noopener noreferrer");
     expect(screen.getByText("Tin lạ")).toBeInTheDocument();
-    expect(screen.getByText(/Federal Reserve · 28\/10\/2026/)).toBeInTheDocument();
+    // 18:00 UTC ngày 28/10 = 01:00 ngày 29/10 giờ Việt Nam
+    expect(screen.getByText(/Federal Reserve · 29\/10\/2026/)).toBeInTheDocument();
     // answer thiếu disclaimer → web tự hiện dòng disclaimer
     expect(screen.getByText(DISCLAIMER)).toBeInTheDocument();
   });
@@ -166,6 +169,33 @@ describe("ChatPanel", () => {
     ask("Hỏi thêm?");
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent(/Bạn đã dùng hết 20 lượt hỏi hôm nay\..*00:00.*giờ Việt Nam/);
+  });
+
+  it("sau 429 rate_limited không còn hiện số lượt cũ", async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(200, reply())).mockResolvedValueOnce(
+      jsonResponse(429, {
+        error: "rate_limited",
+        message: "Bạn đã dùng hết 20 lượt hỏi hôm nay.",
+        reset_at: "2026-11-03T17:00:00Z",
+      }),
+    );
+    render(<ChatPanel asset="wti" assetName="Dầu WTI" />);
+    ask("Câu một?");
+    await screen.findByText("Còn 17/20 lượt hôm nay");
+    ask("Câu hai?");
+    await screen.findByRole("alert");
+    expect(screen.getByText("Đã hết lượt hỏi hôm nay")).toBeInTheDocument();
+    expect(screen.queryByText(/Còn 17\/20/)).toBeNull();
+  });
+
+  it("reset_at sai dạng không làm hỏng trang", async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse(200, reply({ quota: { limit: 20, used: 1, remaining: 19, reset_at: "không phải ngày" } })),
+    );
+    render(<ChatPanel asset="wti" assetName="Dầu WTI" />);
+    ask("Câu một?");
+    expect(await screen.findByText("Còn 19/20 lượt hôm nay")).toBeInTheDocument();
+    expect(screen.queryByText(/làm mới lúc/)).toBeNull();
   });
 
   it("429 do throttling của API Gateway: câu chung; lượt lỗi không vào lịch sử", async () => {

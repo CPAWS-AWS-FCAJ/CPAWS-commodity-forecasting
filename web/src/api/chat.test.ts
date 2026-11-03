@@ -3,6 +3,7 @@ import {
   buildHistory,
   chatErrorMessage,
   countChars,
+  formatResetVn,
   MAX_QUESTION_CHARS,
   questionProblem,
   safeLink,
@@ -40,6 +41,8 @@ describe("buildHistory", () => {
       { role: "assistant", text: "đáp 3" },
     ]);
     expect(buildHistory([])).toEqual([]);
+    // chỉ có khoảng trắng: server coi là rỗng (strip) → cũng dừng
+    expect(buildHistory([turn(1), { question: "hỏi", answer: "  \n " }, turn(3)])).toHaveLength(2);
   });
 });
 
@@ -50,6 +53,14 @@ describe("safeLink", () => {
     expect(safeLink("javascript:alert(1)")).toBeNull();
     expect(safeLink("data:text/html,hi")).toBeNull();
     expect(safeLink("không phải link")).toBeNull();
+  });
+});
+
+describe("formatResetVn", () => {
+  it("giờ Việt Nam; chuỗi sai dạng hoặc không phải chuỗi → null", () => {
+    expect(formatResetVn("2026-11-03T17:00:00Z")).toBe("00:00 ngày 04/11");
+    expect(formatResetVn("không phải ngày")).toBeNull();
+    expect(formatResetVn(undefined)).toBeNull();
   });
 });
 
@@ -73,7 +84,7 @@ describe("chatErrorMessage", () => {
   });
 
   it("503, 504 và lỗi mạng có câu riêng; 400 dùng message tiếng Việt của server", () => {
-    expect(chatErrorMessage(new ApiError(503, "model_unavailable", "x"))).toMatch(/đang bận/);
+    expect(chatErrorMessage(new ApiError(503, "model_unavailable", "x"))).toMatch(/10 giây/);
     expect(chatErrorMessage(new ApiError(504, "timeout", "x"))).toMatch(/quá lâu/);
     expect(chatErrorMessage(new TypeError("Failed to fetch"))).toMatch(/Không kết nối/);
     expect(chatErrorMessage(new ApiError(400, "invalid_history", "Lịch sử hội thoại không hợp lệ."))).toBe(

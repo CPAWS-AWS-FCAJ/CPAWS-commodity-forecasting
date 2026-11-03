@@ -37,7 +37,8 @@ export function buildHistory(turns: readonly CompletedTurn[]): ChatHistoryItem[]
   const kept: CompletedTurn[] = [];
   for (let i = turns.length - 1; i >= 0 && kept.length < MAX_HISTORY_ITEMS / 2; i -= 1) {
     const { question, answer } = turns[i];
-    const fits = (t: string) => t.length > 0 && countChars(t) <= MAX_HISTORY_TEXT_CHARS;
+    // Cùng luật với server: text.strip() không rỗng và tối đa 2000 ký tự
+    const fits = (t: string) => t.trim().length > 0 && countChars(t) <= MAX_HISTORY_TEXT_CHARS;
     if (!fits(question) || !fits(answer)) break;
     kept.unshift(turns[i]);
   }
@@ -88,11 +89,19 @@ const VN_PARTS = new Intl.DateTimeFormat("en-GB", {
   hourCycle: "h23",
 });
 
-/** "2026-11-03T17:00:00Z" → "00:00 ngày 04/11" (giờ Việt Nam). */
-export function formatResetVn(date: Date): string {
-  const part = (type: Intl.DateTimeFormatPartTypes) =>
-    VN_PARTS.formatToParts(date).find((p) => p.type === type)?.value ?? "";
+/** "2026-11-03T17:00:00Z" → "00:00 ngày 04/11" (giờ Việt Nam); chuỗi sai dạng → null. */
+export function formatResetVn(iso: unknown): string | null {
+  if (typeof iso !== "string") return null;
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return null;
+  const parts = VN_PARTS.formatToParts(date);
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value ?? "";
   return `${part("hour")}:${part("minute")} ngày ${part("day")}/${part("month")}`;
+}
+
+/** Hết lượt trong ngày (429 rate_limited do Lambda trả, không phải throttling của stage). */
+export function isRateLimited(error: unknown): error is ApiError {
+  return error instanceof ApiError && error.status === 429 && error.code === "rate_limited";
 }
 
 /** Câu báo lỗi cho người dùng, theo bảng lỗi của contract. */
@@ -103,13 +112,11 @@ export function chatErrorMessage(error: unknown): string {
     if (error.code !== "rate_limited") return "Bạn đã hỏi quá nhiều, thử lại sau.";
     const base =
       typeof error.body.message === "string" ? error.body.message : "Bạn đã hết lượt hỏi hôm nay.";
-    const resetAt = typeof error.body.reset_at === "string" ? new Date(error.body.reset_at) : null;
-    return resetAt && !Number.isNaN(resetAt.getTime())
-      ? `${base} Lượt hỏi được làm mới lúc ${formatResetVn(resetAt)} (giờ Việt Nam).`
-      : base;
+    const resetAt = formatResetVn(error.body.reset_at);
+    return resetAt ? `${base} Lượt hỏi được làm mới lúc ${resetAt} (giờ Việt Nam).` : base;
   }
   if (error.status === 504) return "Chatbot trả lời quá lâu, bạn thử hỏi ngắn hơn hoặc thử lại sau.";
-  if (error.status === 503) return "Chatbot đang bận, bạn thử lại sau ít phút.";
+  if (error.status === 503) return "Chatbot đang bận, bạn thử lại sau khoảng 10 giây.";
   // 400 (Lambda có message tiếng Việt), 401 (client đã đổi câu), 500 và lỗi khác
   return error.message;
 }

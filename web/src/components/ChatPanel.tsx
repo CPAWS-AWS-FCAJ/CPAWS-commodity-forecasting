@@ -4,6 +4,7 @@ import {
   citationLinks,
   countChars,
   formatResetVn,
+  isRateLimited,
   MAX_QUESTION_CHARS,
   postChat,
   questionProblem,
@@ -12,7 +13,7 @@ import {
 import { createPortal } from "react-dom";
 import { config } from "../api/config";
 import type { AssetId, ChatResponse } from "../api/types";
-import { formatDate } from "../lib/format";
+import { formatDateVn } from "../lib/format";
 import { SampleBadge, StaleBadge } from "./StatusBadges";
 
 /**
@@ -26,7 +27,7 @@ import { SampleBadge, StaleBadge } from "./StatusBadges";
 type Entry =
   | { id: number; kind: "user"; text: string }
   | { id: number; kind: "assistant"; response: ChatResponse }
-  | { id: number; kind: "error"; text: string };
+  | { id: number; kind: "error"; text: string; resetAt?: string };
 type NewEntry = Entry extends infer E ? (E extends Entry ? Omit<E, "id"> : never) : never;
 
 /** Lượt đã có câu trả lời (không bị chặn) → đưa vào history gửi lên. */
@@ -66,7 +67,9 @@ function useChat(asset: AssetId) {
         add({ kind: "assistant", response });
       } catch (error) {
         if (controller.signal.aborted) return;
-        add({ kind: "error", text: chatErrorMessage(error) });
+        const resetAt =
+          isRateLimited(error) && typeof error.body.reset_at === "string" ? error.body.reset_at : undefined;
+        add({ kind: "error", text: chatErrorMessage(error), ...(isRateLimited(error) ? { resetAt } : {}) });
       } finally {
         if (!controller.signal.aborted) setPending(false);
       }
@@ -80,11 +83,33 @@ function useChat(asset: AssetId) {
     setEntries([]);
   }, []);
 
-  const lastQuota = [...entries]
-    .reverse()
-    .find((e): e is Extract<Entry, { kind: "assistant" }> => e.kind === "assistant")?.response.quota;
+  return { entries, pending, send, clear, quota: quotaState(entries) };
+}
 
-  return { entries, pending, send, clear, quota: lastQuota ?? null };
+interface QuotaView {
+  /** null khi hết lượt sau 429 rate_limited (không còn số chính xác từ server) */
+  remaining: number | null;
+  limit: number | null;
+  resetAt: string | undefined;
+  exhausted: boolean;
+}
+
+/**
+ * Số lượt lấy từ câu trả lời thành công gần nhất; nếu sau đó gặp 429 rate_limited thì coi như hết
+ * lượt (không hiện số cũ "Còn x/20").
+ */
+function quotaState(entries: readonly Entry[]): QuotaView | null {
+  for (let i = entries.length - 1; i >= 0; i -= 1) {
+    const e = entries[i];
+    if (e.kind === "assistant" && e.response.quota) {
+      const q = e.response.quota;
+      return { remaining: q.remaining, limit: q.limit, resetAt: q.reset_at, exhausted: q.remaining <= 0 };
+    }
+    if (e.kind === "error" && "resetAt" in e) {
+      return { remaining: null, limit: null, resetAt: e.resetAt, exhausted: true };
+    }
+  }
+  return null;
 }
 
 type ChatState = ReturnType<typeof useChat>;
@@ -125,7 +150,7 @@ function AnswerBubble({ response }: { response: ChatResponse }) {
                 )}
                 <span className="text-muted">
                   {" "}
-                  · {c.source} · {formatDate(c.published_at)}
+                  · {c.source} · {formatDateVn(c.published_at)}
                 </span>
               </li>
             ))}
@@ -135,6 +160,10 @@ function AnswerBubble({ response }: { response: ChatResponse }) {
       {response.answer.includes(response.disclaimer) ? null : (
         <p className="mt-2 text-xs text-muted">{response.disclaimer}</p>
       )}
+      {/* Để tra log CloudWatch khi câu trả lời sai (kịch bản demo #77 mục 7); không nhạy cảm */}
+      {response.request_id ? (
+        <p className="mt-2 break-all text-[11px] text-muted">Mã tra cứu: {response.request_id}</p>
+      ) : null}
     </div>
   );
 }
@@ -147,6 +176,7 @@ function ChatBody({ assetName, chat }: { assetName: string; chat: ChatState }) {
   const disabled = config.useSample;
   const problem = draft.trim() ? questionProblem(draft) : null;
   const chars = countChars(draft.trim());
+  const resetText = formatResetVn(chat.quota?.resetAt);
 
   useEffect(() => {
     listEnd.current?.scrollIntoView?.({ block: "end" });
@@ -210,9 +240,11 @@ function ChatBody({ assetName, chat }: { assetName: string; chat: ChatState }) {
         <div id={hintId} className="mt-1 flex items-center justify-between gap-2 text-xs text-muted">
           <span className={problem ? "text-down" : undefined}>
             {problem ??
-              (chat.quota
-                ? `Còn ${chat.quota.remaining}/${chat.quota.limit} lượt hôm nay`
-                : "Enter để gửi, Shift+Enter xuống dòng")}
+              (chat.quota?.exhausted
+                ? "Đã hết lượt hỏi hôm nay"
+                : chat.quota && chat.quota.remaining !== null
+                  ? `Còn ${chat.quota.remaining}/${chat.quota.limit} lượt hôm nay`
+                  : "Enter để gửi, Shift+Enter xuống dòng")}
           </span>
           <span className="tabular">
             {chars}/{MAX_QUESTION_CHARS}
@@ -236,10 +268,8 @@ function ChatBody({ assetName, chat }: { assetName: string; chat: ChatState }) {
             </button>
           ) : null}
         </div>
-        {chat.quota ? (
-          <p className="mt-1 text-xs text-muted">
-            Lượt hỏi làm mới lúc {formatResetVn(new Date(chat.quota.reset_at))} (giờ Việt Nam).
-          </p>
+        {resetText ? (
+          <p className="mt-1 text-xs text-muted">Lượt hỏi làm mới lúc {resetText} (giờ Việt Nam).</p>
         ) : null}
       </form>
     </div>
