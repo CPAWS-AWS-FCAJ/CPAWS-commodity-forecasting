@@ -96,3 +96,36 @@ def r_full(s: AssetSeries, cfg: CeemdanConfig) -> tuple[pd.DataFrame, int]:
     comp = combine_components(w.imfs, w.residue)
     df = pd.DataFrame({"date": s.dates} | {name: comp[j] for j, name in enumerate(C.COMPONENTS)})
     return df, w.n_imf
+
+
+def cross_check_cache(st, asset: str, cfg: CeemdanConfig, causal: pd.DataFrame) -> dict:
+    """Kiểm chéo R-causal với cache ADR-0007 (kế hoạch mục 3.3 điểm 5). Chỉ đọc các tháng tới
+    CUTOFF; không dùng cache cho mô hình. Trả số cửa sổ chung, số lệch price_hash, số lệch n_imf
+    và sai lệch lớn nhất của SEQ_LEN giá trị cuối của 4 thành phần (cùng cách gộp)."""
+    months = pd.period_range(C.CAUSAL_START, C.CUTOFF, freq="M").strftime("%Y-%m")
+    frames = [f for f in (cc.read_month(st, asset, cfg, m) for m in months) if len(f)]
+    if not frames:
+        return {"asset": asset, "cache_windows": 0, "common": 0}
+    cache = pd.concat(frames, ignore_index=True)
+    cache["end_date"] = pd.to_datetime(cache["end_date"])
+    if cache["end_date"].max() > pd.Timestamp(C.CUTOFF):
+        raise RuntimeError(f"{asset}: cache có end_date sau {C.CUTOFF}")
+    cache = cache.set_index("end_date").sort_index()
+    ours = causal.set_index(pd.DatetimeIndex(causal["end_date"]))
+    common = ours.index.intersection(cache.index)
+    c, o = cache.loc[common], ours.loc[common]
+    x_cache = fixed_imf_matrix(cc.to_windows(c.reset_index()), C.MAX_IMF, C.SEQ_LEN)
+    x_ours = np.stack([np.stack(o[name].to_numpy()) for name in C.COMPONENTS], axis=-1)
+    diff = np.abs(x_cache - x_ours)
+    return {
+        "asset": asset,
+        "cache_windows": len(cache),
+        "ours_windows": len(ours),
+        "common": len(common),
+        "price_hash_mismatch": int(
+            (c["price_hash"].to_numpy() != o["price_hash"].to_numpy()).sum()
+        ),
+        "n_imf_mismatch": int((c["n_imf"].to_numpy() != o["n_imf"].to_numpy()).sum()),
+        "max_abs_diff": float(diff.max()) if len(common) else float("nan"),
+        "windows_not_bit_equal": int((diff.reshape(len(common), -1).max(axis=1) > 0).sum()),
+    }
