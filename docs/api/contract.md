@@ -7,6 +7,7 @@
 - Cập nhật 2026-10-29: bảng `Forecasts` thêm `input_snapshot_dt` (ngày `dt=` của snapshot `clean/prices` mà `predict` đã dùng), ghi cho bản ghi champion từ PR #48; theo review của Tiến trên RFC #45 (điểm 2)
 - Cập nhật 2026-10-30 theo RFC [#45](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/45) v4.6 (PR [#65](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/65)): Rolling Accuracy và fixtures v3.1; không xác nhận code/API/IAM đã deploy.
 - Cập nhật 2026-10-31 (PR bổ sung sau #65): thống nhất key encoding, schema writer Rolling r3, error semantics `503 accuracy_unavailable` và xác nhận smoke PR #48 theo #68; **không sửa JSON fixtures** hoặc khẳng định API/Writer đã deploy.
+- Cập nhật 2026-11-03 (PR #72, review Khải): thống nhất nhãn Web `not_ready`/`collecting`; không đổi JSON response, DynamoDB schema hoặc ba fixtures.
 - Người viết: Khải; góp ý: Long (bản "Chốt target, phân vị và đánh giá mô hình" và "Đánh giá các metric trong metrics.py", 15/10; review PR #6)
 - Người dùng: Tuấn (API, Cognito), Tiến (web, Lambda `predict`), Long (DLinear), Phước (tool `get_forecast` của chatbot)
 
@@ -148,10 +149,12 @@ Dùng Cognito ID token và error envelope chung ở đầu mục Endpoint. Asset
 
 | Trường hợp sau khi đọc lại nhất quán | HTTP | Trạng thái / mã lỗi | Hành vi Web |
 |---|---|---|---|
-| Chưa có `STATE`, chưa có completed run của champion hiện tại | `200` | JSON fixture `data_status=not_ready` | "Đang thu thập" |
-| `STATE` hợp lệ, trỏ run `COMPLETED` của champion trước (khác `MODEL_VERSIONS[asset]` hoặc không còn trong effective scope) | `200` | `data_status=not_ready` | "Đang thu thập"; không trả metrics cũ |
+| Chưa có `STATE`, chưa có completed run của champion hiện tại | `200` | JSON fixture `data_status=not_ready` | "Chưa có kết quả đánh giá" |
+| `STATE` hợp lệ, trỏ run `COMPLETED` của champion trước (khác `MODEL_VERSIONS[asset]` hoặc không còn trong effective scope) | `200` | `data_status=not_ready` | "Chưa có kết quả đánh giá"; không trả metrics cũ |
 | `STATE` trỏ run nhưng `META` vắng/chưa `COMPLETED`, `run_id/order` không khớp, thiếu/thừa METRIC, `metric_hashes`/`payload_hash` sai, derived/provenance/cutoff không hợp lệ | `503` | `accuracy_unavailable` | "Tạm thời chưa lấy được độ tin cậy" |
 | `STATE` đổi giữa hai lần đọc, DynamoDB lỗi đọc hoặc phân trang/kiểm chứng thất bại kéo dài sau retry | `503` | `accuracy_unavailable` | "Tạm thời chưa lấy được độ tin cậy" |
+
+Web phân biệt `not_ready` ("Chưa có kết quả đánh giá") với `collecting` ("Đang thu thập (n/20)", với `n=overall.coverage_80.n_base_dates` thực sự được chấm). `503 accuracy_unavailable` không được hiển thị như một trong hai trạng thái này. Đây là quy tắc UI, **không thêm field hoặc sửa JSON fixtures v3.1**.
 
 Reader phải dùng `GetItem(STATE, ConsistentRead=true)` → `Query(run_pk, ConsistentRead=true)` **đọc hết pagination** → kiểm `META` và **đúng 28 METRIC/hash** → `GetItem(STATE, ConsistentRead=true)` để chống promote đồng thời. Nếu pointer đổi hoặc kết quả đọc chưa nhất quán, **retry toàn chu trình một lần ngắn, có giới hạn**; nếu vẫn lỗi thì `503`, không trả JSON `not_ready` giả. Chỉ trả `200 not_ready` khi trạng thái chưa có run hiện hành **đã được xác minh** (bao gồm đổi champion). Khi đọc lại thành công một completed run đúng champion, mới trả `200 collecting/ready`.
 
