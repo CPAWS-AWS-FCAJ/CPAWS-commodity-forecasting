@@ -1,43 +1,19 @@
-# Production Rolling Accuracy v4.6 revision 3 — handoff offline
+# Production Rolling Accuracy v4.6 — handoff
 
-## Revision 3: sửa F2/F3 theo review và Contract PR #65 §7.6
+Hướng dẫn vận hành và tích hợp cho PR #71. API Contract và Walk-forward Contract §7
+là nguồn chuẩn; tài liệu này không thay đổi eligibility, metric, storage hoặc hash rules.
+Kiểm thử offline không chứng minh AWS đã deploy hoặc evidence production đã được duyệt.
 
-Nguồn contract đọc cục bộ: `CPAWS-PR65-contract-files-only.zip`,
-`docs/eval/walk-forward-contract.md` §7.6. Không truy cập PR/GitHub.
-
-- F1 giữ nguyên: production không có provenance phù hợp → not_ready, không ghi DynamoDB.
-- F2: `Evidence.require_configured(cfg, records)` nhận các record thực từ Query asset/window
-  của run. Khi không có release evidence hợp lệ, phải có một record qua `validate_record(cfg)`
-  và `for_record()` với policy LEGACY_ACCEPT_WITH_EVIDENCE. Kiểm asset/model/effective/window,
-  exact record digest, approval và snapshot binding; approval gold không mở gate WTI,
-  record ngoài window hoặc không có trong nguồn không mở gate. Query nguồn xảy ra trước gate;
-  gate vẫn trước mọi Accuracy write. Release hợp lệ vẫn cho phép READY + zero eligible COMPLETED.
-- F3: probe các ngày chạy TUE–SAT từ issuance đầu tiên của champion eligible đến ngày evaluation
-  (kèm ngày issuance thực có), đọc key biết trước, không Scan/List toàn bucket. `dt` là ngày chạy;
-  created_at có thể là timestamp champion ở ngày trước nhưng không được sau partition day.
-  Gom candidates theo `(asset,base_date,h,target_date,target_series)`, kiểm input_snapshot_dt và
-  identity snapshot khớp champion, provenance/LastModified trước nhãn, q50/baseline như cũ.
-  Không có candidate hợp lệ → audit `shadow_missing`; không đếm pair hai lần.
-  Nếu nhiều candidate đều hợp lệ và cùng snapshot, chọn issuance S3 sớm nhất, tie-break theo key
-  để retry deterministic; đây là tie-break triển khai, không tuyên bố contract quy định thứ tự này.
-  Provenance từng pair ghi object đã chọn; fingerprint giữ các candidate object đã đọc.
-- Thêm test đầy đủ public projection collecting/ready với chính JSON fixtures PR #62 được cung cấp.
-  Test này xác minh serialization/display/fields/values từ internal summary tương ứng; không tuyên bố
-  tái tạo raw synthetic q/y đã dùng để soạn fixtures. Các test metric từ raw pairs vẫn độc lập.
-
-Diff r2 → r3: chỉ `rolling_sources.py`, `rolling_job.py`, `rolling_shadow.py`,
-`test_rolling_sources.py`, `test_rolling_job.py`, `test_rolling_shadow.py`,
-`test_rolling_accuracy.py` và handoff này. Predict, Metrics/Walk-forward lịch sử, CDK, infrastructure
-và fixtures không sửa. ZIP vẫn 14 file hoàn chỉnh; không ghi đè ZIP r2.
-
-Đây là source để review/tích hợp trên developer (5), không phải bằng chứng đã deploy.
-Không truy cập Git/GitHub, AWS hoặc nguồn từ xa trong phiên thực hiện. Dữ liệu test là synthetic;
-không sử dụng Validation 2019 như kết quả production. Không thay đổi file có sẵn của developer (5).
+Gate production yêu cầu release evidence hợp lệ hoặc legacy approval gắn với record thực
+đúng asset/model/window/effective date. READY với common mask rỗng vẫn có thể COMPLETED;
+thiếu provenance configuration không được publish. Shadow chọn candidate có snapshot khớp
+champion và issuance hợp lệ, không chấm trùng base_date/h; shadow thiếu không chặn champion.
 
 ## 1. File bàn giao và interface
 
-| File mới | Trách nhiệm / interface chính |
+| File | Trách nhiệm / interface chính |
 |---|---|
+| `src/eval/rolling_evidence.py` | CLI offline tạo candidate legacy evidence, không tự phê duyệt |
 | `src/eval/rolling_accuracy.py` | `Config`, `evaluate(records, actual, cfg, evidence_for)`, `summarize`, `baseline_at`, `response_payload`; calendar, common mask, metrics và identity thuần |
 | `src/eval/rolling_sources.py` | `Sources(s3, bucket, forecasts, prefix)`, `Snapshot`, `Evidence`; Query Forecasts, snapshot/quality/rejected, kiểm provenance, immutable shadow output |
 | `src/eval/rolling_store.py` | `AccuracyStore(table).publish(result, verify_sources, champion_guard)`; 28 rows, lifecycle, compare/hash, pointer monotonic |
@@ -51,7 +27,7 @@ không sử dụng Validation 2019 như kết quả production. Không thay đ�
 | `tests/test_rolling_shadow.py` | Paired subset, late issuance, model change, Parquet round-trip/retry |
 | `tests/test_lambda_accuracy.py` | Event/env, handler orchestration, failure signaling, dependency import và evidence artifact |
 | `tests/rolling_support.py` | Utility bổ sung cần thiết: dùng chung synthetic prices và behavioral AWS fakes; không credentials/network |
-| `handoff/ROLLING_HANDOFF.md` | Tài liệu này |
+| `docs/handoff/rolling-accuracy-handoff.md` | Tài liệu này |
 
 `Sources` nhận low-level S3 client và boto3 DynamoDB **resource Table** cho Forecasts.
 `AccuracyStore` nhận resource Table cho Accuracy. Tests inject fakes, không tạo SDK session thật.
@@ -78,7 +54,7 @@ chẩn đoán, không được ghi backfill. Không nhận evidence/model/cutove
 | `ROLLING_EVIDENCE_PATH` | Thay cho JSON env: file UTF-8 JSON được review và đóng trong image/layer; không dùng đồng thời cả hai |
 
 File evidence là lựa chọn khi allowlist vượt tổng giới hạn env Lambda 4 KB. Không tạo file evidence
-production trong gói này. Không fetch evidence qua CloudWatch/CloudFormation lúc runtime.
+production tự động. Không fetch evidence qua CloudWatch/CloudFormation lúc runtime.
 
 Logical `as_of` cố định **job UTC date T13:45:00Z**, nên retry trong ngày giữ identity nếu input/config
 không đổi. Invocation trước mốc bị từ chối. Snapshot/object viết sau mốc không được dùng; correction
@@ -130,8 +106,8 @@ Common mask gồm actual endpoints, forecast hợp lệ và baseline khả dụn
 Thiếu giữa hai endpoints không tự loại cặp. Sign loại thêm y=0/q50=0. Width percent tính từng cặp
 trước pooling, cùng mask/n_obs với width log. Mismatch prob_up chỉ ghi audit. Không DM/retrain/backfill.
 Gating chung 20 distinct base dates coverage; mọi overall display field ẩn khi thiếu ngưỡng;
-by-h luôn counts_only. Projection `not_ready` khớp chính xác fixture v3.1 được cung cấp, kể cả disclaimer
-hiện hành không có chữ “chỉ”. Không sửa fixture/Contract/RFC.
+by-h luôn counts_only. Projection `not_ready` khớp chính xác fixture v3.1 trong repository, kể cả disclaimer
+hiện hành không có chữ “chỉ”. Nguồn chuẩn: API Contract và Walk-forward Contract §7.5; không định nghĩa schema mới ở đây.
 
 Accuracy một bảng PK/SK, không Scan/GSI/BatchWrite/TTL:
 
@@ -179,85 +155,136 @@ Tiến cần COPY sáu module mới vào predict image cùng `src/__init__.py`, 
 và các module data/forecast có sẵn, override CMD handler mới; không đổi CMD Predict đang chạy.
 Runtime dùng requirements-predict có sẵn: numpy, pandas, pyarrow, pandas-market-calendars, boto3;
 không SciPy/torch/sklearn/statsmodels. Nếu dùng evidence file, COPY reviewed artifact hoặc layer.
-Không sửa Docker/requirements/CDK trong gói này. Cần build/import test trên image Linux thật.
+Cần owner cấu hình Docker/requirements/CDK và build/import test trên image Linux thật.
 
 Scheduler `cron(45 13 ? * TUE-SAT *)` UTC, retry=0, timeout=300s, không reserved concurrency;
 Errors→SNS. Asset lỗi thật được tiếp tục xử lý asset khác rồi raise AccuracyFailed để alarm;
 NotReady log/return không promote. Shadow error log riêng không làm champion Lambda failure.
 
-## 6. Kiểm thử và trạng thái
+## 6. Tạo candidate legacy evidence offline
 
-Python 3.11; chỉ local dependency có sẵn. Trước test contract fixture, đặt
-`CPAWS_ACCURACY_FIXTURES_ZIP` thành đường dẫn tuyệt đối tới `accuracy-json-fixtures-v3-1-final.zip`.
-Nếu fixtures đã được đưa vào `tests/fixtures/accuracy/`, không cần biến này. Thiếu cả hai nguồn thì
-hai test fixture sẽ SKIP rõ ràng; ZIP không chứa bản sao fixtures theo giới hạn bàn giao. Lệnh tại root đã overlay các file mới:
+`src/eval/rolling_evidence.py` chỉ đọc file cục bộ; không tạo AWS client, không ghi DynamoDB/S3.
+Người vận hành được cấp quyền chuẩn bị dữ liệu gốc ở kho riêng, ngoài repository:
 
-```powershell
-python -m pytest -q -p no:cacheprovider --basetemp=./.test-temp-v46 tests/test_rolling_accuracy.py tests/test_rolling_sources.py tests/test_rolling_store.py tests/test_rolling_job.py tests/test_rolling_shadow.py tests/test_lambda_accuracy.py tests/test_metrics.py tests/test_returns.py tests/test_returns_adr0008.py tests/test_baselines.py tests/test_requirements_predict.py
-$files = @('src/eval/rolling_accuracy.py','src/eval/rolling_sources.py','src/eval/rolling_store.py','src/eval/rolling_job.py','src/eval/rolling_shadow.py','src/eval/lambda_accuracy.py','tests/rolling_support.py','tests/test_rolling_accuracy.py','tests/test_rolling_sources.py','tests/test_rolling_store.py','tests/test_rolling_job.py','tests/test_rolling_shadow.py','tests/test_lambda_accuracy.py')
-ruff check @files
-ruff format --check @files
+1. Export **toàn bộ** DynamoDB item, không ProjectionExpression, không lọc/redact trước hash.
+   File `forecasts-full.json` là envelope có `format` (`dynamodb-attribute-values` hoặc
+   `resource-json`), `full_items: true`, `projection_used: false`, `Items: [...]`.
+   Hai cờ là xác nhận của người export, không phải bằng chứng công cụ có thể tự chứng minh.
+   Dữ liệu AttributeValue được deserialize về Decimal; trường bổ sung vẫn tham gia hash.
+   Export chỉ có asset/base_date/created_at/model_version/is_sample không đủ để tính digest.
+2. Chuẩn bị `issuances.json` với `issuances: [...]`. Mỗi entry phải khớp chính xác
+   asset/base_date/model_version/created_at và có input_snapshot_dt lấy từ evidence lượt chạy,
+   reference là audit ID không nhạy cảm (chữ/số hoặc `_.:-`, tối đa 120 ký tự).
+   `dry_run: false`, `written: true` là xác nhận **riêng record**, không sao chép số tổng
+   written của log thành boolean. Các cờ no_overwrite/scheduled_run/input_asof_checked/
+   pre_cutover_verified chỉ được đặt true sau khi owner kiểm bằng chứng; không suy từ timestamp.
+   Có thể cung cấp snapshot_digest đã lưu độc lập để đối chiếu. Không đưa raw logs vào file này.
+3. Chuẩn bị `snapshot-bundle.json`: bucket, prefix (nếu có), objects. Mỗi object có key S3 gốc,
+   path tương đối trong thư mục bundle, etag, version_id (null nếu nguồn không có),
+   last_modified UTC **gốc**, sha256 của bytes gốc. Bundle chứa đủ quality.json,
+   prices.parquet và rejected.parquet tại các key clean/prices/dt=... mà Sources.snapshot đọc.
+   Không lấy timestamp file tải xuống thay LastModified, không bịa ETag/version hay sửa bytes.
+   Công cụ kiểm SHA-256 bytes rồi dùng nguyên Sources.snapshot() để dựng identity.
+
+Ví dụ hình dạng manifest (placeholder cần thay bằng metadata thật, không phải evidence):
+
+```json
+{
+  "bucket": "<private-lake>",
+  "objects": [
+    {
+      "key": "clean/prices/dt=<issued-snapshot-date>/quality.json",
+      "path": "quality.json",
+      "etag": "<original-etag>",
+      "version_id": null,
+      "last_modified": "<original-UTC-timestamp>",
+      "sha256": "<raw-object-sha256>"
+    }
+  ]
+}
 ```
 
-Dùng basetemp mới trong workspace; không dùng cùng directory cho dữ liệu cần giữ (pytest có thể dọn).
+Chạy trong môi trường Python của repository, sau khi đã được cấp dữ liệu:
 
-| Kiểm tra | Kết quả |
+```bash
+python -m src.eval.rolling_evidence --asset gold --from 2026-10-26 --to 2026-10-28 --forecasts /private/forecasts-full.json --issuance-evidence /private/issuances.json --snapshot-bundle /private/snapshot-bundle.json --output /private/gold-candidates.json
+```
+
+Đổi asset/output tương ứng cho silver/brent/wti. Các đường dẫn trên là placeholder;
+output phải chưa tồn tại. Phạm vi candidate chỉ 4 asset × base 26–28/10/2026;
+16/10 sample, 23/10 và base 29/10 hậu cutover không được tự đưa vào legacy allowlist.
+Không suy snapshot_dt từ base_date. Snapshot bị overwrite hoặc có LastModified sau issuance
+sẽ bị đánh dấu unverified; cần artifact/version lịch sử đúng, không dùng snapshot hiện tại giả thay.
+
+`record_digest` gọi đúng digest(record) trên item đầy đủ trước mọi lựa chọn trường;
+`snapshot_digest` gọi digest(snapshot.identity). SHA-256 bytes trong bundle chỉ kiểm file nguồn,
+không thay hai digest production. Output không chứa giá, q, payload gốc hoặc raw logs.
+
+Output có kind=legacy_evidence_candidates, production_ready=false. Mỗi candidate có
+status pending_review/unverified/excluded, reasons và evidence với các field mà Evidence.for_record
+sử dụng. approved luôn false; approved_by/approved_at luôn null, kể cả input khai đã approved.
+Exit 0 chỉ nghĩa đã xuất báo cáo, không nghĩa evidence đủ điều kiện production.
+Người có thẩm quyền phải xác minh dữ liệu gốc và phê duyệt riêng trước khi chuyển entry phù hợp
+vào legacy[] của release configuration; không nạp nguyên candidate report vào Lambda.
+CLI không thể chứng minh một export thiếu unknown attributes hay lời khai vận hành là đúng.
+
+Giữ log Predict gốc, full items và snapshot trong S3 private do owner quản lý, có quyền đọc hạn chế
+và retention/version phù hợp. Chỉ chia sẻ audit reference/digest đã kiểm tra. Không commit dữ liệu
+giá, q, raw Predict logs, credentials hoặc bundle production trong docs/eval/evidence/ hay nơi khác.
+Digest của bản log đã lọc không phải digest của DynamoDB item đầy đủ.
+
+## 7. Dry-run trước deployment
+
+Owner chuẩn bị hai champion mappings và evidence đã duyệt theo §2–3, kiểm image/handler trước
+khi chạy. Event cho handler hiện có (chỉ vận hành sau khi được cấp quyền):
+
+```json
+{"assets":["gold","silver","brent","wti"],"dry_run":true}
+```
+
+`job_utc_date` chỉ dùng chẩn đoán ngày đã qua; snapshot phải tồn tại đúng as-of 13:45 UTC.
+Dry-run không publish Accuracy, không promote STATE và không ghi shadow report.
+Đọc diagnostics của từng asset trong kết quả/ACCURACY_DONE:
+
+- records_read: records nguồn đọc được; records_passing_provenance: qua xác thực record/evidence.
+- records_with_scored_pairs: record có ít nhất một cặp được chấm; n_obs: số cặp coverage.
+- reason_counts và record_exclusions/pair_exclusions/warnings/schedule tách cấp đếm.
+  Không cộng các loại này để suy số record bị loại; prob_up_mismatch chỉ là cảnh báo.
+- base_price_revision_mismatch.count là số cặp bị loại vì lý do đó; denominator là
+  **7 × records_passing_provenance**, bao gồm target pending, loại record đã fail provenance.
+  rate=count/denominator; null khi denominator=0 hoặc chưa đánh giá được nguồn.
+  Đây không phải tỷ lệ lỗi trên riêng các target mature.
+- source_status/evidence_status cho biết readiness riêng; số chưa thể tính giữ null.
+  Exception không thuộc mã audit cố định được gộp other_validation_error, không in payload nhạy cảm.
+
+Checklist cho đủ bốn asset: lưu báo cáo counts/reasons, kiểm READY và mapping/effective/cutover,
+kiểm kỳ missing riêng với forecast bị loại, đối chiếu tỷ lệ mismatch và snapshot identity gốc.
+Nếu mismatch đáng kể, dừng kết luận sẵn sàng, đưa Khải/Tuấn/Tiến xem provenance và revisions;
+nhóm phải quyết định cách xử lý nguồn trước deployment. Không tự đặt tolerance, sửa forecast,
+đổi common mask hoặc backfill để tăng n_obs. Không đặt ngưỡng tỷ lệ mới trong handoff.
+Diagnostics chỉ nằm ở kết quả dry-run, không thêm field vào META/METRIC/public API.
+
+## 8. Kiểm thử và ownership
+
+Dùng Python 3.11 và dependencies của repository. Fixtures đọc trực tiếp từ
+`tests/fixtures/accuracy/{not_ready,collecting,ready}.json`, không cần nguồn ngoài.
+Test projection đối chiếu toàn bộ response với fixtures; test raw pairs xác minh metric độc lập.
+
+```bash
+python -m pytest -q tests/test_rolling_evidence.py tests/test_rolling_accuracy.py tests/test_rolling_sources.py tests/test_rolling_store.py tests/test_rolling_job.py tests/test_rolling_shadow.py tests/test_lambda_accuracy.py
+python -m ruff check src/eval/rolling_evidence.py src/eval/rolling_accuracy.py src/eval/rolling_job.py tests/test_rolling_evidence.py tests/test_rolling_accuracy.py tests/test_rolling_job.py
+python -m ruff format --check src/eval/rolling_evidence.py src/eval/rolling_accuracy.py src/eval/rolling_job.py tests/test_rolling_evidence.py tests/test_rolling_accuracy.py tests/test_rolling_job.py
+```
+
+Synthetic tests/fakes không thay staging integration, IAM deny tests hoặc full repository CI.
+
+| Owner | Việc cần xác minh trước deploy |
 |---|---|
-| Core/source/store/job/shadow/Lambda mới, synthetic integration bốn asset | PASS offline |
-| Metrics/Returns/Baselines/requirements-predict hồi quy | Đã chạy trong revision trước; không dùng kết quả đó để tuyên bố full CI revision 3 PASS |
-| Targeted Rolling revision 3 (6 test modules) | 82 passed, 0 failed, 0 errors |
-| Ruff lint toàn repository (`python -m ruff check .`) | PASS, exit 0 |
-| Ruff format toàn repository (`python -m ruff format --check .`) | PASS, 177 files already formatted, exit 0 |
-| Contract collecting/ready | PASS: full-response equality với hai JSON PR #62 thật, ngoài tests field sets/units/gating |
-| Import Lambda khi chặn scipy/torch/sklearn/statsmodels | PASS |
-| not_ready projection so với fixture v3.1 thật trong ZIP | PASS exact equality |
-| Bảo toàn source developer (5) | PASS: 313 file gốc byte-identical |
-| AWS IAM deny tests, concurrent writers DynamoDB thật, S3 condition thật | BLOCKED/pending owners và môi trường deploy; không chạy |
-| Image/CDK/Scheduler/alarm/API reader integration | BLOCKED/pending Tuấn/Tiến; không chạy |
-| Production legacy approvals, deploy cutover, snapshot retention | BLOCKED/pending evidence thật; không bịa |
-| Full repository pytest suite revision 3 | BLOCKED: đã chạy, exit 2; 1 skipped, 2 collection errors vì thiếu `jsonschema` tại test_labeling_benchmark.py và test_labeling_v3.py; 20.33s |
-| GitHub Actions / Web CI | Không chạy, không truy cập GitHub; không tuyên bố CI PASS |
+| Long | CLI candidate, diagnostics, regression tests; phối hợp đánh giá mismatch, không tự duyệt evidence |
+| Khải/Tiến | Full legacy items và audit 12 record; snapshot gốc/binding; approval thực; release cutover/smoke và hai mappings đồng bộ |
+| Tuấn | API reader theo hai Contract, META/METRIC hashes/derived và integrity failure; DynamoDB/IAM/concurrency staging |
+| Tiến | Image đóng gói module, handler riêng, Scheduler/timeout/retry/alarm, S3 permissions/403 và snapshot retention |
 
-Môi trường thực đo revision 3: Windows, Python 3.11.15; NumPy 2.4.6, pandas 3.0.6,
-pyarrow 25.0.1, pandas_market_calendars 5.5.0, pytest 9.1.1, Ruff 0.16.10.
-Các dependency Rolling khớp pins; môi trường **chưa đủ requirements-dev.txt** do thiếu
-jsonschema==4.26.0. Đã thử `uv pip install --offline -r requirements-dev.txt` với cache cục bộ; resolver báo không có jsonschema==4.26.0 trong cache. Không tải dependency từ xa. CI chính thức dùng Ubuntu/Python3.11, nên local
-checks không đồng nghĩa GitHub Actions thành công. Cần môi trường đủ requirements-dev để chạy lại full suite.
-
-Lượt targeted revision 3 chỉ dùng sáu test modules Rolling trong lệnh trên,
-`--basetemp=./.test-temp-r3-final`. Full suite dùng `pytest.main(['-q', '-p', 'no:cacheprovider',
-'--basetemp=./.test-temp-r3-full'])` qua Python launcher, không chọn/bỏ test; socket connect bị chặn
-để bảo đảm không gọi hệ thống từ xa. Đây là full-suite attempt offline, không phải lần chạy thành công.
-
-Các lỗi phát hiện trong development đã sửa: đường dẫn code hash, identity phụ thuộc thứ tự source,
-tuple quantiles khi tính pinball, invalid numeric fingerprint và thiếu audit mismatch/missing.
-Một lượt pytest lỗi fixture tmp_path vì thư mục temp môi trường; lượt cuối dùng basetemp workspace.
-Không tái sử dụng kết quả validation cũ. Không có claim T01–T48 đã đạt toàn bộ trên AWS.
-
-## 7. Integration blockers và smoke test
-
-1. Khải/Tiến cung cấp deploy event/smoke reference thật của PR #48, input-as-of assurance và danh sách
-   legacy cụ thể đã duyệt. Cấu hình evidence thiếu → production not_ready, không ghi bất kỳ item nào.
-   Chỉ evidence hợp lệ + nguồn READY mới có thể complete zero eligible.
-2. Khải/Tiến xác nhận PR #53 shadow S3 write-once, thời điểm deploy, raw scaling và snapshots truy vết.
-   Code developer (5) có input_snapshot_dt/conditional Predict; không chứng minh AWS đang chạy bản đó.
-3. Tuấn thống nhất đọc META/28 hash manifest/derived structure, auth/error envelope, model/effective
-   check và recheck pointer; không trả dữ liệu model cũ. Không dùng helper projection thay reader guard.
-4. Tiến truyền cùng hai authoritative CDK mappings cho ba components, build CMD, scheduler/alarm,
-   drain writer cũ, giới hạn quyền và đo runtime/memory/network trên full 56-day window (timeout300s).
-5. Nguồn Predict lịch sử tên có `(1)` trong prompt không có đúng tên trên máy; chỉ bản không suffix
-   được dùng làm reference lịch sử. Không overwrite Predict mới từ ZIP cũ.
-
-Smoke sau deploy **do owners thực hiện**, không thực hiện trong phiên này:
-
-- Import image và validate mappings/evidence; chạy dry_run trên forecast production thực đã phát hành,
-  không seed synthetic rows/không backfill. Kiểm n_obs/audit/source hashes và eligibility bằng record thật.
-- Chờ snapshot/actual READY và chạy scheduled thật với revision được duyệt; kiểm 28 rows, META COMPLETED,
-  STATE đúng order/model, derived width, display fields. Retry cùng input không tăng/thay payload.
-- Kiểm stale/not-ready không promote; kiểm shadow thiếu không chặn champion. Dùng bảng/bucket test tách
-  biệt để inject crash/conflict/IAM denies, tuyệt đối không cố tình làm hỏng source production.
-- API fail-closed khi pointer model cũ; thử đổi chỉ một asset ở staging, drain writer cũ và xác minh
-  ba asset còn lại. Kiểm CloudWatch Errors→SNS, IAM deny/prefix và S3 403 ambiguity với policy thật.
-
-ZIP này có đúng 14 file mới, không có toàn repository, contracts/fixtures, .git, cache, evidence thật,
-credentials, dữ liệu production hoặc binaries. Chưa deploy hoặc thực hiện bất kỳ thao tác từ xa nào.
+Release config phải theo evidence deploy/smoke đã được duyệt; mốc trong Contract không tự biến
+candidate thành approved. Production dry-run bốn asset, IAM/S3/DynamoDB thật và deployment vẫn
+cần owners thực hiện; các lệnh offline trên không thực hiện các bước đó.
