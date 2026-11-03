@@ -32,7 +32,7 @@ Câu 3 so sánh hai giao thức, **không quy chênh lệch hoàn toàn cho rò 
 | Mã | Tách chuỗi | Mô hình | Vai trò |
 |---|---|---|---|
 | R-full | CEEMDAN một lần trên toàn chuỗi 2012–2018 rồi mới chia train/đánh giá | LSTM cho từng thành phần, cộng lại | Giao thức thường gặp trong các bài này |
-| R-causal | CEEMDAN theo cửa sổ 252 phiên kết thúc tại ngày gốc (ADR-0001, ADR-0007) | LSTM cho từng thành phần, cộng lại | Giao thức sản phẩm buộc phải dùng |
+| R-causal | CEEMDAN theo cửa sổ 252 phiên kết thúc tại ngày gốc (ADR-0001, ADR-0007), tách lại từ dữ liệu ≤ 2018 (mục 3.3) | LSTM cho từng thành phần, cộng lại | Giao thức sản phẩm buộc phải dùng |
 | R-raw | Không tách | LSTM trên chuỗi giá gốc | Đối chứng không tách |
 | naive | — | giá mai = giá hôm nay (return = 0) | Mốc của bài toán mức giá |
 | baseline-q252 | — | Phân vị 252 phiên | Mốc của sản phẩm (chỉ cho `pinball_skill`) |
@@ -47,20 +47,22 @@ Câu 3 so sánh hai giao thức, **không quy chênh lệch hoàn toàn cho rò 
 
 ### 3.2 Huấn luyện (chốt, không tinh chỉnh theo kết quả đánh giá)
 
-- LSTM: 1 lớp, 32 đơn vị, cửa sổ 20, Adam, MSE trên giá trị chuẩn hóa.
-- **Chuẩn hóa:** mỗi tài sản × biến thể × thành phần một scaler (z-score), fit chỉ trên phần fit của train (2014-01-01 → hết 80% đầu theo thời gian của train).
-- **Early stopping:** trên 20% cuối của train theo thời gian (đoạn hiệu chỉnh), patience cố định. Không dùng dữ liệu 2017–2018 trong early stopping, chuẩn hóa hay dựng đặc trưng.
+- LSTM: 1 lớp, 32 đơn vị, cửa sổ 20, MSE trên giá trị chuẩn hóa. Siêu tham số đóng băng: Adam, learning rate 1e-3, không lịch giảm learning rate, batch 64, tối đa 200 epoch, patience 20 trên loss đoạn early stopping, khôi phục trọng số tốt nhất. Không thử giá trị khác.
+- **Chia train 2014-01-01 → 2016-12-31 theo thời gian thành ba đoạn liền nhau:** 70% đầu để fit, 15% tiếp theo để early stopping, 15% cuối để hiệu chỉnh phân vị. Một mẫu tại ngày gốc t thuộc đoạn chứa t, và chỉ được dùng khi t + 1 cùng đoạn (bỏ mẫu ở ranh giới để target không lấn sang đoạn sau). Cửa sổ đầu vào được nhìn lùi vào đoạn trước vì đó là dữ liệu quá khứ.
+- **Chuẩn hóa:** mỗi tài sản × biến thể × thành phần một scaler (z-score), fit chỉ trên đoạn fit.
+- **Không dùng dữ liệu 2017–2018** trong fit, early stopping, hiệu chỉnh, chuẩn hóa hay dựng đặc trưng.
 - **Seed:** chạy 3 seed cố định (0, 1, 2) cho mọi LSTM; báo cáo trung bình và khoảng min–max qua 3 seed. Vẫn chỉ là minh họa, không chứng minh tính ổn định.
-- **Phân vị cho `pinball_skill`:** gắn phân vị thực nghiệm của phần dư return trên đoạn hiệu chỉnh (ngoài mẫu đối với LSTM đã fit) vào r̂. Không dùng phần dư trong mẫu fit.
+- **Phân vị cho `pinball_skill`:** gắn phân vị thực nghiệm của phần dư return trên đoạn hiệu chỉnh vào r̂. Đoạn này không dùng để fit hay chọn epoch.
 
-### 3.3 Nguồn cache CEEMDAN cho R-causal (chốt)
+### 3.3 CEEMDAN cho R-causal: tách lại từ dữ liệu ≤ 2018 (chốt)
 
-Cache ADR-0007 có cả 2019; lọc theo ngày là chưa đủ, phải chứng minh từng cửa sổ dùng ≤ 2018 không phụ thuộc dữ liệu sau nó:
+Không dùng cache ADR-0007 (cache có cả 2019, và kiểm mẫu không thay được bằng chứng nguồn gốc). Tách lại toàn bộ cửa sổ 252 phiên có ngày cuối từ 2014-01-01 đến 2018-12-31 cho 4 tài sản, chỉ từ bản clean đã cắt ≤ 2018:
 
-1. Chỉ dùng cửa sổ có `end_date` ≤ 2018-12-31 và đúng `cfg_hash` của `w252` K3.
-2. Với mỗi cửa sổ dùng tới, tính lại `price_hash` từ bản clean đã cắt ≤ 2018 và so với `price_hash` trong cache; lệch bất kỳ cửa sổ nào thì dừng.
-3. **Kiểm tính bất biến theo tiền tố:** chọn ngẫu nhiên 50 cửa sổ mỗi tài sản (seed cố định), tách lại từ bản clean đã cắt ≤ 2018 bằng `decompose_window` (cùng `cfg_hash`, noise seed theo ngày cuối cửa sổ, ADR-0007 mục 3); IMF1..K phải trùng từng bit, residue lệch ≤ 1e-12 tương đối (ngưỡng theo probe ADR-0007). Có test tự động cho bước này.
-4. Nếu bước 2 hoặc 3 không qua thì tách lại toàn bộ cửa sổ 2014–2018 từ dữ liệu ≤ 2018, không dùng cache.
+1. Cấu hình CEEMDAN đóng băng: đúng `trials`, `epsilon`, `seed`, `keep_last`, cách tạo noise seed theo ngày cuối cửa sổ và tài sản của `w252` K3 (ADR-0007, `configs/ceemdan_cache.py`); ghi `cfg_hash` vào mục 8. R-full dùng cùng `trials`, `epsilon`, seed.
+2. Mỗi cửa sổ tách độc lập bằng `decompose_window`, chỉ từ giá trong cửa sổ; lưu `price_hash` từng cửa sổ.
+3. Ước tính thời gian: ADR-0007 đo khoảng 1,8 giờ cho 2014–2019 với 8 tiến trình, nên 2014–2018 trên máy Khải khoảng 1,5 giờ.
+4. **Kiểm tính bất biến theo tiền tố** (test tự động trên dữ liệu tổng hợp, chạy trong CI): tách một cửa sổ từ chuỗi đầy đủ và từ chuỗi cắt ngay sau ngày cuối cửa sổ phải cho kết quả trùng từng bit.
+5. Đối chiếu với cache cũ (nếu có) chỉ là kiểm chéo: so `price_hash` và IMF của các cửa sổ chung, báo số cửa sổ lệch. Kết quả đối chiếu không thay thế bản tách lại.
 
 ### 3.4 Giới hạn so sánh (ghi vào báo cáo)
 
@@ -95,9 +97,10 @@ Cache ADR-0007 có cả 2019; lọc theo ngày là chưa đủ, phải chứng m
 ## 8. Ghi trước khi chạy
 
 - `CLEAN_DT` và SHA-256 bản clean: …
-- `cfg_hash` cache CEEMDAN và kết quả kiểm mục 3.3: …
+- `cfg_hash` CEEMDAN, thời gian tách lại và kết quả kiểm chéo với cache (mục 3.3): …
 - Commit chạy: …
 
 ## 9. Sửa đổi
 
+- 3/11/2026 (review Long lần 2, #75): chia train thành fit / early stopping / hiệu chỉnh 70/15/15 theo thời gian, bỏ mẫu ở ranh giới; đóng băng learning rate, batch, số epoch, patience; R-causal tách lại CEEMDAN từ dữ liệu ≤ 2018 thay vì dùng cache, cache chỉ để kiểm chéo.
 - 2/11/2026 (review Long, #75): đổi tên thành minh họa ý tưởng, không tuyên bố tái lập đúng giao thức hay chỉ số; câu 3 chỉ so sánh hai giao thức, ghi giới hạn nhân quả; chốt đầu vào/target từng thành phần, quy đổi về giá và log return, chuẩn hóa và early stopping chỉ trên train, phân vị từ đoạn hiệu chỉnh; kiểm nguồn cache bằng `price_hash` và bất biến theo tiền tố, không qua thì tách lại; 3 seed; ghi giới hạn số LSTM của R-raw; MAPE chỉ trên giá > 0.

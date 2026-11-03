@@ -39,7 +39,9 @@ Không chạy K3, K3b khác S1a, K4, DLinear: đều đã thua mốc trên valid
 - **Chỉ số chính theo tài sản:** trung bình cộng 7 skill theo h, `S(a) = (1/7) Σ_h pinball_skill(a, h)`, trên mẫu `all`. Lấy trung bình 7 skill (không gộp loss) để mỗi kỳ hạn có trọng số như nhau, vì loss h = 7 lớn hơn h = 1 nhiều lần; đơn vị đánh giá vẫn là nhóm tài sản × h như ADR-0011. Nếu một h không có dòng nào hoặc `L_base(a, h) = 0` thì `S(a)` là undefined (không bỏ bớt h để tính tiếp), báo lý do.
 - **4 giả thuyết chính** (một cho mỗi tài sản, mẫu `all`): H0: S(a) ≤ 0, H1: S(a) > 0 (một phía).
 - **Bootstrap:** circular moving-block bootstrap trên lịch hợp nhất NYSE/CME (như `walk_forward.py`), block 20, B = 2000, seed cố định ghi trong config. **Một kế hoạch rút mẫu ngày dùng chung** cho mọi tài sản và mọi h, nên giữ phụ thuộc giữa kỳ hạn và giữa tài sản. Mỗi lần rút tính lại `S*(a)` từ các dòng của ngày được rút. Lần rút nào cho giá trị không hữu hạn thì CI undefined (theo `block_bootstrap_ci`), không bỏ lần rút.
-- **CI và p-value:** CI 95% percentile của `S*(a)`; p một phía `p(a) = (1 + #{S*(a) ≤ 0}) / (B + 1)`. Holm qua 4 tài sản, α = 0,05.
+- **p-value (bootstrap căn giữa theo H0):** mỗi lần rút tính `T*(a) = S*(a) − Ŝ(a)`, với Ŝ(a) là giá trị trên mẫu gốc; phân phối của T* xấp xỉ phân phối của Ŝ(a) − S(a), nên dùng làm phân phối dưới H0 (S(a) = 0). p một phía `p(a) = (1 + #{T*(a) ≥ Ŝ(a)}) / (B + 1)`. Không dùng tỷ lệ lần rút có S* ≤ 0 làm p-value.
+- **Holm** qua 4 tài sản trên 4 p-value trên, α = 0,05. Kết luận "S1a tốt hơn mốc ở tài sản a" chỉ khi p Holm của a < 0,05.
+- **CI 95% percentile** của `S*(a)` báo kèm để mô tả độ bất định, không dùng thay kiểm định.
 - Các con số trên chỉ để báo cáo (mục 5); không dùng đổi champion.
 
 ### 3.2 Bất biến của S1a (kiểm trước khi tính chỉ số, sai thì dừng)
@@ -98,4 +100,5 @@ Kết luận chính chỉ dựa trên mục 3.1 (block 20, mẫu `all`); các m�
 
 ## 9. Sửa đổi
 
+- 3/11/2026 (review Long lần 2, #75): p-value đổi sang bootstrap căn giữa theo H0; Holm áp trên p-value này; CI percentile chỉ để mô tả.
 - 2/11/2026 (review Long, #75): chốt định nghĩa chỉ số chính (trung bình 7 skill theo h, mặt nạ chung, xử lý undefined); bootstrap dùng chung kế hoạch rút mẫu, 4 giả thuyết một phía, p-value và Holm; bất biến S1a; khóa DT/SHA-256/lineage trong `claim.json`, giới hạn PIT; WTI 20/4/2020; quy trình khi chạy lỗi; B từ 1000 lên 2000; tách rõ chỉ số phụ và báo cáo bổ sung.
