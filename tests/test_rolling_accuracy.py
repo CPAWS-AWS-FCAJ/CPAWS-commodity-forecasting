@@ -20,19 +20,10 @@ from tests.rolling_support import case
 @pytest.mark.parametrize("state", ["collecting", "ready"])
 def test_projection_against_actual_pr62_fixture(state):
     import json
-    import os
-    import zipfile
     from pathlib import Path
 
-    archive = os.environ.get("CPAWS_ACCURACY_FIXTURES_ZIP")
-    name = "tests/fixtures/accuracy/" + state + ".json"
-    if archive:
-        with zipfile.ZipFile(archive) as z:
-            expected = json.loads(z.read(name))
-    elif Path(name).is_file():
-        expected = json.loads(Path(name).read_text(encoding="utf-8"))
-    else:
-        pytest.skip("PR62 fixtures absent: provide CPAWS_ACCURACY_FIXTURES_ZIP")
+    path = Path(__file__).parent / "fixtures" / "accuracy" / (state + ".json")
+    expected = json.loads(path.read_text(encoding="utf-8"))
     # Adapt the fixture's internal values/counts to a completed result. This tests
     # the entire public projection, not reconstruction of synthetic q/y inputs.
     result = copy.deepcopy(expected)
