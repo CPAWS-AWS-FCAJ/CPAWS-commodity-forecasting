@@ -20,11 +20,15 @@ export function formatProbability(probability: number): string {
   return `${Math.round(probability * 100)}%`;
 }
 
-/** Log return → phần trăm có dấu, ví dụ +0,30%. */
-export function formatReturnPercent(logReturn: number): string {
+/**
+ * Log return → phần trăm có dấu, mặc định 1 chữ số (skill forecast-display), ví dụ +0,3%.
+ * Số làm tròn về 0 thì không ghi dấu ("0,0%") để khỏi có "+0,0%" / "−0,0%".
+ */
+export function formatReturnPercent(logReturn: number, fractionDigits = 1): string {
   const percent = logReturn * 100;
-  const sign = percent > 0 ? "+" : percent < 0 ? "−" : "";
-  return `${sign}${formatNumber(Math.abs(percent), 2)}%`;
+  const text = formatNumber(Math.abs(percent), fractionDigits);
+  if (Number(Math.abs(percent).toFixed(fractionDigits)) === 0) return `${text}%`;
+  return `${percent > 0 ? "+" : "−"}${text}%`;
 }
 
 /** "2026-10-20" → "20/10/2026" (cắt chuỗi, không qua Date để khỏi lệch múi giờ). */

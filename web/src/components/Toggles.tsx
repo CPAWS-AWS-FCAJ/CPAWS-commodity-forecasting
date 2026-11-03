@@ -65,7 +65,7 @@ export function CurrencyToggle({
   );
 }
 
-/** Chọn chân trời 1 / 3 / 7 ngày bằng nút, không dùng thanh trượt. */
+/** Chọn nhanh số phiên 1 / 3 / 7 bằng nút, không dùng thanh trượt (dải 7 thẻ chọn được mọi h). */
 export function HorizonPicker({
   value,
   options,
@@ -77,10 +77,10 @@ export function HorizonPicker({
 }) {
   return (
     <Segmented
-      label="Chân trời dự báo"
+      label="Số phiên dự báo"
       value={String(value)}
       onChange={(next) => onChange(Number(next))}
-      options={options.map((h) => ({ value: String(h), text: `${h} ngày` }))}
+      options={options.map((h) => ({ value: String(h), text: `${h} phiên` }))}
     />
   );
 }

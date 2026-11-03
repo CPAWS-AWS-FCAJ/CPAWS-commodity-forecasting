@@ -23,6 +23,8 @@ export function useAccuracy(asset: AssetId) {
   return useQuery({
     queryKey: ["accuracy", asset],
     queryFn: ({ signal }) => getAccuracy(asset, signal),
+    // Route chưa deploy: không gọi (xem config.accuracyApiEnabled)
+    enabled: config.accuracyApiEnabled,
     retry: (failureCount, error) =>
       !(error instanceof AccuracyFormatError) &&
       !(error instanceof ApiError && error.status >= 400 && error.status < 500) &&

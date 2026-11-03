@@ -43,9 +43,9 @@ export function QuantileTable({ asset, detail, currency, showPrices = true }: Pr
               <tr key={horizon.h} className="border-t border-line">
                 <th scope="row" className="px-4 py-2 text-left font-medium">{horizon.h}</th>
                 <td className="px-4 py-2">{formatDate(horizon.target_date)}</td>
-                <td className="px-4 py-2 text-right">{formatReturnPercent(view.returnLow)}</td>
-                <td className="px-4 py-2 text-right">{formatReturnPercent(view.returnMid)}</td>
-                <td className="px-4 py-2 text-right">{formatReturnPercent(view.returnHigh)}</td>
+                <td className="px-4 py-2 text-right">{formatReturnPercent(view.returnLow, 2)}</td>
+                <td className="px-4 py-2 text-right">{formatReturnPercent(view.returnMid, 2)}</td>
+                <td className="px-4 py-2 text-right">{formatReturnPercent(view.returnHigh, 2)}</td>
                 {showPrices ? (
                   <td className="px-4 py-2 text-right">
                     {price(view.low)}–{price(view.high)}

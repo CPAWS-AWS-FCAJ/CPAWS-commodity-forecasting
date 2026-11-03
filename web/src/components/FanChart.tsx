@@ -11,7 +11,8 @@ import {
 } from "recharts";
 import type { AssetId, Currency } from "../api/types";
 import type { FanPoint } from "../lib/chartData";
-import { formatDate, formatDayMonth, formatNumber, formatPrice, formatProbability } from "../lib/format";
+import { formatDate, formatDayMonth, formatNumber, formatPrice } from "../lib/format";
+import { describeProbability } from "../lib/forecast";
 import { displayUnit } from "../lib/units";
 
 // Token màu theo skill forecast-charts.
@@ -57,7 +58,7 @@ function FanTooltip({ active, payload, asset, currency }: TooltipProps) {
               Khoảng 80%: {formatPrice(asset, point.low, currency)}–{formatPrice(asset, point.high, currency)}
             </p>
           ) : null}
-          {point.probUp !== undefined ? <p>Xác suất tăng: {formatProbability(point.probUp)}</p> : null}
+          {point.probUp !== undefined ? <p>Xác suất tăng: {describeProbability(point.probUp).probUpLabel}</p> : null}
         </>
       ) : null}
     </div>

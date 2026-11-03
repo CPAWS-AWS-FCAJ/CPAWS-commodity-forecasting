@@ -24,6 +24,12 @@ export const config = {
    */
   sampleAccuracy: parseSampleAccuracy(env.VITE_SAMPLE_ACCURACY),
   /**
+   * Gọi GET /accuracy/{asset}. Route chưa deploy thì API Gateway trả 403 cho cả preflight CORS, nên
+   * với API thật chỉ bật khi VITE_ACCURACY_API=true; tắt thì khối hiện "Chưa có kết quả đánh giá".
+   * Chế độ mẫu luôn bật (đọc fixture).
+   */
+  accuracyApiEnabled: useSample || env.VITE_ACCURACY_API === "true",
+  /**
    * Hiển thị giá vàng/bạc (dựng từ dữ liệu Yahoo, ADR-0005). Mặc định TẮT (phương án dự phòng đang
    * áp dụng): vàng/bạc chỉ hiện % thay đổi và xác suất tăng. Chỉ bật khi VITE_SHOW_METAL_PRICES=true.
    */
