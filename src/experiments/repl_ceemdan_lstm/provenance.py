@@ -2,14 +2,14 @@
 
 artifacts_sha256.json nằm cạnh manifest.json: SHA-256 của 8 file bản tách, recorded_at (UTC) và
 recorded_after_run (true khi ghi bằng --record-digests, tức sau khi bản tách đã có sẵn). Mọi kiểm
-tra đều fail-closed: thiếu trường, thiếu khóa hay thiếu file đều báo lỗi, không bỏ qua.
+tra đều fail-closed: thiếu trường, sai kiểu, thiếu khóa hay thiếu file đều báo lỗi, không bỏ qua.
 """
 
 from __future__ import annotations
 
 import json
 import subprocess
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from . import config as C
@@ -35,11 +35,27 @@ def write_digests(dec_dir: Path, recorded_after_run: bool) -> dict:
     return doc
 
 
+def _check_recorded_at(value) -> None:
+    """recorded_at phải là chuỗi ISO 8601 có múi giờ, offset đúng bằng UTC ("+00:00" hoặc "Z")."""
+    if not isinstance(value, str):
+        raise TypeError("recorded_at phải là chuỗi")
+    if datetime.fromisoformat(value).utcoffset() != timedelta(0):  # không múi giờ: None
+        raise ValueError(f"recorded_at phải có múi giờ UTC: {value}")
+
+
 def read_digests(dec_dir: Path) -> dict:
-    """Đọc DIGEST_FILE. Thiếu file: FileNotFoundError; sai định dạng: ValueError hoặc TypeError."""
+    """Đọc DIGEST_FILE và kiểm sha256, recorded_at, recorded_after_run. Thiếu file:
+    FileNotFoundError; thiếu trường hoặc sai định dạng: ValueError hoặc TypeError."""
     doc = json.loads((dec_dir / DIGEST_FILE).read_text(encoding="utf-8"))
     if not isinstance(doc, dict) or not isinstance(doc.get("sha256"), dict):
         raise TypeError("thiếu trường sha256")
+    for name in ("recorded_at", "recorded_after_run"):
+        if name not in doc:
+            raise ValueError(f"thiếu trường {name}")
+    _check_recorded_at(doc["recorded_at"])
+    # type(...) is bool: isinstance sẽ nhận cả số 0/1
+    if type(doc["recorded_after_run"]) is not bool:
+        raise TypeError("recorded_after_run phải là bool")
     return doc
 
 

@@ -539,3 +539,85 @@ def test_git_info_ok(monkeypatch, stdout, dirty):
 
     monkeypatch.setattr(subprocess, "run", fake)
     assert P.git_info() == {"commit": "abc", "dirty": dirty, "git_status": "ok"}
+
+
+# ---------- metadata của artifacts_sha256.json (review lần 2 của Long, #83) ----------
+
+
+_MISSING = object()
+VALID_RECORDED_AT = "2026-11-04T04:02:30+00:00"
+
+
+def _rewrite_digest_fields(dec, **fields) -> None:
+    """Sửa trực tiếp JSON (không qua read_digests); giá trị _MISSING thì xóa trường."""
+    path = dec / P.DIGEST_FILE
+    doc = json.loads(path.read_text(encoding="utf-8"))
+    for name, value in fields.items():
+        if value is _MISSING:
+            del doc[name]
+        else:
+            doc[name] = value
+    path.write_text(json.dumps(doc), encoding="utf-8")
+
+
+def _assert_invalid_digest(dec, lake) -> None:
+    assert any(f"{P.DIGEST_FILE} không hợp lệ" in e for e in _check(dec, lake))
+
+
+@pytest.mark.parametrize(
+    "fields",
+    [
+        {"recorded_at": _MISSING},
+        {"recorded_after_run": _MISSING},
+        {"recorded_at": _MISSING, "recorded_after_run": _MISSING},
+    ],
+    ids=["no_recorded_at", "no_recorded_after_run", "neither"],
+)
+def test_check_manifest_fails_when_digest_metadata_missing(prov_dirs, fields):
+    dec, lake, _, _ = prov_dirs
+    _rewrite_digest_fields(dec, **fields)
+    _assert_invalid_digest(dec, lake)
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "not-a-date",
+        "",
+        "2026-11-04T04:02:30",  # không có múi giờ
+        "2026-11-04",  # chỉ có ngày, không có múi giờ
+        "2026-11-04T11:02:30+07:00",  # cùng thời điểm nhưng offset khác 0
+        "2026-11-03T23:02:30-05:00",
+        1762228950,
+        1762228950.5,
+        True,
+        None,
+    ],
+)
+def test_check_manifest_fails_on_invalid_recorded_at(prov_dirs, value):
+    dec, lake, _, _ = prov_dirs
+    _rewrite_digest_fields(dec, recorded_at=value)
+    _assert_invalid_digest(dec, lake)
+
+
+@pytest.mark.parametrize("value", ["true", "false", 1, 0, None])
+def test_check_manifest_fails_on_non_bool_recorded_after_run(prov_dirs, value):
+    dec, lake, _, _ = prov_dirs
+    _rewrite_digest_fields(dec, recorded_after_run=value)
+    _assert_invalid_digest(dec, lake)
+
+
+@pytest.mark.parametrize("after_run", [True, False])
+@pytest.mark.parametrize("recorded_at", ["2026-11-04T04:02:30Z", VALID_RECORDED_AT])
+def test_check_manifest_accepts_valid_digest_metadata(prov_dirs, recorded_at, after_run):
+    dec, lake, _, _ = prov_dirs
+    _rewrite_digest_fields(dec, recorded_at=recorded_at, recorded_after_run=after_run)
+    assert _check(dec, lake) == []
+
+
+@pytest.mark.parametrize("after_run", [True, False])
+def test_write_digests_output_passes_read_digests(prov_dirs, after_run):
+    dec, lake, _, _ = prov_dirs
+    doc = P.write_digests(dec, recorded_after_run=after_run)
+    assert P.read_digests(dec) == doc
+    assert _check(dec, lake) == []
