@@ -38,6 +38,8 @@ class CpawsApiStack(Stack):
         env_name: str,
         forecasts_table: dynamodb.ITable,
         user_pool: cognito.IUserPool,
+        model_versions: dict[str, str],
+        champion_effective_base_dates: dict[str, str],
         **kwargs: Any,
     ) -> None:
         super().__init__(scope, construct_id, **kwargs)
@@ -63,7 +65,8 @@ class CpawsApiStack(Stack):
             description="Read CPAWS forecast records from DynamoDB",
             runtime=lambda_.Runtime.PYTHON_3_12,
             handler="handler.handler",
-            # Exclude local Python cache files to keep the CDK asset hash stable.
+            # Bỏ __pycache__/.pyc sinh ra khi chạy test trên máy: chúng làm đổi hash asset và
+            # khiến cdk diff báo đổi Code.S3Key dù code không đổi.
             code=lambda_.Code.from_asset(str(handler_dir), exclude=["__pycache__", "*.pyc"]),
             timeout=Duration.seconds(10),
             memory_size=256,
@@ -74,6 +77,7 @@ class CpawsApiStack(Stack):
             },
         )
 
+        # The API Lambda chỉ cần Query trên bảng Forecasts.
         forecast_api_lambda.add_to_role_policy(
             iam.PolicyStatement(
                 actions=["dynamodb:Query"],
@@ -107,6 +111,8 @@ class CpawsApiStack(Stack):
             "Access-Control-Allow-Methods": "'GET,POST,OPTIONS'",
         }
 
+        # Thêm CORS headers cho lỗi 4xx và 5xx do API Gateway tự trả về,
+        # bao gồm cả request bị Cognito authorizer từ chối.
         apigateway.GatewayResponse(
             self,
             "Default4xxCors",
@@ -167,23 +173,8 @@ class CpawsApiStack(Stack):
         )
 
         # ---------- Rolling Accuracy API ----------
-        # Reader Lambda is isolated from Forecasts and Chat. It receives only the Accuracy
-        # table name and current champion/effective-date mappings.
+        # Reader Lambda chỉ nhận tên bảng Accuracy và cấu hình champion/ngày hiệu lực hiện tại.
         accuracy_handler_dir = Path(__file__).resolve().parents[1] / "lambda" / "accuracy_api"
-
-        model_versions = {
-            "gold": "baseline-q252",
-            "silver": "baseline-q252",
-            "brent": "baseline-q252",
-            "wti": "baseline-q252",
-        }
-
-        champion_effective_base_dates = {
-            "gold": "2026-10-26",
-            "silver": "2026-10-26",
-            "brent": "2026-10-26",
-            "wti": "2026-10-26",
-        }
 
         accuracy_log_group = logs.LogGroup(
             self,
@@ -214,7 +205,7 @@ class CpawsApiStack(Stack):
             },
         )
 
-        # Least privilege: the Accuracy Reader can only read the exact Accuracy table.
+        # Quyền tối thiểu theo bảng quyền trong contract; mỗi quyền trên đúng ARN, không "*".
         accuracy_table_arn = self.format_arn(
             service="dynamodb",
             resource="table",
@@ -256,7 +247,9 @@ class CpawsApiStack(Stack):
             removal_policy=RemovalPolicy.RETAIN,
         )
 
-        # Timeout 28 seconds: API Gateway cuts off at 29 seconds.
+        # Timeout 28 giây: API Gateway cắt ở 29 giây; handler tự trả 504 trước hạn chót tính từ
+        # requestTimeEpoch. Không đặt NEWS_TABLE_NAME: bảng NewsLabels chưa có collector, demo đọc
+        # tin gắn nhãn tay trong asset (docs/api/demo-news.md).
         chat_lambda = lambda_.Function(
             self,
             "ChatApiHandler",
@@ -278,6 +271,7 @@ class CpawsApiStack(Stack):
             },
         )
 
+        # Quyền tối thiểu: bộ đếm lượt hỏi chỉ được UpdateItem và GetItem trên đúng bảng.
         chat_lambda.add_to_role_policy(
             iam.PolicyStatement(
                 sid="ChatUsageCounter",
@@ -317,6 +311,8 @@ class CpawsApiStack(Stack):
             ),
         )
 
+        # Handler bắt mọi exception và trả 500, nên đếm lỗi không lường trước từ log;
+        # alarm ở CpawsOps (cùng namespace + tên metric trong shared.py).
         api.root.add_resource("chat").add_method(
             "POST",
             apigateway.LambdaIntegration(chat_lambda, proxy=True),

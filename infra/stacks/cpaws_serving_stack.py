@@ -60,7 +60,12 @@ class CpawsServingStack(Stack):
             value=self.forecasts_table.table_arn,
         )
 
-        # Nhãn tin đã gắn cho từng tài sản (contract POST /chat).
+        # Nhãn tin đã gắn cho từng tài sản (contract POST /chat, mục "Nguồn dữ liệu của tool
+        # get_news"; ADR-0003 mục 6). Collector tin ghi (PutItem), Lambda /chat đọc (Query).
+        # Quyền tối thiểu: shared.news_labels_read_statement / news_labels_write_statement.
+        # Item: PK asset, SK sk = "<published_at>#<article_id>", bắt buộc title, summary, link,
+        # source, published_at, impact_score (Number 0-3), direction. On-demand: vài chục tin/ngày,
+        # chi phí gần 0. RETAIN vì nhãn tốn tiền Bedrock để tạo lại.
         self.news_labels_table = dynamodb.Table(
             self,
             "NewsLabelsTable",
@@ -83,7 +88,11 @@ class CpawsServingStack(Stack):
             value=self.news_labels_table.table_name,
         )
 
-        # Bộ đếm lượt hỏi chatbot. TTL chỉ áp dụng cho ChatUsage.
+        # Bộ đếm lượt hỏi chatbot (contract POST /chat, mục giới hạn lượt hỏi):
+        # PK pk = "user#<sub>" hoặc "global", SK sk = "day#YYYY-MM-DD" (giờ VN).
+        # TTL trên expires_at chỉ để dọn dữ liệu cũ; reset theo ngày dựa vào sk.
+        # Không lưu câu hỏi/câu trả lời. DESTROY: chỉ là bộ đếm, mất cũng không sao
+        # (khác Forecasts, NewsLabels).
         self.chat_usage_table = dynamodb.Table(
             self,
             "ChatUsageTable",
@@ -107,18 +116,18 @@ class CpawsServingStack(Stack):
             value=self.chat_usage_table.table_name,
         )
 
-        # Rolling Accuracy: STATE và RUN/META/METRIC dùng chung pk/sk.
+        # Rolling Accuracy: STATE và RUN/META/METRIC dùng chung PK/SK.
         # Không GSI, không TTL; giữ dữ liệu khi stack bị xóa.
         self.accuracy_table = dynamodb.Table(
             self,
             "AccuracyTable",
             table_name=accuracy_table_name(env_name),
             partition_key=dynamodb.Attribute(
-                name="pk",
+                name="PK",
                 type=dynamodb.AttributeType.STRING,
             ),
             sort_key=dynamodb.Attribute(
-                name="sk",
+                name="SK",
                 type=dynamodb.AttributeType.STRING,
             ),
             billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,

@@ -11,7 +11,7 @@ from urllib.parse import quote
 
 import boto3
 from boto3.dynamodb.conditions import Key
-from botocore.exceptions import BotoCoreError
+from botocore.exceptions import BotoCoreError, ClientError
 from response import build_response
 
 logger = logging.getLogger()
@@ -363,11 +363,22 @@ def _metric_groups(
 
         metric = {key: value for key, value in entry.items() if key != "h"}
 
-        if not isinstance(metric.get("n_obs"), int) or isinstance(metric.get("n_obs"), bool):
+        n_obs = metric.get("n_obs")
+
+        if isinstance(n_obs, bool):
             raise AccuracyUnavailable("derived_horizon_n_obs_invalid")
 
-        if metric["n_obs"] < 0:
+        if isinstance(n_obs, Decimal):
+            if not n_obs.is_finite() or n_obs != n_obs.to_integral_value():
+                raise AccuracyUnavailable("derived_horizon_n_obs_invalid")
+            n_obs = int(n_obs)
+        elif not isinstance(n_obs, int):
             raise AccuracyUnavailable("derived_horizon_n_obs_invalid")
+
+        if n_obs < 0:
+            raise AccuracyUnavailable("derived_horizon_n_obs_invalid")
+
+        metric["n_obs"] = n_obs
 
         if metric.get("status") not in ("ok", "undefined"):
             raise AccuracyUnavailable("derived_horizon_status_invalid")
@@ -547,6 +558,7 @@ def handler(event, context):
         except (
             AccuracyUnavailable,
             BotoCoreError,
+            ClientError,
             KeyError,
             TypeError,
             ValueError,

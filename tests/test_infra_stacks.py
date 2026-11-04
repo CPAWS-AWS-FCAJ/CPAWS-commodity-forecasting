@@ -43,6 +43,11 @@ def _synth(
         from stacks.cpaws_serving_stack import CpawsServingStack
         from stacks.shared import ingest_function_name, predict_function_name
 
+        configured_model_versions = BASELINE_VERSIONS if model_versions is None else model_versions
+        configured_effective_dates = (
+            EFFECTIVE_DATES if effective_base_dates is None else effective_base_dates
+        )
+
         app = cdk.App()
         data = CpawsDataStack(
             app,
@@ -51,10 +56,8 @@ def _synth(
             ingest_image_tag="abc1234",
             predict_image_tag=PREDICT_TAG,
             predict_model_version=model_version,
-            predict_model_versions=BASELINE_VERSIONS if model_versions is None else model_versions,
-            champion_effective_base_dates=(
-                EFFECTIVE_DATES if effective_base_dates is None else effective_base_dates
-            ),
+            predict_model_versions=configured_model_versions,
+            champion_effective_base_dates=configured_effective_dates,
             predict_shadow_models=shadow_models,
             predict_repo_only=predict_repo_only,
             eia_parameter_name=eia_parameter_name,
@@ -81,6 +84,8 @@ def _synth(
             env_name="dev",
             forecasts_table=serving.forecasts_table,
             user_pool=user_pool,
+            model_versions=configured_model_versions,
+            champion_effective_base_dates=configured_effective_dates,
         )
 
         return {
@@ -542,8 +547,8 @@ def test_forecasts_table_is_unchanged_by_news_labels(templates):
     accuracy_props = accuracy["Properties"]
 
     assert accuracy_props["KeySchema"] == [
-        {"AttributeName": "pk", "KeyType": "HASH"},
-        {"AttributeName": "sk", "KeyType": "RANGE"},
+        {"AttributeName": "PK", "KeyType": "HASH"},
+        {"AttributeName": "SK", "KeyType": "RANGE"},
     ]
     assert accuracy_props["BillingMode"] == "PAY_PER_REQUEST"
     assert "GlobalSecondaryIndexes" not in accuracy_props
@@ -625,6 +630,27 @@ def test_accuracy_api_lambda_configuration(templates: dict) -> None:
     assert json.loads(variables["CHAMPION_EFFECTIVE_BASE_DATES"]) == {
         asset: "2026-10-26" for asset in expected_assets
     }
+
+
+def test_accuracy_champion_mapping_matches_predict_lambda(templates: dict) -> None:
+    """Accuracy Lambda và Predict Lambda phải dùng cùng champion mapping."""
+    predict_variables = _predict_env(templates["data"])
+
+    accuracy_function_id = _function_id(
+        templates["api"],
+        "cpaws-dev-accuracy-api",
+    )
+    accuracy_variables = templates["api"]["Resources"][accuracy_function_id]["Properties"][
+        "Environment"
+    ]["Variables"]
+
+    assert json.loads(accuracy_variables["MODEL_VERSIONS"]) == json.loads(
+        predict_variables["MODEL_VERSIONS"]
+    )
+
+    # Predict Lambda không nhận effective dates; đối chiếu Accuracy với cấu hình
+    # effective dates đã truyền vào CDK synth.
+    assert json.loads(accuracy_variables["CHAMPION_EFFECTIVE_BASE_DATES"]) == dict(EFFECTIVE_DATES)
 
 
 def test_accuracy_api_iam_is_read_only_and_table_scoped(templates: dict) -> None:

@@ -132,7 +132,9 @@ def build_response(
     for horizon in by_horizon:
         h = horizon["h"]
         group = dict(horizon)
-        group["width_80_pct"] = horizon_derived[h]
+        group["width_80_pct"] = {
+            key: value for key, value in horizon_derived[h].items() if key != "h"
+        }
         projected_horizons.append(
             {
                 "h": h,
