@@ -66,6 +66,16 @@ export function postChat(
   );
 }
 
+/**
+ * Chữ hiển thị của `answer`: bỏ cặp `**…**` khớp trên cùng một dòng (Haiku prompt v2 trả Markdown,
+ * #80 theo điều kiện của Phước). Không đụng `*` đơn (dấu nhân, gạch đầu dòng) hay `**` lẻ không có
+ * cặp; kết quả vẫn là văn bản thuần, React tự escape. Chỉ dùng lúc render: history gửi lên và phần
+ * kiểm disclaimer vẫn dùng `response.answer` gốc.
+ */
+export function displayAnswer(answer: string): string {
+  return answer.replace(/\*\*([^*\n]+?)\*\*/g, "$1");
+}
+
 /** Link trích dẫn: chỉ nhận http/https (contract mục "Bảo mật"); khác → null, hiển thị không link. */
 export function safeLink(link: string): string | null {
   try {

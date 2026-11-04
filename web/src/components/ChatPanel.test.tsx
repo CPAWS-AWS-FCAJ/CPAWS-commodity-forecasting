@@ -103,6 +103,27 @@ describe("ChatPanel", () => {
     ]);
   });
 
+  it("bỏ cặp ** khi hiển thị; history và kiểm disclaimer vẫn dùng answer gốc", async () => {
+    const first = `Xác suất tăng **51%**, 2 * 3 giữ nguyên.\n** lẻ giữ nguyên\n**<b>x</b>**\n\n**${DISCLAIMER}**`;
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse(200, reply({ answer: first })))
+      .mockResolvedValueOnce(jsonResponse(200, reply({ answer: "Hai." })));
+    const { container } = render(<ChatPanel asset="wti" assetName="Dầu WTI" />);
+    ask("Câu một?");
+
+    const bubble = await screen.findByText(/Xác suất tăng 51%, 2 \* 3 giữ nguyên\./);
+    expect(bubble.textContent).toContain("\n** lẻ giữ nguyên\n<b>x</b>\n");
+    expect(bubble.textContent).not.toContain("**51%");
+    expect(container.querySelector("b")).toBeNull();
+    // answer gốc vẫn chứa nguyên disclaimer (bọc **) → không lặp dòng riêng; hiển thị không còn **
+    expect(screen.queryByText(DISCLAIMER)).toBeNull();
+    expect(bubble.textContent?.endsWith(`\n\n${DISCLAIMER}`)).toBe(true);
+
+    ask("Câu hai?");
+    await screen.findByText("Hai.");
+    expect(sentBody(1).history[1]).toEqual({ role: "assistant", text: first });
+  });
+
   it("HTML trong answer hiện như chữ; link chỉ lấy từ citations http/https, mở tab mới an toàn", async () => {
     fetchMock.mockResolvedValueOnce(
       jsonResponse(

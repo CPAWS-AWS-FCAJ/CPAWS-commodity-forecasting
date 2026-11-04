@@ -3,6 +3,7 @@ import {
   buildHistory,
   chatErrorMessage,
   countChars,
+  displayAnswer,
   formatResetVn,
   MAX_QUESTION_CHARS,
   questionProblem,
@@ -90,5 +91,25 @@ describe("chatErrorMessage", () => {
     expect(chatErrorMessage(new ApiError(400, "invalid_history", "Lịch sử hội thoại không hợp lệ."))).toBe(
       "Lịch sử hội thoại không hợp lệ.",
     );
+  });
+});
+
+describe("displayAnswer", () => {
+  it("bỏ các cặp ** khớp trên một dòng", () => {
+    expect(displayAnswer("**a** và **b**")).toBe("a và b");
+    expect(displayAnswer("Xác suất tăng **53%**.\n- Khoảng 80%: **72–78 USD/bbl**")).toBe(
+      "Xác suất tăng 53%.\n- Khoảng 80%: 72–78 USD/bbl",
+    );
+  });
+
+  it("giữ * đơn, ** lẻ và cặp ** vắt qua hai dòng", () => {
+    expect(displayAnswer("2 * 3 = 6")).toBe("2 * 3 = 6");
+    expect(displayAnswer("* gạch đầu dòng")).toBe("* gạch đầu dòng");
+    expect(displayAnswer("lẻ ** ở đây")).toBe("lẻ ** ở đây");
+    expect(displayAnswer("**mở\nđóng**")).toBe("**mở\nđóng**");
+  });
+
+  it("HTML trong answer vẫn là chữ sau khi bỏ **", () => {
+    expect(displayAnswer("**<b>x</b>**")).toBe("<b>x</b>");
   });
 });

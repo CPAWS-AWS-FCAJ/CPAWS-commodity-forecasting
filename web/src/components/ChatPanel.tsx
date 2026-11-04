@@ -3,6 +3,7 @@ import {
   chatErrorMessage,
   citationLinks,
   countChars,
+  displayAnswer,
   formatResetVn,
   isRateLimited,
   MAX_QUESTION_CHARS,
@@ -20,6 +21,7 @@ import { SampleBadge, StaleBadge } from "./StatusBadges";
  * Chatbot gọi POST /chat (docs/api/contract.md). Quy tắc hiển thị (mục "Bảo mật" của contract):
  * - `answer` là văn bản thuần: render như text (React tự escape), giữ xuống dòng bằng CSS, không
  *   dangerouslySetInnerHTML, không đổi Markdown sang HTML, không tự biến URL trong answer thành link.
+ *   Chỉ bỏ cặp `**` khi hiển thị (displayAnswer); history và kiểm disclaimer dùng answer gốc.
  * - Link chỉ lấy từ `citations`, chỉ http/https, mở tab mới với rel="noopener noreferrer".
  * - Hai loại 429: hết lượt trong ngày (rate_limited, kèm giờ reset) và throttling của stage.
  */
@@ -126,7 +128,7 @@ function AnswerBubble({ response }: { response: ChatResponse }) {
           {stale ? <StaleBadge /> : null}
         </div>
       ) : null}
-      <p className="whitespace-pre-line break-words">{response.answer}</p>
+      <p className="whitespace-pre-line break-words">{displayAnswer(response.answer)}</p>
       {response.truncated ? (
         <p className="mt-2 text-xs text-warn-fg">Câu trả lời bị cắt, hãy hỏi ngắn hơn.</p>
       ) : null}
