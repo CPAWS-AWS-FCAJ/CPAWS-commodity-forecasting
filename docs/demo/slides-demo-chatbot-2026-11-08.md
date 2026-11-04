@@ -23,10 +23,7 @@ Xuất PDF: npx @marp-team/marp-cli docs/demo/slides-demo-chatbot-2026-11-08.md 
 
 Demo nội bộ team, Chủ nhật 8/11/2026
 
-- Trình bày: Phước. Chạy máy: Tiến, trên web của nhóm
-
-<!-- Chờ Phước chốt nơi chạy web: domain Amplify (Khải đề xuất) hay localhost:5173 (dự phòng). Chốt xong thì ghi vào dòng trên nếu muốn. -->
-
+- Trình bày: Phước. Chạy máy: Tiến, trên domain Amplify (dự phòng localhost:5173)
 - `POST /chat` thật trên AWS: Bedrock Claude Haiku 4.5, prompt `chatbot-haiku-v2`
 - 15 phút demo, 10 phút hỏi đáp
 
@@ -40,7 +37,7 @@ Demo nội bộ team, Chủ nhật 8/11/2026
 - Số liệu **chỉ lấy từ tool** `get_forecast`, khớp với trang dự báo
 - Tin Fed/EIA có **trích nguồn** (nguồn, ngày, link). Tin là yếu tố có thể ảnh hưởng; dự báo không dùng tin
 - Dự báo có khoảng 80% và xác suất tăng, kèm câu: *"Dự báo mang tính tham khảo, không phải lời khuyên đầu tư."*
-- Vàng, bạc dựa trên GLD/SLV: chỉ nêu % và xác suất tăng, không nêu giá
+- Chatbot: vàng, bạc dựa trên GLD/SLV, chỉ nêu % và xác suất tăng (tool v2)
 
 **Ngoài phạm vi**
 
