@@ -1,6 +1,6 @@
 # ADR-0005: Nguồn dữ liệu giá vàng, bạc, dầu và tỷ giá USD/VND
 
-- Ngày: 2026-10-07 (cập nhật 2026-10-08: gỡ Tiingo sau phản hồi của Tiingo)
+- Ngày: 2026-10-07 (cập nhật 2026-10-08: gỡ Tiingo sau phản hồi của Tiingo; 2026-11-04: vàng, bạc hiển thị giá và khoảng giá, thêm quy đổi ra số tiền)
 - Trạng thái: Đề xuất
 - Người viết: Trịnh Tiến Khải (bản nháp do Claude Code soạn từ kết quả probe); người duyệt: Huỳnh Ngọc Tuấn (IA), Nguyễn Tiến Long
 
@@ -149,13 +149,20 @@ Các quy tắc đi kèm:
 
 ## Hệ quả
 
-### Điều khoản và hiển thị: **chốt lựa chọn (b) ngày 28/10/2026**
+### Điều khoản và hiển thị: **chọn (b) ngày 28/10/2026; đổi sang (a) kèm quy đổi ra số tiền ngày 04/11/2026**
 - **Yahoo Finance có điều khoản tương tự Tiingo**: dữ liệu chỉ dành cho mục đích cá nhân. yfinance là thư viện không chính thức, có thể bị chặn hoặc đổi định dạng bất cứ lúc nào.
 - Dùng yfinance để huấn luyện và đánh giá nội bộ có cùng mức rủi ro như mọi dự án học thuật dùng nguồn này. Phần rủi ro chính là **hiển thị giá** cho người khác.
 - Hai lựa chọn hiển thị đã cân nhắc:
   - **(a)** Giảng viên chấp nhận dùng dữ liệu Yahoo cho buổi demo đồ án. Web hiển thị giá và biểu đồ vàng, bạc, dầu như thiết kế, chỉ mở sau đăng nhập Cognito, có ghi nguồn và không có tính năng tải dữ liệu.
   - **(b)** Chỉ hiển thị chuỗi giá từ nguồn công khai (dầu từ EIA: RWTC, RBRTE). Với vàng và bạc, chỉ hiển thị **kết quả dự báo dạng % return và xác suất tăng**, không hiển thị chuỗi giá hay khoảng giá USD/VND dựng từ dữ liệu Yahoo.
 - **Quyết định ngày 28/10/2026: chọn (b).** Nhóm tự chốt, không chờ giảng viên, vì (b) không phụ thuộc điều khoản Yahoo và đã chạy trên web từ trước. Web giữ `VITE_SHOW_METAL_PRICES=false`; chatbot cùng quy tắc (tool v2 không trả giá vàng/bạc). Bỏ chế độ (a) khỏi phạm vi trước buổi bảo vệ.
+- **Sửa quyết định ngày 04/11/2026: chuyển sang (a), kèm quy đổi ra số tiền.** Giảng viên cho phép dùng dữ liệu Yahoo cho đồ án (Khải xác nhận ngày 04/11/2026). Lý do đổi: người dùng không rành tài chính khó hiểu khoảng % log return; khoảng giá và số tiền dễ hiểu hơn.
+  - **Giá và khoảng giá vàng, bạc:** như dầu, `price_q = last_price × exp(q)`, ghi rõ "giá quy đổi từ quỹ GLD/SLV (chuỗi đại diện), không phải giá giao ngay". Web đặt `VITE_SHOW_METAL_PRICES=true`.
+  - **Quy đổi ra số tiền** (cả 4 tài sản): người xem tự nhập số tiền, web tính `số tiền × exp(q)` cho q10, q50, q90. Ví dụ 10.000.000 đồng, q10 = −0,025, q90 = +0,031 → khoảng 9,75–10,31 triệu đồng sau h phiên. Kèm câu "chưa gồm phí giao dịch, không phải lời khuyên đầu tư". Không dùng thêm dữ liệu giá nào.
+  - **Biểu đồ lịch sử giá:** cần endpoint mới; sửa `docs/api/contract.md` qua PR trước rồi mới sửa code. Làm trước đóng băng 22/11 nếu kịp.
+  - **Giữ nguyên điều kiện của (a):** chỉ sau đăng nhập Cognito, ghi nguồn (`config.SOURCE_ATTRIBUTION`), không có tính năng tải hay xuất dữ liệu giá, dự án phi thương mại. Rủi ro còn lại: điều khoản Yahoo chỉ cho dùng cá nhân; nhóm ghi nhận rủi ro này.
+  - **Chatbot:** giữ tool v2 (không trả giá vàng/bạc) tới sau buổi chạy thử chatbot nội bộ 8/11, để không đổi cấu hình đã benchmark; mở bằng PR riêng.
+  - API `/forecasts` đã trả `last_price` và `prices` cho cả 4 tài sản nên không cần sửa API cho phần giá và khoảng giá.
 - Áp dụng cho cả hai lựa chọn:
   - Dự án phi thương mại.
   - Luôn ghi nguồn (`config.SOURCE_ATTRIBUTION` = "Nguồn: Yahoo Finance, U.S. EIA").
