@@ -1,4 +1,4 @@
-"""Stack CpawsOps: alarm cho Lambda ingest, predict và /chat, gửi email qua SNS."""
+"""Stack CpawsOps: alarm cho Lambda ingest, predict (cả shadow S1a) và /chat, gửi email qua SNS."""
 
 from typing import Any
 
@@ -9,7 +9,12 @@ from aws_cdk import aws_sns as sns
 from aws_cdk import aws_sns_subscriptions as subs
 from constructs import Construct
 
-from .shared import CHAT_INTERNAL_ERRORS_METRIC, CHAT_METRIC_NAMESPACE
+from .shared import (
+    CHAT_INTERNAL_ERRORS_METRIC,
+    CHAT_METRIC_NAMESPACE,
+    PREDICT_METRIC_NAMESPACE,
+    PREDICT_SHADOW_ERRORS_METRIC,
+)
 
 
 class CpawsOpsStack(Stack):
@@ -81,6 +86,28 @@ class CpawsOpsStack(Stack):
             treat_missing_data=cloudwatch.TreatMissingData.NOT_BREACHING,
         )
         predict_alarm.add_alarm_action(cw_actions.SnsAction(self.alarm_topic))
+
+        # Shadow S1a lỗi (PREDICT_SHADOW_FAILED) hoặc cấu hình shadow sai
+        # (PREDICT_SHADOW_CONFIG_INVALID): predict vẫn ghi champion và không raise, nên đếm từ log
+        # (metric filter ở CpawsData). Không có dòng log khớp thì không có số liệu → bình thường.
+        shadow_errors = cloudwatch.Metric(
+            namespace=PREDICT_METRIC_NAMESPACE,
+            metric_name=PREDICT_SHADOW_ERRORS_METRIC,
+            statistic="Sum",
+            period=Duration.minutes(5),
+        )
+        shadow_alarm = cloudwatch.Alarm(
+            self,
+            "PredictShadowErrorsAlarm",
+            alarm_name=f"cpaws-{env_name}-predict-shadow-errors",
+            alarm_description="Predict shadow S1a failed or shadow config invalid (>= 1 log line)",
+            metric=shadow_errors,
+            threshold=1,
+            evaluation_periods=1,
+            comparison_operator=cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
+            treat_missing_data=cloudwatch.TreatMissingData.NOT_BREACHING,
+        )
+        shadow_alarm.add_alarm_action(cw_actions.SnsAction(self.alarm_topic))
 
         if chat_function_name:
             self._add_chat_alarms(env_name, chat_function_name)

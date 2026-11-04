@@ -17,12 +17,32 @@ from stacks.shared import chat_api_function_name, ingest_function_name, predict_
 # Đổi khi đẩy image mới: cdk deploy CpawsData -c ingest_image_tag=<commit>
 DEFAULT_INGEST_IMAGE_TAG = "5cfde32"
 
-# Tag image của Lambda predict = SHA ngắn của commit merge PR #48 trên developer (không ghi đè
-# dự báo đã phát hành, thêm input_snapshot_dt; deploy 30/10 08:10 UTC). Đổi khi đẩy image mới:
-# cdk deploy CpawsData -c predict_image_tag=<commit>
-DEFAULT_PREDICT_IMAGE_TAG = "ce77bcb"
-# Demo dùng mốc thống kê 252 phiên, không cần artifact (Khải chốt 22/10); DLinear là challenger.
+# Tag image của Lambda predict = SHA ngắn của commit merge PR #53 trên developer (champion theo
+# tài sản qua MODEL_VERSIONS + shadow S1a; gồm cả #48: không ghi đè, input_snapshot_dt).
+# Rollback: cdk deploy CpawsData -c predict_image_tag=ce77bcb (image #48, chỉ đọc MODEL_VERSION).
+DEFAULT_PREDICT_IMAGE_TAG = "c61abdd"
+# Champion mốc thống kê 252 phiên, không cần artifact (Khải chốt 22/10; ADR-0012: cả 4 tài sản).
 DEFAULT_PREDICT_MODEL_VERSION = "baseline-q252"
+# Champion theo tài sản (RFC #45 v4.6 D10). Lambda predict đọc MODEL_VERSIONS; job accuracy dùng
+# cùng giá trị. Phải bằng DEFAULT_PREDICT_MODEL_VERSION cho mọi tài sản (CpawsData kiểm lúc synth).
+CHAMPION_MODEL_VERSIONS = {
+    "gold": DEFAULT_PREDICT_MODEL_VERSION,
+    "silver": DEFAULT_PREDICT_MODEL_VERSION,
+    "brent": DEFAULT_PREDICT_MODEL_VERSION,
+    "wti": DEFAULT_PREDICT_MODEL_VERSION,
+}
+# base_date đầu tiên champion baseline-q252 phát hành chạy thật (lượt predict tự động đầu tiên
+# 27/10, contract #65). Predict không đọc; job accuracy (rolling_8w) đọc.
+CHAMPION_EFFECTIVE_BASE_DATES = {
+    "gold": "2026-10-26",
+    "silver": "2026-10-26",
+    "brent": "2026-10-26",
+    "wti": "2026-10-26",
+}
+# Shadow chạy song song với champion (docs/experiments/s1a-shadow-plan.md), ghi
+# eval/shadow/s1a-l094/ trên lake. Tắt mà không build image:
+#   cdk deploy CpawsData -c shadow_models=off
+DEFAULT_PREDICT_SHADOW_MODELS = "s1a-l094"
 
 app = cdk.App()
 env_name = app.node.try_get_context("env") or "dev"
@@ -37,6 +57,13 @@ predict_image_tag = app.node.try_get_context("predict_image_tag") or DEFAULT_PRE
 predict_model_version = (
     app.node.try_get_context("predict_model_version") or DEFAULT_PREDICT_MODEL_VERSION
 )
+# "off" (hoặc "none") = tắt shadow; không truyền = mặc định ở trên
+shadow_context = app.node.try_get_context("shadow_models")
+predict_shadow_models = (
+    DEFAULT_PREDICT_SHADOW_MODELS if shadow_context is None else str(shadow_context).strip()
+)
+if predict_shadow_models.lower() in ("off", "none"):
+    predict_shadow_models = ""
 # Chỉ dùng ở lần deploy ĐẦU TIÊN (tạo ECR predict trước khi có image): -c predict_repo_only=true
 predict_repo_only = str(app.node.try_get_context("predict_repo_only") or "").lower() == "true"
 
@@ -59,11 +86,14 @@ CpawsDataStack(
     eia_parameter_name=eia_parameter_name,
     predict_image_tag=predict_image_tag,
     predict_model_version=predict_model_version,
+    predict_model_versions=CHAMPION_MODEL_VERSIONS,
+    champion_effective_base_dates=CHAMPION_EFFECTIVE_BASE_DATES,
+    predict_shadow_models=predict_shadow_models,
     predict_repo_only=predict_repo_only,
     env=aws_env,
 )
 
-# Monitoring và cảnh báo cho Lambda ingest, predict và /chat
+# Monitoring và cảnh báo cho Lambda ingest, predict (cả shadow S1a) và /chat
 CpawsOpsStack(
     app,
     "CpawsOps",
