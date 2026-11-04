@@ -1,6 +1,6 @@
 # Minh họa CEEMDAN + LSTM theo ý tưởng của Cao et al. (2019): kết quả trên 2017–2018
 
-- Ngày chạy: 3/11/2026; sửa tài liệu 4/11/2026 theo review của Long ở #83 (không chạy lại). Người viết: Khải (bản nháp do Claude Code soạn). Người duyệt: Long.
+- Ngày chạy: 3/11/2026; sửa tài liệu 4/11/2026 theo review của Long ở #83 (không chạy lại). Người viết: Khải (bản nháp do Claude Code soạn). Người review: Long (đang review).
 - Kế hoạch: `docs/experiments/ceemdan-lstm-replication-plan.md` (#75); quyết định của Khải ngày 3/11 cho bước 1 và bước 2.
 - **Đây là minh họa, không phải thí nghiệm chọn mô hình.** Kết quả không đổi champion, không thêm challenger, không mở lại ADR-0012 (kế hoạch mục 0, 5).
 - **Chỉ dùng dữ liệu ≤ 2018-12-31**; không đọc validation 2019 hay test 2020 → nay. Mọi siêu tham số đã đóng băng trước khi chạy. Chạy hai lần với cùng tham số: lần đầu trên code chưa commit, lần sau trên commit sạch để chứng minh nguồn gốc, kết quả trùng từng bit (mục 9). Không chỉnh gì sau khi xem số 2017–2018.
