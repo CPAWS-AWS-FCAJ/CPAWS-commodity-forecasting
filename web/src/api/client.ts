@@ -4,12 +4,18 @@ import type { ApiErrorBody } from "./types";
 export class ApiError extends Error {
   readonly status: number;
   readonly code: string;
+  /**
+   * Thân lỗi JSON gốc (nếu có), ví dụ `reset_at` của 429 rate_limited. Lỗi do API Gateway tự sinh
+   * (401, 429 throttling, 504) chỉ có `{"message": ...}` tiếng Anh: không hiển thị nguyên văn.
+   */
+  readonly body: Record<string, unknown>;
 
-  constructor(status: number, code: string, message: string) {
+  constructor(status: number, code: string, message: string, body: Record<string, unknown> = {}) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.code = code;
+    this.body = body;
   }
 }
 
@@ -32,25 +38,46 @@ function messageForStatus(status: number, fallback: string): string {
   return fallback;
 }
 
-export async function apiGet<T>(path: string, signal?: AbortSignal): Promise<T> {
+async function request<T>(path: string, init: RequestInit, fallback: string): Promise<T> {
   const response = await fetch(`${config.apiUrl}${path}`, {
-    headers: { Accept: "application/json", ...(await authHeaders()) },
-    signal,
+    ...init,
+    headers: { Accept: "application/json", ...init.headers, ...(await authHeaders()) },
   });
 
   if (response.ok) return (await response.json()) as T;
 
   if (response.status === 401) window.dispatchEvent(new Event(UNAUTHORIZED_EVENT));
 
-  let body: Partial<ApiErrorBody> = {};
+  let body: Partial<ApiErrorBody> & Record<string, unknown> = {};
   try {
-    body = (await response.json()) as Partial<ApiErrorBody>;
+    const parsed: unknown = await response.json();
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      body = parsed as Partial<ApiErrorBody> & Record<string, unknown>;
+    }
   } catch {
     // thân phản hồi không phải JSON: dùng thông báo mặc định
   }
-  throw new ApiError(
-    response.status,
-    body.error ?? `http_${response.status}`,
-    messageForStatus(response.status, body.message ?? "Không tải được dữ liệu."),
+  const code = typeof body.error === "string" ? body.error : `http_${response.status}`;
+  // Chỉ dùng message của Lambda (thân dạng chung có "error"); thân mặc định của API Gateway là
+  // tiếng Anh nên thay bằng câu mặc định.
+  const serverMessage =
+    typeof body.error === "string" && typeof body.message === "string" ? body.message : fallback;
+  throw new ApiError(response.status, code, messageForStatus(response.status, serverMessage), body);
+}
+
+export async function apiGet<T>(path: string, signal?: AbortSignal): Promise<T> {
+  return request<T>(path, { signal }, "Không tải được dữ liệu.");
+}
+
+export async function apiPost<T>(path: string, payload: unknown, signal?: AbortSignal): Promise<T> {
+  return request<T>(
+    path,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal,
+    },
+    "Đã có lỗi, bạn thử lại sau.",
   );
 }

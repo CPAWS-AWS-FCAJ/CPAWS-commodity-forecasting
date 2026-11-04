@@ -37,7 +37,7 @@ export function HorizonCards({ asset, detail, currency, hidePrice, selected, onS
         Dự báo theo số phiên giao dịch (h = 1…7)
       </h2>
       <p className="mt-1 text-xs text-muted">
-        Khoảng 80%: giá nhiều khả năng nằm trong khoảng q10–q90 với xác suất danh nghĩa 80%. Nhãn: xác suất
+        Khoảng 80%: kết quả sau h phiên nhiều khả năng nằm trong khoảng này (q10–q90, xác suất danh nghĩa 80%). Nhãn: xác suất
         tăng từ 60% là “Nghiêng tăng”, từ 40% trở xuống là “Nghiêng giảm”, còn lại “Chưa rõ xu hướng”.
       </p>
       <ul className="mt-3 grid grid-cols-[repeat(auto-fill,minmax(13rem,1fr))] gap-3">

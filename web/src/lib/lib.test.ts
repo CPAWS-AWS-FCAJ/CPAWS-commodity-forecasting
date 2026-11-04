@@ -1,7 +1,7 @@
 import { QUANTILE_LEVELS } from "../api/types";
 import { sampleDetail, sampleHistory, sampleList } from "../api/sample";
 import { ASSET_IDS } from "../api/types";
-import { formatDate, formatNumber, formatPrice, formatProbability, formatReturnPercent } from "./format";
+import { formatDate, formatDateVn, formatNumber, formatPrice, formatProbability, formatReturnPercent } from "./format";
 import {
   describeProbability,
   isStaleByDate,
@@ -54,6 +54,9 @@ describe("format", () => {
 
   it("định dạng ngày không lệch múi giờ", () => {
     expect(formatDate("2026-10-20")).toBe("20/10/2026");
+    // ngày theo giờ Việt Nam: tin Fed 18:00 UTC sang VN đã là ngày hôm sau
+    expect(formatDateVn("2026-10-28T18:00:00Z")).toBe("29/10/2026");
+    expect(formatDateVn("2026-10-28T10:00:00Z")).toBe("28/10/2026");
   });
 });
 

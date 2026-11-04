@@ -133,7 +133,7 @@ function AssetContent({ asset }: { asset: AssetId }) {
             <Notes asset={asset} detail={detail} />
           </div>
           <div className="lg:sticky lg:top-4 lg:self-start">
-            <ChatPanel assetName={meta.name} />
+            <ChatPanel key={asset} asset={asset} assetName={meta.name} />
           </div>
         </div>
       ) : null}
