@@ -25,6 +25,29 @@ def predict_function_name(env_name: str) -> str:
     return f"cpaws-{env_name}-predict"
 
 
+# ---------- Lambda predict: champion và shadow (RFC #45 v4.6, ADR-0012, s1a-shadow-plan) ----------
+
+# Các hằng dưới phải KHỚP src/forecast/predict.py (tests/test_infra_stacks.py kiểm tra):
+# 4 tài sản dự báo = PREDICT_ASSETS (thứ tự cũng là thứ tự khóa của MODEL_VERSIONS).
+FORECAST_ASSETS = ("gold", "silver", "brent", "wti")
+# Định dạng version = _MODEL_VERSION_RE; champion mốc 252 phiên = BASELINE_MODEL_VERSION.
+MODEL_VERSION_PATTERN = r"[A-Za-z0-9][A-Za-z0-9._-]*"
+BASELINE_MODEL_VERSION = "baseline-q252"
+# Model shadow predict chấp nhận = SHADOW_S1A; giá trị lạ bị chặn ngay lúc synth thay vì để
+# Lambda log PREDICT_SHADOW_CONFIG_INVALID mỗi tối.
+ALLOWED_SHADOW_MODELS = ("s1a-l094",)
+
+# Lỗi shadow không bao giờ làm Lambda predict raise (champion vẫn ghi), nên alarm Errors không
+# bắt được. CpawsData tạo metric filter trên log predict, CpawsOps tạo alarm theo namespace + tên
+# này. Hai mã log của src/forecast/predict.py (log ERROR/exception):
+PREDICT_METRIC_NAMESPACE = "CPAWS"
+PREDICT_SHADOW_ERRORS_METRIC = "PredictShadowErrors"
+PREDICT_SHADOW_ERROR_LOG_TERMS = (
+    "PREDICT_SHADOW_FAILED",
+    "PREDICT_SHADOW_CONFIG_INVALID",
+)
+
+
 def forecasts_table_name(env_name: str) -> str:
     """Tên bảng DynamoDB Forecasts. Phải KHỚP table_name trong cpaws_serving_stack.py
     (tests/test_infra_stacks.py kiểm tra). CpawsData tham chiếu bảng theo tên thay vì export

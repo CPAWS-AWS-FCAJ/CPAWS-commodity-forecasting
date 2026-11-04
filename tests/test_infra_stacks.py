@@ -4,6 +4,7 @@ Cần aws-cdk-lib (có trong infra .venv, không có trong CI) nên tự bỏ qu
 Chạy: infra .venv Scripts activate rồi pytest tests/test_infra_stacks.py (từ gốc repo).
 """
 
+import ast
 import json
 import sys
 from pathlib import Path
@@ -12,15 +13,23 @@ import pytest
 
 pytest.importorskip("aws_cdk")
 
-INFRA_DIR = Path(__file__).resolve().parents[1] / "infra"
+ROOT = Path(__file__).resolve().parents[1]
+INFRA_DIR = ROOT / "infra"
 
 PREDICT_TAG = "def5678"
+ASSETS = ("gold", "silver", "brent", "wti")
+BASELINE_VERSIONS = dict.fromkeys(ASSETS, "baseline-q252")
+EFFECTIVE_DATES = dict.fromkeys(ASSETS, "2026-10-26")
 
 
 def _synth(
     *,
     predict_repo_only: bool = False,
     eia_parameter_name: str | None = None,
+    model_version: str = "baseline-q252",
+    model_versions: dict | None = None,
+    effective_base_dates: dict | None = None,
+    shadow_models: str = "s1a-l094",
 ) -> dict:
     """Synth CpawsData, CpawsOps và CpawsServing cho env dev, trả về template dạng dict."""
     sys.path.insert(0, str(INFRA_DIR))
@@ -41,7 +50,12 @@ def _synth(
             env_name="dev",
             ingest_image_tag="abc1234",
             predict_image_tag=PREDICT_TAG,
-            predict_model_version="baseline-q252",
+            predict_model_version=model_version,
+            predict_model_versions=BASELINE_VERSIONS if model_versions is None else model_versions,
+            champion_effective_base_dates=(
+                EFFECTIVE_DATES if effective_base_dates is None else effective_base_dates
+            ),
+            predict_shadow_models=shadow_models,
             predict_repo_only=predict_repo_only,
             eia_parameter_name=eia_parameter_name,
         )
@@ -129,9 +143,10 @@ def test_alarms_watch_the_deployed_lambdas(templates):
     assert fn_names == {"cpaws-dev-ingest", "cpaws-dev-predict"}
     watched = set()
     for alarm in _resources(templates["ops"], "AWS::CloudWatch::Alarm"):
+        if alarm["Properties"]["Namespace"] != "AWS/Lambda":
+            continue  # alarm metric từ log (shadow S1a): kiểm ở test riêng bên dưới
         dims = {d["Name"]: d["Value"] for d in alarm["Properties"]["Dimensions"]}
         assert alarm["Properties"]["MetricName"] == "Errors"
-        assert alarm["Properties"]["Namespace"] == "AWS/Lambda"
         watched.add(dims["FunctionName"])
     assert watched == fn_names
 
@@ -160,10 +175,142 @@ def test_predict_lambda_configuration(templates):
     assert image_parts[-1].endswith(f":{PREDICT_TAG}")
     assert "PredictRepo" in str(image_parts)
     env = fn["Environment"]["Variables"]
-    assert set(env) == {"LAKE_BUCKET", "FORECASTS_TABLE", "MODEL_VERSION", "CPAWS_ENV"}
+    assert set(env) == {
+        "LAKE_BUCKET",
+        "FORECASTS_TABLE",
+        "MODEL_VERSION",
+        "MODEL_VERSIONS",
+        "SHADOW_MODELS",
+        "CPAWS_ENV",
+    }
     assert env["FORECASTS_TABLE"] == "cpaws-dev-forecasts"
     assert env["MODEL_VERSION"] == "baseline-q252"
     assert env["CPAWS_ENV"] == "dev"
+
+
+def _predict_env(template: dict) -> dict:
+    fn = template["Resources"][_function_id(template, "cpaws-dev-predict")]["Properties"]
+    return fn["Environment"]["Variables"]
+
+
+def test_predict_env_has_per_asset_champion_and_shadow(templates):
+    env = _predict_env(templates["data"])
+    versions = json.loads(env["MODEL_VERSIONS"])
+    assert list(versions) == list(ASSETS)  # đúng 4 tài sản, thứ tự cố định
+    # MODEL_VERSION giữ cho rollback image ce77bcb và phải khớp mọi giá trị MODEL_VERSIONS
+    assert set(versions.values()) == {env["MODEL_VERSION"]} == {"baseline-q252"}
+    assert env["SHADOW_MODELS"] == "s1a-l094"
+    # Predict không đọc ngày hiệu lực champion: không đặt vào env predict
+    assert "CHAMPION_EFFECTIVE_BASE_DATES" not in env
+    # Env Lambda tối đa 4 KB tổng cộng
+    assert sum(len(k) + len(v) for k, v in env.items() if isinstance(v, str)) < 1024
+
+
+@pytest.mark.parametrize("value", ["", " "])
+def test_shadow_off_removes_env_without_touching_champion(value):
+    env = _predict_env(_synth(shadow_models=value)["data"])
+    assert "SHADOW_MODELS" not in env
+    assert set(json.loads(env["MODEL_VERSIONS"]).values()) == {"baseline-q252"}
+
+
+def _with(mapping: dict, **changes) -> dict:
+    out = dict(mapping)
+    for k, v in changes.items():
+        if v is None:
+            out.pop(k)
+        else:
+            out[k] = v
+    return out
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"shadow_models": "s1b"},  # model lạ
+        {"shadow_models": "s1a-l094,s1a-l094"},  # trùng
+        {"model_versions": _with(BASELINE_VERSIONS, wti=None)},  # thiếu tài sản
+        {"model_versions": _with(BASELINE_VERSIONS, usd_vnd="baseline-q252")},  # thừa tài sản
+        {"model_versions": _with(BASELINE_VERSIONS, gold=" baseline-q252")},  # khoảng trắng
+        {"model_versions": _with(BASELINE_VERSIONS, gold="dlinear-v1")},  # lệch MODEL_VERSION
+        {"model_version": "dlinear-v1"},  # MODEL_VERSION lệch MODEL_VERSIONS
+        {
+            # không tài sản nào baseline mà vẫn bật shadow
+            "model_version": "dlinear-v1",
+            "model_versions": dict.fromkeys(ASSETS, "dlinear-v1"),
+        },
+        {"effective_base_dates": _with(EFFECTIVE_DATES, brent=None)},
+        {"effective_base_dates": _with(EFFECTIVE_DATES, gold="26/10/2026")},
+        {"effective_base_dates": _with(EFFECTIVE_DATES, gold="2026-10-26T00:00:00Z")},
+    ],
+)
+def test_invalid_champion_or_shadow_config_fails_at_synth(kwargs):
+    with pytest.raises(ValueError):
+        _synth(**kwargs)
+
+
+def test_non_baseline_champion_without_shadow_synthesizes():
+    """Đổi champion sau này (có ADR) mà tắt shadow thì vẫn synth được."""
+    versions = dict.fromkeys(ASSETS, "dlinear-v1")
+    env = _predict_env(
+        _synth(model_version="dlinear-v1", model_versions=versions, shadow_models="")["data"]
+    )
+    assert env["MODEL_VERSION"] == "dlinear-v1" and "SHADOW_MODELS" not in env
+
+
+def test_shadow_errors_metric_filter_and_alarm(templates):
+    sys.path.insert(0, str(INFRA_DIR))
+    try:
+        from stacks import shared
+    finally:
+        sys.path.remove(str(INFRA_DIR))
+    t = templates["data"]
+    (mf,) = _resources(t, "AWS::Logs::MetricFilter")
+    props = mf["Properties"]
+    (log_group_id,) = [
+        k
+        for k, r in _items(t, "AWS::Logs::LogGroup").items()
+        if r["Properties"]["LogGroupName"] == "/aws/lambda/cpaws-dev-predict"
+    ]
+    assert props["LogGroupName"] == {"Ref": log_group_id}
+    assert props["FilterPattern"] == '?"PREDICT_SHADOW_FAILED" ?"PREDICT_SHADOW_CONFIG_INVALID"'
+    (transform,) = props["MetricTransformations"]
+    assert transform["MetricNamespace"] == shared.PREDICT_METRIC_NAMESPACE
+    assert transform["MetricName"] == shared.PREDICT_SHADOW_ERRORS_METRIC
+    assert transform["MetricValue"] == "1"
+
+    alarms = {
+        r["Properties"]["AlarmName"]: r["Properties"]
+        for r in _resources(templates["ops"], "AWS::CloudWatch::Alarm")
+    }
+    alarm = alarms["cpaws-dev-predict-shadow-errors"]
+    assert alarm["Namespace"] == shared.PREDICT_METRIC_NAMESPACE
+    assert alarm["MetricName"] == shared.PREDICT_SHADOW_ERRORS_METRIC
+    assert alarm["Threshold"] == 1 and alarm["TreatMissingData"] == "notBreaching"
+    assert alarm["AlarmActions"]  # gửi SNS
+
+
+def test_infra_constants_match_predict_code():
+    """Đổi tên tài sản, champion, model shadow hay câu log trong predict mà quên shared.py
+    → synth chặn nhầm cấu hình đúng, hoặc metric filter không bao giờ khớp."""
+    sys.path.insert(0, str(INFRA_DIR))
+    try:
+        from stacks import shared
+    finally:
+        sys.path.remove(str(INFRA_DIR))
+    predict_src = (ROOT / "src" / "forecast" / "predict.py").read_text(encoding="utf-8")
+    assert f'BASELINE_MODEL_VERSION = "{shared.BASELINE_MODEL_VERSION}"' in predict_src
+    assert f're.compile(r"{shared.MODEL_VERSION_PATTERN}")' in predict_src
+    (shadow,) = shared.ALLOWED_SHADOW_MODELS
+    assert f'SHADOW_S1A = "{shadow}"' in predict_src
+    for term in shared.PREDICT_SHADOW_ERROR_LOG_TERMS:
+        assert f'"{term} ' in predict_src, term  # đầu chuỗi format của log.error/exception
+
+    (assets,) = [
+        node.value
+        for node in ast.parse(predict_src).body
+        if isinstance(node, ast.AnnAssign) and getattr(node.target, "id", None) == "PREDICT_ASSETS"
+    ]
+    assert ast.literal_eval(assets) == shared.FORECAST_ASSETS
 
 
 def test_predict_role_is_least_privilege(templates):

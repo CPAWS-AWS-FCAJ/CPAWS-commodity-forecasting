@@ -40,11 +40,7 @@ def _project_group(group: dict, *, overall: bool, ready: bool, enough: bool) -> 
         if metric not in group:
             raise ValueError(f"missing metric: {metric}")
 
-        item = {
-            key: value
-            for key, value in group[metric].items()
-            if key != "undefined_reason"
-        }
+        item = {key: value for key, value in group[metric].items() if key != "undefined_reason"}
 
         if overall:
             if not ready:
@@ -59,9 +55,7 @@ def _project_group(group: dict, *, overall: bool, ready: bool, enough: bool) -> 
             display_status = "counts_only"
 
         item["display_status"] = display_status
-        item["display_value"] = (
-            round(item["value"], 6) if display_status == "ready" else None
-        )
+        item["display_value"] = round(item["value"], 6) if display_status == "ready" else None
 
         if metric == "coverage_80":
             item.pop("value", None)
@@ -108,15 +102,12 @@ def build_response(
             "missing_count": None,
         }
         overall = empty_group()
-        by_horizon = [
-            {"h": horizon, **empty_group()} for horizon in HORIZONS
-        ]
+        by_horizon = [{"h": horizon, **empty_group()} for horizon in HORIZONS]
         derived_metrics = {
             "width_80_pct": {
                 "overall": overall["width_80_pct"],
                 "by_horizon": [
-                    {"h": horizon, **empty_group()["width_80_pct"]}
-                    for horizon in HORIZONS
+                    {"h": horizon, **empty_group()["width_80_pct"]} for horizon in HORIZONS
                 ],
             }
         }
@@ -135,10 +126,7 @@ def build_response(
     overall_group = dict(overall)
     overall_group["width_80_pct"] = derived_metrics["width_80_pct"]["overall"]
 
-    horizon_derived = {
-        item["h"]: item
-        for item in derived_metrics["width_80_pct"]["by_horizon"]
-    }
+    horizon_derived = {item["h"]: item for item in derived_metrics["width_80_pct"]["by_horizon"]}
     projected_horizons = []
 
     for horizon in by_horizon:

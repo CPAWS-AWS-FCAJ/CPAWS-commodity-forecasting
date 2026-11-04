@@ -1,4 +1,3 @@
-
 """Read-only Accuracy API Lambda for RFC #45 v4.6."""
 
 from __future__ import annotations
@@ -25,9 +24,7 @@ DISPLAY_METRICS = (*METRICS, "width_80_pct")
 
 TABLE_NAME = os.environ.get("ACCURACY_TABLE_NAME", "")
 MODEL_VERSIONS = json.loads(os.environ.get("MODEL_VERSIONS", "{}"))
-CHAMPION_EFFECTIVE_BASE_DATES = json.loads(
-    os.environ.get("CHAMPION_EFFECTIVE_BASE_DATES", "{}")
-)
+CHAMPION_EFFECTIVE_BASE_DATES = json.loads(os.environ.get("CHAMPION_EFFECTIVE_BASE_DATES", "{}"))
 
 dynamodb = boto3.resource("dynamodb")
 
@@ -92,9 +89,7 @@ def _component(value: str) -> str:
 
 
 def _run_pk(asset: str, model: str, run_id: str) -> str:
-    return "RUN#" + "#".join(
-        _component(value) for value in (asset, model, run_id)
-    )
+    return "RUN#" + "#".join(_component(value) for value in (asset, model, run_id))
 
 
 def _expected_metric_keys(meta: dict) -> set[str]:
@@ -113,11 +108,7 @@ def _expected_metric_keys(meta: dict) -> set[str]:
     parts = ("all", "rolling_8w", *values)
     prefix = "METRIC#" + "#".join(_component(value) for value in parts)
 
-    return {
-        f"{prefix}#H{h}#{metric}"
-        for h in HORIZONS
-        for metric in METRICS
-    }
+    return {f"{prefix}#H{h}#{metric}" for h in HORIZONS for metric in METRICS}
 
 
 def _query_all(table, pk: str) -> list[dict]:
@@ -147,11 +138,7 @@ def _verify_metric(item: dict) -> None:
     if not isinstance(supplied_hash, str):
         raise AccuracyUnavailable("metric_hash_missing")
 
-    payload = {
-        key: value
-        for key, value in item.items()
-        if key != "payload_hash"
-    }
+    payload = {key: value for key, value in item.items() if key != "payload_hash"}
     if _digest(payload) != supplied_hash:
         raise AccuracyUnavailable("metric_hash_mismatch")
 
@@ -161,11 +148,7 @@ def _verify_meta(meta: dict) -> None:
     if not isinstance(supplied_hash, str):
         raise AccuracyUnavailable("meta_hash_missing")
 
-    payload = {
-        key: value
-        for key, value in meta.items()
-        if key not in {"payload_hash", "status"}
-    }
+    payload = {key: value for key, value in meta.items() if key not in {"payload_hash", "status"}}
     if _digest(payload) != supplied_hash:
         raise AccuracyUnavailable("meta_hash_mismatch")
 
@@ -269,7 +252,6 @@ def _verify_metric_provenance(
             raise AccuracyUnavailable("metric_provenance_mismatch")
 
 
-
 def _metric_groups(
     meta: dict,
     metric_items: list[dict],
@@ -304,11 +286,7 @@ def _metric_groups(
         horizon = item.get("h")
         metric = item.get("metric")
 
-        if (
-            isinstance(horizon, bool)
-            or horizon not in HORIZONS
-            or metric not in METRICS
-        ):
+        if isinstance(horizon, bool) or horizon not in HORIZONS or metric not in METRICS:
             raise AccuracyUnavailable("metric_identity_invalid")
 
         expected_suffix = f"#H{horizon}#{metric}"
@@ -383,13 +361,9 @@ def _metric_groups(
         if not isinstance(entry, dict) or entry.get("h") != horizon:
             raise AccuracyUnavailable("derived_horizon_order_invalid")
 
-        metric = {
-            key: value for key, value in entry.items() if key != "h"
-        }
+        metric = {key: value for key, value in entry.items() if key != "h"}
 
-        if not isinstance(metric.get("n_obs"), int) or isinstance(
-            metric.get("n_obs"), bool
-        ):
+        if not isinstance(metric.get("n_obs"), int) or isinstance(metric.get("n_obs"), bool):
             raise AccuracyUnavailable("derived_horizon_n_obs_invalid")
 
         if metric["n_obs"] < 0:
@@ -432,19 +406,16 @@ def _read_cycle(table, asset: str):
     run_id = state.get("latest_run_id")
     run_order = state.get("latest_run_order")
 
-    if not all(
-        isinstance(value, str) and value
-        for value in (run_pk, run_id, run_order)
-    ):
+    if not all(isinstance(value, str) and value for value in (run_pk, run_id, run_order)):
         raise AccuracyUnavailable("state_pointer_invalid")
 
     items = _query_all(table, run_pk)
 
     meta_items = [item for item in items if item.get("SK") == "META"]
     metric_items = [
-        item for item in items
-        if isinstance(item.get("SK"), str)
-        and item["SK"].startswith("METRIC#")
+        item
+        for item in items
+        if isinstance(item.get("SK"), str) and item["SK"].startswith("METRIC#")
     ]
 
     if len(meta_items) != 1:
@@ -553,10 +524,7 @@ def handler(event, context):
 
             # Integrity has already been verified. A valid run from an old
             # champion or a different effective scope is simply not_ready.
-            if (
-                meta["model_version"] != current_model
-                or meta["effective"] != current_effective
-            ):
+            if meta["model_version"] != current_model or meta["effective"] != current_effective:
                 return _response(200, _not_ready(asset, current_model))
 
             response_meta = {

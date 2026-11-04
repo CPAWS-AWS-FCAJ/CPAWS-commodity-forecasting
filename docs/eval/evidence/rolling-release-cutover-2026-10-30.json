@@ -1,0 +1,12 @@
+{
+  "release": {
+    "approved": true,
+    "approved_by": "kha1rk19fpt",
+    "approved_at": "2026-11-04T03:49:22Z",
+    "reference": "pr48-deploy-2026-10-30T08:10:06Z+pr68-smoke",
+    "cutover_at": "2026-10-30T08:10:06Z",
+    "conditional_write": true,
+    "input_asof_checked": true
+  },
+  "legacy": []
+}

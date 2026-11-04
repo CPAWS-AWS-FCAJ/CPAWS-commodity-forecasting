@@ -24,5 +24,7 @@ COPY src/features/ ${LAMBDA_TASK_ROOT}/src/features/
 COPY src/forecast/ ${LAMBDA_TASK_ROOT}/src/forecast/
 
 # Environment set by CDK: LAKE_BUCKET, LAKE_PREFIX (optional), FORECASTS_TABLE, MODEL_VERSION,
-# CPAWS_ENV. Model artifacts are downloaded to /tmp (see src/forecast/predict.py).
+# MODEL_VERSIONS (per-asset champion JSON; overrides MODEL_VERSION), SHADOW_MODELS (optional,
+# "s1a-l094"; empty = off), CPAWS_ENV. Model artifacts are downloaded to /tmp
+# (see src/forecast/predict.py and the docstring of src/forecast/lambda_predict.py).
 CMD ["src.forecast.lambda_predict.handler"]

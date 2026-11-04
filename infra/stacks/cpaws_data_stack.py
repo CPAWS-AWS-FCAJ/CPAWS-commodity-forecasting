@@ -5,6 +5,10 @@ OnFailure đều gọi Lambda predict (retry 0). Ingest lỗi một nguồn vẫ
 nên predict vẫn chạy; tài sản thiếu phiên cuối bị bỏ qua và predict raise PredictFailed (alarm).
 """
 
+import json
+import re
+from collections.abc import Mapping
+from datetime import date
 from typing import Any
 
 from aws_cdk import CfnOutput, Duration, RemovalPolicy, Stack
@@ -18,12 +22,72 @@ from aws_cdk import aws_scheduler as scheduler
 from constructs import Construct
 
 from .shared import (
+    ALLOWED_SHADOW_MODELS,
+    BASELINE_MODEL_VERSION,
+    FORECAST_ASSETS,
     INGEST_SCHEDULE_EXPRESSION,
     INGEST_SCHEDULE_GROUP,
+    MODEL_VERSION_PATTERN,
+    PREDICT_METRIC_NAMESPACE,
+    PREDICT_SHADOW_ERROR_LOG_TERMS,
+    PREDICT_SHADOW_ERRORS_METRIC,
     forecasts_table_name,
     ingest_function_name,
     predict_function_name,
 )
+
+
+def predict_champion_environment(
+    *,
+    model_version: str,
+    model_versions: Mapping[str, str],
+    effective_base_dates: Mapping[str, str],
+    shadow_models: str,
+) -> dict[str, str]:
+    """Biến môi trường champion/shadow cho Lambda predict, kiểm tra ngay lúc synth.
+
+    - MODEL_VERSIONS: JSON đúng 4 tài sản; predict (#53) đọc biến này và bỏ qua MODEL_VERSION.
+    - MODEL_VERSION giữ lại, phải bằng mọi giá trị của MODEL_VERSIONS: image ce77bcb (rollback)
+      chỉ đọc MODEL_VERSION, còn predict #53 không báo gì khi hai biến lệch nhau.
+    - CHAMPION_EFFECTIVE_BASE_DATES: predict không đọc (job accuracy đọc); chỉ kiểm cùng bộ
+      tài sản và ngày ISO, không đặt vào env predict.
+    - SHADOW_MODELS: rỗng = tắt (rollback không cần build image); chỉ nhận ALLOWED_SHADOW_MODELS.
+    """
+    assets = set(FORECAST_ASSETS)
+    if set(model_versions) != assets:
+        raise ValueError(f"model_versions must have exactly the assets {sorted(assets)}")
+    if set(effective_base_dates) != assets:
+        raise ValueError(f"effective_base_dates must have exactly the assets {sorted(assets)}")
+    for asset in FORECAST_ASSETS:
+        version = model_versions[asset]
+        if not isinstance(version, str) or not re.fullmatch(MODEL_VERSION_PATTERN, version):
+            raise ValueError(f"invalid model version for {asset}: {version!r}")
+        value = effective_base_dates[asset]
+        if not isinstance(value, str) or date.fromisoformat(value).isoformat() != value:
+            raise ValueError(f"effective base date for {asset} must be YYYY-MM-DD: {value!r}")
+    if set(model_versions.values()) != {model_version}:
+        raise ValueError(
+            "MODEL_VERSION must equal every MODEL_VERSIONS value "
+            "(rollback image ce77bcb reads MODEL_VERSION only)"
+        )
+
+    env = {
+        # Thứ tự cố định để template không đổi giữa các lần synth
+        "MODEL_VERSIONS": json.dumps(
+            {a: model_versions[a] for a in FORECAST_ASSETS}, separators=(",", ":")
+        ),
+    }
+    shadows = [m.strip() for m in shadow_models.split(",") if m.strip()]
+    unknown = sorted(set(shadows) - set(ALLOWED_SHADOW_MODELS))
+    if unknown or len(shadows) != len(set(shadows)):
+        raise ValueError(f"shadow_models accepts only {list(ALLOWED_SHADOW_MODELS)}: {shadows}")
+    if shadows:
+        # S1a co giãn phân vị của mốc 252 phiên: không tài sản nào baseline thì predict log
+        # PREDICT_SHADOW_CONFIG_INVALID mỗi lượt (alarm), nên chặn ngay ở đây.
+        if BASELINE_MODEL_VERSION not in model_versions.values():
+            raise ValueError(f"shadow models need at least one {BASELINE_MODEL_VERSION} champion")
+        env["SHADOW_MODELS"] = ",".join(shadows)
+    return env
 
 
 class CpawsDataStack(Stack):
@@ -36,11 +100,25 @@ class CpawsDataStack(Stack):
         ingest_image_tag: str,
         predict_image_tag: str,
         predict_model_version: str,
+        predict_model_versions: Mapping[str, str],
+        champion_effective_base_dates: Mapping[str, str],
+        predict_shadow_models: str,
         eia_parameter_name: str | None = None,
         predict_repo_only: bool = False,
         **kwargs: Any,
     ) -> None:
         super().__init__(scope, construct_id, **kwargs)
+
+        # Kiểm cấu hình champion/shadow cả khi predict_repo_only (sai thì dừng ở synth).
+        predict_champion_env = predict_champion_environment(
+            model_version=predict_model_version,
+            model_versions=predict_model_versions,
+            effective_base_dates=champion_effective_base_dates,
+            shadow_models=predict_shadow_models,
+        )
+        # Lambda accuracy-job (PR sau) dùng cùng giá trị, không khai báo lần hai.
+        self.champion_model_versions = dict(predict_model_versions)
+        self.champion_effective_base_dates = dict(champion_effective_base_dates)
 
         # Data lake: raw/ clean/ features/ kb/ models/ (xem skill aws-serverless-platform)
         self.lake = s3.Bucket(
@@ -102,6 +180,7 @@ class CpawsDataStack(Stack):
                 env_name=env_name,
                 image_tag=predict_image_tag,
                 model_version=predict_model_version,
+                champion_env=predict_champion_env,
             )
             predict_destination = destinations.LambdaDestination(self.predict_fn)
 
@@ -262,7 +341,7 @@ class CpawsDataStack(Stack):
             CfnOutput(self, "PredictFunctionName", value=self.predict_fn.function_name)
 
     def _predict_function(
-        self, *, env_name: str, image_tag: str, model_version: str
+        self, *, env_name: str, image_tag: str, model_version: str, champion_env: dict[str, str]
     ) -> lambda_.DockerImageFunction:
         """Lambda predict từ image ECR (docker/predict/Dockerfile), quyền tối thiểu. Tuấn review."""
         role = iam.Role(
@@ -327,6 +406,19 @@ class CpawsDataStack(Stack):
             retention=logs.RetentionDays.ONE_MONTH,
             removal_policy=RemovalPolicy.DESTROY,
         )
+        # Lỗi shadow S1a không làm predict raise nên metric Errors không thấy; đếm từ log,
+        # alarm ở CpawsOps (cùng namespace + tên metric trong shared.py).
+        logs.MetricFilter(
+            self,
+            "PredictShadowErrorsFilter",
+            log_group=log_group,
+            metric_namespace=PREDICT_METRIC_NAMESPACE,
+            metric_name=PREDICT_SHADOW_ERRORS_METRIC,
+            metric_value="1",
+            filter_pattern=logs.FilterPattern.literal(
+                " ".join(f'?"{term}"' for term in PREDICT_SHADOW_ERROR_LOG_TERMS)
+            ),
+        )
 
         # 1.024 MB / 120 s, x86_64, ngoài VPC (cấu hình Khải yêu cầu cho baseline-q252).
         return lambda_.DockerImageFunction(
@@ -347,5 +439,6 @@ class CpawsDataStack(Stack):
                 "FORECASTS_TABLE": table_name,
                 "MODEL_VERSION": model_version,
                 "CPAWS_ENV": env_name,
+                **champion_env,
             },
         )

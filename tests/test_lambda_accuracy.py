@@ -97,3 +97,16 @@ def test_missing_evidence_production_not_ready_no_writes():
     )
     assert all(row["status"] == "not_ready" for row in result["assets"])
     assert not table.items and not table.calls
+
+
+@pytest.mark.parametrize("name", ["MODEL_VERSIONS", "CHAMPION_EFFECTIVE_BASE_DATES"])
+@pytest.mark.parametrize("value", [None, "", "   "], ids=["missing", "empty", "whitespace"])
+def test_missing_mapping_environment(name, value):
+    config = env()
+    if value is None:
+        del config[name]
+    else:
+        config[name] = value
+    with pytest.raises(ValueError) as exc:
+        parse_config({}, config, "2026-11-07T14:00:00Z")
+    assert str(exc.value) == "missing " + name
