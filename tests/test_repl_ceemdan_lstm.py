@@ -1,5 +1,8 @@
 """Minh họa CEEMDAN + LSTM, bước 1 (kế hoạch mục 3.3): chỉ dữ liệu tổng hợp, không cần GPU."""
 
+import importlib
+import json
+import subprocess
 from itertools import pairwise
 
 import numpy as np
@@ -7,8 +10,10 @@ import pandas as pd
 import pytest
 
 from src.data import calendars
+from src.data.config import ASSETS as ASSET_SPECS
 from src.experiments.repl_ceemdan_lstm import config as C
 from src.experiments.repl_ceemdan_lstm import data as D
+from src.experiments.repl_ceemdan_lstm import provenance as P
 from src.experiments.repl_ceemdan_lstm.decompose import (
     combine_components,
     r_causal,
@@ -321,3 +326,216 @@ def test_same_seed_training_is_bit_identical_on_cpu():
     np.testing.assert_array_equal(predict(m1, x, dev), predict(m2, x, dev))
     m3, _ = train_lstm(x[:100], y[:100], x[100:], y[100:], 1, dev, params)
     assert not torch.equal(m1.head.weight, m3.head.weight)
+
+
+# ---------- provenance (review Long, #83): manifest, digest bản tách, git_info ----------
+
+
+def _train_script():
+    return importlib.import_module("scripts.repl_ceemdan_train")
+
+
+def _decompose_script():
+    return importlib.import_module("scripts.repl_ceemdan_decompose")
+
+
+@pytest.fixture
+def prov_dirs(tmp_path):
+    """Bản tách và bản clean giả: chỉ kiểm SHA-256 nên nội dung là byte bất kỳ, không phải giá."""
+    dec, lake = tmp_path / "dec", tmp_path / "lake"
+    clean = lake / "clean" / "prices" / f"dt={C.CLEAN_DT}"
+    dec.mkdir()
+    clean.mkdir(parents=True)
+    sha = {}
+    for f in P.CLEAN_FILES:
+        (clean / f).write_bytes(f"clean {f}".encode())
+        sha[f] = D.file_sha256(clean / f)
+    for n in P.artifact_names():
+        (dec / n).write_bytes(f"artifact {n}".encode())
+    assets = {
+        a: {"r_causal": {"n_origins": k, "n_computed": k}, "r_full": {}}
+        for a, k in {"gold": 1258, "silver": 1258, "brent": 1254, "wti": 1256}.items()
+    }
+    manifest = {
+        "limit": None,
+        "cfg_hash": C.EXPECTED_CFG_HASH,
+        "clean_dt": C.CLEAN_DT,
+        "sha256": sha,
+        "assets": assets,
+    }
+    (dec / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    P.write_digests(dec, recorded_after_run=False)
+    return dec, lake, clean, manifest
+
+
+def _check(dec, lake) -> list[str]:
+    return _train_script().check_manifest(dec, lake)[1]
+
+
+def _rewrite_manifest(dec, manifest) -> None:
+    (dec / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+
+def test_check_manifest_passes_when_everything_matches(prov_dirs):
+    dec, lake, _, _ = prov_dirs
+    assert _check(dec, lake) == []
+
+
+def test_check_manifest_fails_without_manifest(prov_dirs):
+    dec, lake, _, _ = prov_dirs
+    (dec / "manifest.json").unlink()
+    assert any("manifest.json" in e for e in _check(dec, lake))
+
+
+def test_check_manifest_fails_when_sha256_field_missing(prov_dirs):
+    dec, lake, _, manifest = prov_dirs
+    del manifest["sha256"]
+    _rewrite_manifest(dec, manifest)
+    assert any("thiếu trường sha256" in e for e in _check(dec, lake))
+
+
+@pytest.mark.parametrize("key", P.CLEAN_FILES)
+def test_check_manifest_fails_when_clean_key_missing(prov_dirs, key):
+    dec, lake, _, manifest = prov_dirs
+    del manifest["sha256"][key]
+    _rewrite_manifest(dec, manifest)
+    assert any(f"thiếu {key}" in e for e in _check(dec, lake))
+
+
+def test_check_manifest_fails_on_extra_clean_key(prov_dirs):
+    dec, lake, _, manifest = prov_dirs
+    manifest["sha256"]["other.parquet"] = "0" * 64
+    _rewrite_manifest(dec, manifest)
+    assert any("thừa other.parquet" in e for e in _check(dec, lake))
+
+
+def test_check_manifest_fails_on_wrong_clean_hash(prov_dirs):
+    dec, lake, clean, _ = prov_dirs
+    (clean / "prices.parquet").write_bytes(b"changed")
+    assert any("SHA-256 prices.parquet lệch" in e for e in _check(dec, lake))
+
+
+def test_check_manifest_fails_without_digest_file(prov_dirs):
+    dec, lake, _, _ = prov_dirs
+    (dec / P.DIGEST_FILE).unlink()
+    assert any(f"thiếu {P.DIGEST_FILE}" in e for e in _check(dec, lake))
+
+
+def test_check_manifest_fails_on_invalid_digest_file(prov_dirs):
+    dec, lake, _, _ = prov_dirs
+    (dec / P.DIGEST_FILE).write_text("{not json", encoding="utf-8")
+    assert any("không hợp lệ" in e for e in _check(dec, lake))
+
+
+def test_check_manifest_fails_when_digest_entry_missing(prov_dirs):
+    dec, lake, _, _ = prov_dirs
+    doc = P.read_digests(dec)
+    del doc["sha256"]["r_full_wti.parquet"]
+    (dec / P.DIGEST_FILE).write_text(json.dumps(doc), encoding="utf-8")
+    assert any("thiếu r_full_wti.parquet" in e for e in _check(dec, lake))
+
+
+def test_check_manifest_fails_when_artifact_changes_by_one_byte(prov_dirs):
+    dec, lake, _, _ = prov_dirs
+    path = dec / "r_causal_gold.parquet"
+    raw = bytearray(path.read_bytes())
+    raw[0] ^= 1
+    path.write_bytes(bytes(raw))
+    assert _check(dec, lake) == ["SHA-256 r_causal_gold.parquet lệch"]
+
+
+def test_check_manifest_fails_when_artifact_is_deleted(prov_dirs):
+    dec, lake, _, _ = prov_dirs
+    (dec / "r_full_gold.parquet").unlink()
+    assert any("thiếu file r_full_gold.parquet" in e for e in _check(dec, lake))
+
+
+def test_record_digests_refuses_overwrite_without_force(prov_dirs, capsys):
+    dec, _, _, _ = prov_dirs
+    target, manifest = dec / P.DIGEST_FILE, dec / "manifest.json"
+    before, manifest_before = target.read_bytes(), manifest.read_bytes()
+    main = _decompose_script().main
+    assert main(["--record-digests", "--out-dir", str(dec)]) == 2
+    assert target.read_bytes() == before
+
+    assert main(["--record-digests", "--force", "--out-dir", str(dec)]) == 0
+    doc = P.read_digests(dec)
+    assert doc["recorded_after_run"] is True
+    assert set(doc["sha256"]) == set(P.artifact_names())
+    assert manifest.read_bytes() == manifest_before  # không sửa manifest
+    out = capsys.readouterr().out
+    assert doc["sha256"]["r_causal_gold.parquet"] in out
+
+
+def test_record_digests_stops_when_artifact_missing(prov_dirs):
+    dec, _, _, _ = prov_dirs
+    (dec / P.DIGEST_FILE).unlink()
+    (dec / "r_full_gold.parquet").unlink()
+    assert _decompose_script().main(["--record-digests", "--out-dir", str(dec)]) == 3
+    assert not (dec / P.DIGEST_FILE).exists()
+
+
+def test_force_requires_record_digests():
+    with pytest.raises(SystemExit):
+        _decompose_script().main(["--force"])
+
+
+def test_full_decompose_run_writes_digests_not_after_run(tmp_path, monkeypatch):
+    # Luồng tách thật trên dữ liệu tổng hợp nhỏ: digest ghi sau cùng, recorded_after_run = false
+    script = _decompose_script()
+    rng = np.random.default_rng(5)
+    frames = []
+    for a in C.ASSETS:
+        dates = calendars.sessions(ASSET_SPECS[a].calendar, "2013-06-01", "2014-03-31")
+        price = 100 + np.cumsum(rng.normal(0, 1, len(dates)))
+        frames.append(pd.DataFrame({"date": dates, "asset": a, "price": price}))
+    prices = pd.concat(frames, ignore_index=True)
+    clean = D.CleanData("2099-01-01", prices, prices.iloc[:0], {f: "x" for f in P.CLEAN_FILES})
+    monkeypatch.setattr(script, "read_clean", lambda *_: clean)
+    monkeypatch.setattr(script.C, "ceemdan_config", lambda: CFG)
+    assert script.main(["--limit", "2", "--processes", "1", "--out-dir", str(tmp_path)]) == 0
+    out = tmp_path / "probe"
+    doc = P.read_digests(out)
+    assert doc["recorded_after_run"] is False
+    assert P.check_digests(out) == []
+    manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["git"]["git_status"] in ("ok", "unavailable")
+
+
+def _fail_oserror(*_a, **_k):
+    raise OSError("git not found")
+
+
+def _fail_called(*_a, **_k):
+    raise subprocess.CalledProcessError(128, "git")
+
+
+@pytest.mark.parametrize("fake", [_fail_oserror, _fail_called])
+def test_git_info_unavailable_is_not_reported_clean(monkeypatch, fake):
+    train, decompose = _train_script(), _decompose_script()  # import trước khi thay subprocess.run
+    monkeypatch.setattr(subprocess, "run", fake)
+    expected = {"commit": None, "dirty": None, "git_status": "unavailable"}
+    assert P.git_info() == expected
+    # cả hai script dùng chung hàm này
+    assert train.git_info() == expected
+    assert decompose.git_info() == expected
+    assert P.git_label(None) == "unknown"
+
+
+def test_git_info_unavailable_when_only_status_fails(monkeypatch):
+    def fake(cmd, **_k):
+        if "status" in cmd:
+            raise subprocess.CalledProcessError(128, "git")
+        return subprocess.CompletedProcess(cmd, 0, stdout="abc\n")
+
+    monkeypatch.setattr(subprocess, "run", fake)
+    assert P.git_info()["dirty"] is None
+
+
+@pytest.mark.parametrize(("stdout", "dirty"), [("", False), (" M x.py\n", True)])
+def test_git_info_ok(monkeypatch, stdout, dirty):
+    def fake(cmd, **_k):
+        return subprocess.CompletedProcess(cmd, 0, stdout="abc\n" if "log" in cmd else stdout)
+
+    monkeypatch.setattr(subprocess, "run", fake)
+    assert P.git_info() == {"commit": "abc", "dirty": dirty, "git_status": "ok"}
