@@ -2,7 +2,7 @@
 
 - Ngày: 31/10/2026; sửa 2/11/2026 theo review của Long ở #75
 - Người viết: Khải (bản nháp do Claude soạn); người duyệt: Long
-- Trạng thái: **Bản nháp.** Long approve, merge, rồi mới viết hoặc chạy code. Sau khi chốt, không đổi mô hình, dữ liệu, chỉ số hay cách dùng kết quả; thay đổi (nếu có) ghi thành mục mới có ngày, kèm lý do, trước khi chạy.
+- Trạng thái: **Đã chốt (#75).** PR #75 đã được review, approve và merge vào `developer` ngày 03/11/2026 lúc 09:59 UTC theo xác nhận của nhóm; giao thức mô hình, chỉ số, bootstrap và phạm vi test đã khóa. Snapshot DT và SHA-256 tại mục 8 được hoàn thiện theo quy tắc đã định trước, không phải thay đổi giao thức sau khi xem kết quả. Runner PR #85 có quy trình review/merge riêng; cập nhật tài liệu này không xác nhận trạng thái phê duyệt của runner. Chưa thực hiện lần chạy test2020 chính thức. Mọi thay đổi mới phải ghi ngày, lý do và được review trước khi chạy.
 - Căn cứ: ADR-0008 (chia dữ liệu, chỉ số), ADR-0010 (S1a), ADR-0011 (champion/challenger), ADR-0012 (dừng dò mô hình), họp 30/10 điểm 19 và 21.
 
 ## 0. Mục đích
@@ -91,14 +91,43 @@ Kết luận chính chỉ dựa trên mục 3.1 (block 20, mẫu `all`); các m�
 - Code runner: trước 15/11.
 - Chạy: tuần 16–22/11, trước đóng băng.
 
-## 8. Ghi trước khi chạy (cách xác định đã chốt ở mục 2 và 6; giá trị điền lúc claim)
+## 8. Ghi trước khi chạy (quy tắc tại mục 2 và 6; snapshot đã khóa, execution metadata khóa trước lần chạy)
 
-- DT của bản clean: …
-- SHA-256 bản clean: …
-- Commit chạy: …
-- `config_hash`: …
+### 8.1. Snapshot clean đã khóa
+
+- Mốc khóa snapshot: `2026-11-03T09:59:00Z`, thời điểm merge PR #75 theo xác nhận của nhóm. Đây là mốc chọn snapshot, **khác** target cutoff `2026-10-23` của evaluation.
+- DT đã chọn: **`2026-10-31`**.
+- S3 prefix: `s3://cpaws-dev-lake/clean/prices/dt=2026-10-31/`.
+- S3 Versioning: **Enabled**, theo kết quả kiểm tra S3 do người cung cấp bằng chứng xác nhận.
+- Cả ba object dưới đây có `LastModified=2026-10-31T12:15:43Z`; không có delete marker của snapshot được chọn theo lịch sử S3 đã được đối chiếu.
+
+| File | SHA-256 của raw bytes | VersionId | Size (bytes) |
+|---|---|---|---:|
+| `prices.parquet` | `49dfc745881a38a07bd40b5f722bb2d3f123a7ea0aa1d197fd12ea1ccc954473` | `XSqcFlfGvDZzMrQk43NorSBIYKmgnV4J` | 201081 |
+| `rejected.parquet` | `630dbe9889e5d1d0d215c01f8c3a34e951f1a6d3f12bd5ba7fe261484e388f2e` | `YOzT5FhCZXmjBXH26a0zYdiwEe_A9TBU` | 5693 |
+| `quality.json` | `cca4fd293c81028af8948420769638ba5b4c93379be74db7f91d5d6067584f30` | `z2kWzgePRwjaMMtLbH_FB4bvKthytYdl` | 13934 |
+
+S3 URI của các object đã khóa:
+
+- `s3://cpaws-dev-lake/clean/prices/dt=2026-10-31/prices.parquet`
+- `s3://cpaws-dev-lake/clean/prices/dt=2026-10-31/rejected.parquet`
+- `s3://cpaws-dev-lake/clean/prices/dt=2026-10-31/quality.json`
+
+**Bằng chứng lựa chọn tại mốc khóa.** Theo lịch sử object versions đã được người cung cấp bằng chứng kiểm tra bằng AWS CLI, snapshot `dt=2026-11-03` chỉ có ba version tạo lúc `2026-11-03T12:15:28Z`, sau mốc `09:59:00Z`, nên bị loại. Snapshot đầy đủ ba file mới nhất đã tồn tại tại mốc khóa là `dt=2026-10-31`. Ba file được tải theo đúng VersionId nêu trên; manifest `snapshot-sha256.json` do người cung cấp bằng chứng bàn giao ghi S3 key, VersionId, SHA-256 và kích thước. Kiểm tra offline ngày 04/11/2026 đã băm lại raw bytes và đối chiếu kích thước cả ba file: đều khớp manifest. Không dùng ETag thay SHA-256, không giải mã Parquet hoặc đánh giá dữ liệu. Bằng chứng lịch sử S3/Versioning/LastModified do người cung cấp xác nhận; kiểm tra offline không được diễn giải thành một lần xác minh S3 trực tuyến độc lập.
+
+**Metadata clean và lineage.** `quality.json` ghi `run.run_at_utc=2026-10-31T12:15:20+00:00` (tương đương `2026-10-31T12:15:20Z`) và `status=ok`. `run.fetch_log` ghi bốn chuỗi target từ yfinance: gold→GLD, silver→SLV, wti→CL=F, brent→BZ=F. Log cũng ghi dữ liệu tham chiếu EIA (RWTC, RBRTE) và nguồn phụ trợ yfinance (VND=X, GC=F, SI=F), NBP (nbp_gold); các nguồn này không thay chuỗi target đã chốt.
+
+**Lineage còn thiếu:** chưa có bằng chứng xác minh Git commit của pipeline `src/data/` đã tạo snapshot. Không suy commit từ timestamp, VersionId hoặc hash dữ liệu. Nhóm cần bổ sung full commit và audit reference liên kết đúng lần clean trước claim chính thức. Khóa DT/bytes không đồng nghĩa đã hoàn tất toàn bộ provenance hoặc sẵn sàng chạy test.
+
+### 8.2. Thông tin sẽ khóa trước lần chạy chính thức
+
+- Runner commit sạch: chưa khóa; chỉ điền sau khi runner và protocol cuối cùng được review/merge.
+- `config_hash`: chưa tính/chưa khóa; chỉ tính sau khi PR cập nhật tài liệu này đã merge và runner được freeze. Không tính hash chính thức trong lần sửa tài liệu này.
+- Seed: ghi giá trị đã được review trong locked runner config và execution metadata trước claim; không tự chọn, đổi hoặc suy giá trị từ snapshot.
+- Execution metadata theo mục 6: đủ lineage (bao gồm commit `src/data/` còn thiếu), snapshot DT/ba SHA-256, mốc cắt, block, B, seed, runner commit, `config_hash`, người chạy và thời điểm; lưu môi trường theo quy tắc đã chốt. Không tạo claim hoặc bắt đầu evaluation khi các điều kiện còn thiếu.
 
 ## 9. Sửa đổi
 
+- 04/11/2026 (hoàn thiện metadata và xác nhận chính sách hiện hành; cần Khải review trong PR cập nhật tài liệu): khóa snapshot `dt=2026-10-31` theo mốc merge #75 `2026-11-03T09:59:00Z` và bằng chứng tại mục 8. Nhóm chấp nhận dùng DM calendar-gap policy đang được triển khai trong `walk_forward.py` cho test2020: với h > 1, DM bị chặn nếu chuỗi ngày đánh giá có internal session gaps; nhóm bị chặn phải được ghi nhận undefined/không đủ điều kiện, không phát sinh p-value giả. Chính sách amplitude-modulated đã được đặc tả trong Accuracy Schema nhưng chưa phải implementation đang sử dụng. Giữ nguyên chuỗi `DM_GAP_POLICY=block_internal_session_gaps_for_h_gt_1_pending_Khai_review`, không đổi tên chỉ để cập nhật trạng thái; không sửa `walk_forward.py`, `metrics.py` hoặc thuật toán DM. Quyết định này xác nhận phương pháp hiện hành cho lần chạy, không tạo phương pháp kiểm định mới và không tuyên bố Khải đã approve PR cập nhật này. Tham chiếu: [Walk-forward implementation](../../src/eval/walk_forward.py), [Accuracy Schema](../api/accuracy-schema.md).
 - 3/11/2026 (review Long lần 2, #75): p-value đổi sang bootstrap căn giữa theo H0; Holm áp trên p-value này; CI percentile chỉ để mô tả.
 - 2/11/2026 (review Long, #75): chốt định nghĩa chỉ số chính (trung bình 7 skill theo h, mặt nạ chung, xử lý undefined); bootstrap dùng chung kế hoạch rút mẫu, 4 giả thuyết một phía, p-value và Holm; bất biến S1a; khóa DT/SHA-256/lineage trong `claim.json`, giới hạn PIT; WTI 20/4/2020; quy trình khi chạy lỗi; B từ 1000 lên 2000; tách rõ chỉ số phụ và báo cáo bổ sung.
