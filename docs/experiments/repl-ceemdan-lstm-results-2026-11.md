@@ -1,9 +1,9 @@
 # Minh họa CEEMDAN + LSTM theo ý tưởng của Cao et al. (2019): kết quả trên 2017–2018
 
-- Ngày chạy: 3/11/2026. Người viết: Khải (bản nháp do Claude Code soạn). Người duyệt: Long.
+- Ngày chạy: 3/11/2026; sửa tài liệu 4/11/2026 theo review của Long ở #83 (không chạy lại). Người viết: Khải (bản nháp do Claude Code soạn). Người duyệt: Long.
 - Kế hoạch: `docs/experiments/ceemdan-lstm-replication-plan.md` (#75); quyết định của Khải ngày 3/11 cho bước 1 và bước 2.
 - **Đây là minh họa, không phải thí nghiệm chọn mô hình.** Kết quả không đổi champion, không thêm challenger, không mở lại ADR-0012 (kế hoạch mục 0, 5).
-- **Chỉ dùng dữ liệu ≤ 2018-12-31**; không đọc validation 2019 hay test 2020 → nay. Mọi siêu tham số đã đóng băng trước khi chạy. Chạy đúng một lần, không chỉnh hay chạy lại sau khi xem số 2017–2018.
+- **Chỉ dùng dữ liệu ≤ 2018-12-31**; không đọc validation 2019 hay test 2020 → nay. Mọi siêu tham số đã đóng băng trước khi chạy. Chạy hai lần với cùng tham số: lần đầu trên code chưa commit, lần sau trên commit sạch để chứng minh nguồn gốc, kết quả trùng từng bit (mục 9). Không chỉnh gì sau khi xem số 2017–2018.
 - Báo cáo chỉ có số tổng hợp, không có giá hay giá trị IMF thô.
 
 ## 1. Tóm tắt
@@ -12,9 +12,9 @@
 |---|---|
 | 1. Đo kiểu bài báo (sai số trên mức giá, một bước tới), CEEMDAN + LSTM có trông tốt hơn naive không? | **Có, nhưng chỉ với R-full trên vàng và bạc:** MAE trên mức giá khoảng một nửa naive (0,49 và 0,48 lần). Với dầu thì R-full thua naive. R-causal thua naive ở cả 4 tài sản (1,59–1,80 lần). |
 | 2. Đo theo ADR-0008 trên log return, lợi thế đó còn không? | **Chỉ còn ở R-full vàng/bạc**, với `pinball_skill` +0,48/+0,52 và đúng chiều 84–86%. Mức "quá tốt" này là dấu hiệu rò rỉ mà skill `leakage-safe-forecasting` dặn phải kiểm tra trước (đúng chiều > 60%). Bản nhân quả R-causal thua naive và thua baseline-q252 ở cả 4 tài sản: `mae_ratio_vs_naive` 1,56–1,80, `pinball_skill` −0,58 đến −1,20, DM p < 1e-19. |
-| 3. Hai giao thức tách chuỗi khác nhau thế nào? | Với kim loại, khác biệt rất lớn: R-full thắng naive khoảng 2 lần, R-causal thua naive khoảng 1,6–1,8 lần. Với dầu, cả hai đều thua naive. Thành phần tại cùng ngày gốc lệch nhiều giữa hai giao thức: tương quan IMF1 chỉ 0,33–0,40. **Không quy toàn bộ chênh lệch cho rò rỉ** (mục 7). |
+| 3. Hai giao thức tách chuỗi khác nhau thế nào? | Với kim loại, khác biệt rất lớn: R-full thắng naive khoảng 2 lần, R-causal thua naive khoảng 1,6–1,8 lần. Với dầu, cả hai đều thua naive. Thành phần tại cùng ngày gốc lệch nhiều giữa hai giao thức: tương quan IMF1 chỉ 0,33–0,40. **R-full và R-causal khác cả rò rỉ lẫn độ dài chuỗi đưa vào CEEMDAN, nên không quy toàn bộ chênh lệch cho rò rỉ** (mục 8). |
 
-Thông điệp cho slide: cách đo trên mức giá cùng giao thức tách toàn chuỗi cho kết quả đẹp. Khi chỉ dùng dữ liệu có thật tại t, như sản phẩm buộc phải làm, lợi thế mất hẳn.
+Thông điệp cho slide: cách đo trên mức giá cùng giao thức tách toàn chuỗi cho kết quả đẹp bất thường ở 2/4 tài sản (vàng, bạc). Khi chỉ dùng dữ liệu có thật tại t, như sản phẩm buộc phải làm, lợi thế đó mất hẳn. Slide giữ nguyên lưu ý: hai giao thức khác cả rò rỉ lẫn độ dài chuỗi đưa vào CEEMDAN, nên không quy toàn bộ chênh lệch cho rò rỉ.
 
 ## 2. Thiết lập
 
@@ -73,7 +73,9 @@ Ngày gốc bị loại: mỗi ngày tính một lý do, theo thứ tự ưu ti�
   - phân vị chỉ phụ thuộc phần dư đoạn hiệu chỉnh;
   - cùng seed cho trọng số trùng từng bit;
   - P̂ ≤ 0 được đếm là lỗi, không bị thay;
-  - bất biến theo tiền tố của R-causal.
+  - bất biến theo tiền tố của R-causal;
+  - manifest hoặc digest bản tách thiếu, sai, hay một parquet bị sửa một byte thì báo lỗi;
+  - lệnh git lỗi thì `dirty` là `None`, không báo nhầm là sạch.
 
 ## 5. Chỉ số theo ADR-0008 (log return h = 1, ngày gốc 2017–2018)
 
@@ -162,7 +164,7 @@ Sai lệch tuyệt đối trung bình được chia cho giá trung bình của t
 
 ## 8. Giới hạn
 
-1. **R-full cố ý tách toàn chuỗi 2012–2018 trước khi chia tập**, nên mọi giá trị thành phần (cả đầu vào lẫn target) chứa thông tin sau ngày gốc. Tuy vậy, 2017–2018 không được dùng để fit, chuẩn hóa, early stopping hay hiệu chỉnh phân vị.
+1. **R-full cố ý tách toàn chuỗi 2012–2018 trước khi chia tập**, nên mọi giá trị thành phần (cả đầu vào lẫn target) chứa thông tin sau ngày gốc. 2017–2018 không được dùng để fit, chuẩn hóa, early stopping hay hiệu chỉnh phân vị, nhưng thông tin của giai đoạn này vẫn đi vào đầu vào và target của R-full qua bước tách.
 2. **Câu 3 chỉ so sánh hai giao thức, không quy toàn bộ chênh lệch cho rò rỉ.** R-full và R-causal khác cả việc dùng dữ liệu tương lai lẫn độ dài lịch sử đưa vào CEEMDAN (toàn chuỗi khoảng 1.750 dòng so với 252 dòng). Muốn tách riêng phần rò rỉ thì cần thêm đối chứng nhân quả với cửa sổ mở rộng; ngoài phạm vi (kế hoạch mục 1).
 3. **Số mô hình không bằng nhau:** R-raw có 1 LSTM mỗi tài sản, R-full và R-causal có 4. Chênh lệch giữa R-raw và hai bản có tách gồm cả tác dụng của việc có nhiều mô hình hơn (kế hoạch mục 3.4).
 4. **Cửa sổ chỉ có 3 IMF** (gold 2, wti 3, brent 21): ở các cửa sổ này thành phần "rest" chỉ còn residue, nên ý nghĩa của nó không đồng nhất giữa các cửa sổ (như K3).
@@ -172,8 +174,34 @@ Sai lệch tuyệt đối trung bình được chia cho giá trung bình của t
 6. **R-full của dầu thua naive dù có rò rỉ.** Vì vậy kết luận là R-full **"đẹp bất thường ở 2/4 tài sản"** (vàng, bạc), không phải "luôn thắng". Báo cáo không phân tích nguyên nhân và không chạy thêm thí nghiệm (kế hoạch mục 5).
 7. Ba seed chỉ cho thấy độ dao động, không chứng minh tính ổn định. Kết quả chỉ trên 2017–2018 với h = 1.
 8. Chạy trên CPU (máy không có torch CUDA). Kết quả tất định trên máy này. Chưa so với chạy trên GPU hay nền tảng khác.
+9. **Cấu hình CEEMDAN không độc lập hoàn toàn với 2019.** Cấu hình `w252` K3 (window 252, K = 3) kế thừa từ K3, mà K3 đã chọn cấu hình bằng validation 2019 (ADR-0009). Lần minh họa này không đọc dòng nào của 2019, nhưng việc chọn cấu hình không độc lập hoàn toàn với 2019.
+10. **Phạm vi của "chỉ dùng dữ liệu ≤ 2018":** SHA-256 băm cả file clean (gồm dòng sau 2018); pyarrow có thể giải mã cả row group trước khi lọc, nhưng code không nhận dòng nào sau 2018-12-31.
 
-## 9. Tái lập
+## 9. Dòng thời gian và đăng ký trước
+
+Mọi mốc trong ngày 3/11/2026, giờ UTC.
+
+| Mốc | Sự kiện | Nguồn |
+|---|---|---|
+| 09:59 | #75 merge (kế hoạch: biến thể, cấu hình LSTM, seed, cách chia, chỉ số), trước mọi commit code | `mergedAt` của #75, `42d9bb4` |
+| 10:25 | `d7d7bb1`: `config.py` với `LSTM`, `SEEDS`, `SPLIT`, `SEQ_LEN`, trước khi train | `git log` |
+| 10:25 | `507a6d8`: code tách CEEMDAN | `git log` |
+| 10:29–10:56 | Tách CEEMDAN đầy đủ trên `507a6d8` (`dirty: false`) | `manifest.json`, thời gian sửa của 8 file |
+| 11:12–11:18 | Lần chạy đầu: train và đo trên code chưa commit (`dirty: true`), lần đầu thấy số 2017–2018 | `results-dirty/summary.json`, `env.txt` (có trên S3, mục 10) |
+| 11:25 | `1854f5b`–`fff4f32`: commit code đó nguyên trạng | `git log` |
+| 11:27–11:31 | Chạy lại trên `fff4f32` sạch (`dirty: false`) | `results/summary.json`, `env.txt` |
+
+- **Khóa cấu hình:** tham số đã khóa ở #75 và `d7d7bb1`, trước lần đọc kết quả đầu tiên. `git diff d7d7bb1 fff4f32 -- src/experiments/repl_ceemdan_lstm/config.py` rỗng, nghĩa là cấu hình không đổi sau khi xem kết quả.
+- **Hai lần chạy:** `dataset.py`, `model.py`, `evaluate.py` được commit sau khi đã có số của lần đầu. Vì vậy bằng chứng rằng không có chỉnh sửa là kết quả từ code đã commit trùng từng bit với lần đầu:
+  - diagnostics, metrics, predictions, price_metrics có cùng SHA-256;
+  - `train_log` chỉ khác cột `seconds`;
+  - `env.txt` chỉ khác `date_utc`.
+- **Mục đích và phạm vi chạy lại:** chứng minh kết quả đến đúng từ code đã commit. Không đổi tham số nào, không tách lại CEEMDAN.
+- **Lịch chạy:** chạy sớm hơn lịch §7 của kế hoạch (9–15/11); đây là lệch so với lịch đã ghi. Lý do: #75 đã merge ngày 3/11, việc này không phụ thuộc ai, và cần kết quả cho bản nháp báo cáo cuối. Không dùng dữ liệu sau 2018.
+- **Sửa ngày 4/11 (review #83):** chỉ thêm kiểm tra nguồn gốc (`check_manifest`, `--record-digests`, `git_info`), test và tài liệu. Không đổi code xử lý dữ liệu, mô hình hay chỉ số; không chạy lại; số trong báo cáo vẫn là của `fff4f32`.
+- **`dirty` đã ghi:** `manifest.json` và `summary.json` hiện có được tạo trước khi có trường `git_status`. Cả hai có `commit` khác rỗng, tức lệnh git chạy được lúc đó.
+
+## 10. Tái lập
 
 - Bước 1 (tách CEEMDAN): commit `507a6d8`. Manifest `data/eval/repl-ceemdan-lstm/manifest.json`: `cfg_hash` `4c3229533ae3`; SHA-256 bản clean khớp; R-causal gold 1.258, silver 1.258, brent 1.254, wti 1.256 cửa sổ; R-full đủ 4 tài sản.
 - Bước 2 (train và đo): commit `fff4f328950ed5b66b31879de451228620b2a96c`.
@@ -185,7 +213,7 @@ Sai lệch tuyệt đối trung bình được chia cho giá trung bình của t
   python scripts/repl_ceemdan_train.py --device cpu --smoke
   python scripts/repl_ceemdan_train.py --device cpu
   ```
-- Kết quả trong `data/eval/repl-ceemdan-lstm/results/` (không commit; bản tải lên S3 là bản của lần chạy sạch). SHA-256 lấy từ `results/summary.json` của lần chạy sạch trên `fff4f32`:
+- Kết quả trong `data/eval/repl-ceemdan-lstm/results/` (không commit; đây là bản của lần chạy sạch, kết quả lần chạy đầu nằm riêng ở `results-dirty/`). SHA-256 lấy từ `results/summary.json` của lần chạy sạch trên `fff4f32`:
 
 | File | SHA-256 |
 |---|---|
@@ -198,7 +226,24 @@ Sai lệch tuyệt đối trung bình được chia cho giá trung bình của t
 
   So với lần chạy đầu: diagnostics, metrics, predictions, price_metrics trùng từng bit; train_log khác cột `seconds`, env.txt khác dòng `date_utc`.
 
+- Bản tách CEEMDAN: SHA-256 của 8 file, lấy từ `artifacts_sha256.json`, **ghi sau khi chạy, 4/11** (`recorded_at` 2026-11-04T04:02:30Z, `recorded_after_run: true`, bằng `--record-digests`, không tách lại). Bản tách được tạo ngày 3/11, thời gian sửa của 8 file là 10:35–10:56 UTC, trước lần train đầu. Digest ghi sau chỉ khóa nội dung file từ 4/11 trở đi; đối chiếu độc lập là bản trên S3 (dưới đây).
+
+| File | SHA-256 |
+|---|---|
+| r_causal_gold.parquet | `d5bef80d99f79b98bdbb00e7f7f919f4690eb4c0b01592a12b3e99dd42ac0ea2` |
+| r_causal_silver.parquet | `4762a05a0d65d526809e8247daa76940c1273bb456f0003b2473e398e97d8832` |
+| r_causal_brent.parquet | `1d3d6fa8050bdba7167fb5871cb432dc2cf1000584e4ac6c64e862e11f869c98` |
+| r_causal_wti.parquet | `408bb86e1a91d674a25fc7bb821e73a266090ca2e830805a2aea283b480f564b` |
+| r_full_gold.parquet | `2f329b0d4cb6486b35632da490c46cc75e13a019d9ceaa8906a1d9d21e6ab006` |
+| r_full_silver.parquet | `faa3d35dc5772b017b1f936d68fe49097f006bfa68b06e38d0a82a07f88475f4` |
+| r_full_brent.parquet | `1819eb4fd2e0c25e7996c31535c4690ec16c885cd8711baa241c06c1fdcc767d` |
+| r_full_wti.parquet | `d391e7a9de473a3696031dac5e17eb426927b82d4dfd3a8c9cc9f94c99eff04f` |
+
+- `check_manifest()` trên dữ liệu thật (4/11, chỉ băm file, không train): không lỗi.
+- Trên S3: `s3://cpaws-dev-lake/eval/repl-ceemdan-lstm/`, gồm `manifest.json`, `artifacts_sha256.json`, 8 file bản tách, `results/` (lần chạy sạch), `results-dirty/` (lần chạy đầu) và `probe/`.
+  - Đối chiếu SHA-256 với S3: 4/11/2026 (Khải): tải toàn bộ `s3://cpaws-dev-lake/eval/repl-ceemdan-lstm/` về và so SHA-256 với bản local: 34/34 file khớp (`manifest.json`, `artifacts_sha256.json`, 8 file bản tách, 7 file `results/`, 8 file `results-dirty/`, 9 file `probe/`). `probe/` là bản probe `--limit 20` của bước 1, không dùng cho mô hình.
+
 - `env.txt`:
   - torch 2.14.1+cpu, `torch.version.cuda = None`, `cuda.is_available() = False`; thiết bị cpu, 1 luồng; deterministic bật.
   - Máy có GPU RTX 4060 Laptop, driver 566.24, nhưng không dùng vì torch là bản CPU.
-- Mục 8 "Ghi trước khi chạy" của kế hoạch đã được điền sau khi chạy, theo manifest (CLEAN_DT, SHA-256 bản clean, `cfg_hash`, thời gian tách lại, kiểm chéo cache, commit).
+- Mục 8 "Thông tin lần chạy" của kế hoạch đã được điền sau khi chạy, theo manifest (CLEAN_DT, SHA-256 bản clean, `cfg_hash`, thời gian tách lại, kiểm chéo cache, commit).
