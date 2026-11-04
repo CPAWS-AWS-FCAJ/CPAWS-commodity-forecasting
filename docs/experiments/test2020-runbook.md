@@ -42,9 +42,19 @@ Xác nhận quyền đọc dữ liệu, nguồn gốc và độ sẵn sàng củ
 
 ## 6. IAM và phân quyền
 
-Tuấn phối hợp cấu hình và xác minh quyền AWS/S3 theo yêu cầu nhóm. Runner cần `s3:PutObject` trên `eval/test2020/*` của bucket quy định; **không cấp `s3:DeleteObject` trên prefix này**. Conditional put dùng `IfNoneMatch="*"`, không phải upload ghi đè. Người chuẩn bị snapshot cần quyền đọc đúng object/version; nếu dùng local snapshot đã chuẩn bị, runner không tự tải snapshot thay thế.
+Tuấn phối hợp cấu hình và xác minh quyền AWS/S3 theo yêu cầu nhóm. Runner cần `s3:PutObject` trên `eval/test2020/*` của bucket quy định; **`s3:DeleteObject` và `s3:DeleteObjectVersion` bị chặn theo IAM policy**. Conditional put dùng `IfNoneMatch="*"`, không phải upload ghi đè. Người chuẩn bị snapshot cần quyền đọc đúng object/version; nếu dùng local snapshot đã chuẩn bị, runner không tự tải snapshot thay thế.
 
-Xác nhận credentials, bucket/prefix và quyền phù hợp trước cửa sổ chạy. Không thay IAM/CDK bằng gói sửa này; IAM thực cần được chủ sở hữu kiểm chứng riêng. Không xóa claim hoặc artifact để mở lại lượt chạy.
+**Kiểm tra IAM thực tế ngày 04/11/2026 (Long): PASS 3/3.** Dùng AWS CLI profile `cpaws-dev` với phiên đăng nhập MFA, kiểm tra object `s3://cpaws-dev-lake/eval/test2020/_iam-check-2026-11-04.txt`:
+
+1. `PutObject` với `IfNoneMatch="*"`: **PASS**, upload thành công, VersionId `QMi2c8lwTbQb.LwftsEvvW6sg5UTGCQG`.
+2. Upload lại cùng key với `IfNoneMatch="*"`: **PASS**, nhận `PreconditionFailed` (HTTP 412), xác nhận cơ chế chống ghi đè.
+3. `DeleteObject` trên cùng key: **PASS**, nhận `AccessDenied` với explicit deny trong identity-based policy.
+
+File thử `_iam-check-2026-11-04.txt` được giữ lại trên S3 vì quyền xóa bị chặn. Đây là object kiểm tra riêng, **không trùng các artifact chính thức của runner** (`claim.json`, `started.json`, `failure.json`, `checksums.json`, `summary.*`, `pairs.parquet`, `env.txt`). Không xóa hoặc tái sử dụng file thử để kiểm tra lần chạy chính thức.
+
+Kết quả trên xác minh thực tế quyền upload có điều kiện và chặn `DeleteObject`. Quyền `DeleteObjectVersion` đã được kiểm tra qua IAM Policy Simulator, chưa thử xóa version thực tế.
+
+Xác nhận lại credentials, MFA, bucket/prefix và quyền phù hợp trước cửa sổ chạy. Không thay IAM/CDK bằng PR #85. Không xóa claim hoặc artifact để mở lại lượt chạy.
 
 ## 7. Claim và chạy chính thức
 
