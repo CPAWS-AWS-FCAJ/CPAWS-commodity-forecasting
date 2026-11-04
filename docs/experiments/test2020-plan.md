@@ -137,14 +137,14 @@ Theo output toàn prefix, snapshot đầy đủ mới nhất tồn tại tại c
 
 **Metadata clean và lineage.** `quality.json` ghi `run.run_at_utc=2026-10-31T12:15:20+00:00` (tương đương `2026-10-31T12:15:20Z`) và `status=ok`. `run.fetch_log` ghi bốn chuỗi target từ yfinance: gold→GLD, silver→SLV, wti→CL=F, brent→BZ=F. Log cũng ghi dữ liệu tham chiếu EIA (RWTC, RBRTE) và nguồn phụ trợ yfinance (VND=X, GC=F, SI=F), NBP (nbp_gold); các nguồn này không thay chuỗi target đã chốt.
 
-Lineage `data_commit` của Lambda `cpaws-dev-ingest` tại lần clean 31/10 đang chờ xác minh full Git SHA và deployment reference từ Tuấn/Tiến; phải hoàn tất trước official claim.
+**Deployment lineage đã xác minh.** Lambda `cpaws-dev-ingest` tạo snapshot `dt=2026-10-31` từ `data_commit=5cfde32758827ad76839052e4476975f6058b4d0`, image tag `5cfde32` (`DEFAULT_INGEST_IMAGE_TAG`), ECR digest `sha256:e47a9695b077ed069fe367be0cd01c0b18efb718ea6e774da5df47c81bc54ce9` (pushed `2026-10-28T05:34:31Z`). CloudTrail ghi `UpdateFunctionCode` lúc `2026-10-28T05:53:07Z`, EventID `33fa5644-16b6-4cd3-b586-93897a469d2e`; CloudFormation stack `CpawsData`, resource `IngestFunction4B2F2EB2` đạt `UPDATE_COMPLETE` lúc `2026-10-28T05:53:22Z`. Đối chiếu CloudTrail `CreateFunction`/`UpdateFunctionCode` từ 27/10 đến 04/11 không phát hiện cập nhật code mới trước lượt ingest 31/10. CloudWatch log group `/aws/lambda/cpaws-dev-ingest`, RequestId `3b6ae5db-c441-4a2f-8abf-b339dfa08659`, ghi START `2026-10-31T12:15:19.436Z` và `INGEST_DONE` lúc `2026-10-31T12:15:42.799Z`, status `ok`, written `16`; ba object snapshot có `LastModified=2026-10-31T12:15:43Z`, ngay sau thời điểm hoàn tất ingest. Tiến xác minh các bằng chứng ECR, CloudTrail, CloudFormation, Lambda và CloudWatch Logs ngày 04/11/2026 khoảng 08:00 UTC bằng profile `cpaws-dev`.
 
 ### 8.2. Thông tin sẽ khóa trước lần chạy chính thức
 
 - Runner commit sạch: chưa khóa; chỉ điền sau khi runner và protocol cuối cùng được review/merge.
 - `config_hash`: chưa tính/chưa khóa; chỉ tính sau khi PR cập nhật tài liệu này đã merge và runner được freeze. Không tính hash chính thức trong lần sửa tài liệu này.
 - Seed: ghi giá trị đã được review trong locked runner config và execution metadata trước claim; không tự chọn, đổi hoặc suy giá trị từ snapshot.
-- Execution metadata theo mục 6: đủ lineage (bao gồm commit `src/data/` còn thiếu), snapshot DT/ba SHA-256, mốc cắt, block, B, seed, runner commit, `config_hash`, người chạy và thời điểm; lưu môi trường theo quy tắc đã chốt. Không tạo claim hoặc bắt đầu evaluation khi các điều kiện còn thiếu.
+- Execution metadata theo mục 6: `data_commit` và deployment lineage đã được xác minh tại §8.1. Vẫn phải kiểm tra metadata hoàn chỉnh trước claim: lineage, snapshot DT/ba SHA-256, mốc cắt, block, B, seed, runner commit, `config_hash`, người chạy và thời điểm; lưu môi trường theo quy tắc đã chốt. Runner commit và `config_hash` vẫn chưa khóa; không tạo claim hoặc bắt đầu evaluation khi các điều kiện còn thiếu.
 
 ## 9. Sửa đổi
 
