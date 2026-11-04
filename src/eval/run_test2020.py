@@ -6,7 +6,7 @@ Official usage (only Long after review/merge):
 Metadata schema is REQUIRED_METADATA in configs/test2020.py. snapshot_sha256 maps
 all three SNAPSHOT_FILES to raw-file SHA256. lineage contains source='yfinance',
 symbols={asset: target}, data_commit=<40 hex>, reference=<reviewed audit ref>.
-config_hash is protocol_hash() computed/reviewed BEFORE opening test data.
+config_hash is protocol_hash(commit) computed/reviewed BEFORE opening test data.
 No retry/resume command. Once claim succeeds any failure consumes the attempt.
 Synthetic API takes in-memory frames; its results are labelled synthetic and never
 written to official storage. Internal report schema v1 is not Accuracy/public API.
@@ -19,6 +19,7 @@ import hashlib
 import io
 import json
 import logging
+import os
 import re
 import subprocess
 import sys
@@ -29,12 +30,14 @@ from types import SimpleNamespace
 import numpy as np
 import pandas as pd
 
+from configs import k3b as K3B
 from configs import test2020 as C
 from src.data import calendars
 from src.data.config import ASSETS
 from src.eval import metrics as M
 from src.eval import walk_forward as W
 from src.forecast import baselines as B
+from src.forecast import vol_scale_core
 from src.forecast.returns import horizon_log_returns, normalize_quantiles, prob_up
 from src.forecast.vol_scale_core import scale_quantiles
 from src.forecast.vol_scaled import vol_ratio
@@ -53,23 +56,59 @@ def sha(raw):
     return hashlib.sha256(raw).hexdigest()
 
 
-def protocol_hash():
-    # Bind helpers/calendars/plan as well as this runner, not just CLI options.
+def serialize_json_bytes(payload):
+    """Artifact wire format: deterministic UTF-8 JSON with exactly one final LF."""
+    return encoded(payload) + b"\n"
+
+
+def git_bytes(*args):
+    return subprocess.run(["git", *args], cwd=ROOT, check=True, capture_output=True).stdout
+
+
+def valid_commit(commit):
+    if not isinstance(commit, str) or not re.fullmatch(r"[0-9a-f]{40}", commit):
+        raise ValueError("invalid full commit SHA")
+    return commit
+
+
+def protocol_hash(commit):
+    """Hash the same src/configs Python files and plan, from locked Git blobs.
+
+    Enumerating the committed tree makes both the file set and bytes reproducible
+    without checkout newline conversion. No working-tree fallback is permitted.
+    """
+    valid_commit(commit)
+    plan = "docs/experiments/test2020-plan.md"
     paths = sorted(
-        [
-            *ROOT.joinpath("src").rglob("*.py"),
-            *ROOT.joinpath("configs").rglob("*.py"),
-            ROOT / "docs/experiments/test2020-plan.md",
-        ]
+        p
+        for p in git_bytes(
+            "ls-tree", "-r", "--name-only", "-z", commit, "--", "src", "configs", plan
+        )
+        .decode("utf-8")
+        .split("\0")
+        if p == plan or (p.startswith(("src/", "configs/")) and p.endswith(".py"))
     )
+    if (
+        plan not in paths
+        or not any(p.startswith("src/") for p in paths)
+        or not any(p.startswith("configs/") for p in paths)
+    ):
+        raise ValueError("committed protocol file set unavailable")
     return sha(
         encoded(
             {
                 "protocol": C.protocol(),
-                "code": {p.relative_to(ROOT).as_posix(): sha(p.read_bytes()) for p in paths},
+                "code": {p: sha(git_bytes("show", f"{commit}:{p}")) for p in paths},
             }
         )
     )
+
+
+def validate_s1a_constants():
+    if C.S1A_LAMBDA != K3B.S1_LAMBDA["S1a"]:
+        raise ValueError("S1a lambda configuration drift")
+    if C.K_CLIP != K3B.K_CLIP or C.K_CLIP != vol_scale_core.K_CLIP:
+        raise ValueError("S1a clip configuration drift")
 
 
 def settings(start, end, cutoff, reps=C.N_BOOTSTRAP):
@@ -134,6 +173,7 @@ def build_pairs(prices, rejected, cfg):
     each horizon separately, so use their underlying quantile_baseline and
     vol_ratio/scale_quantiles helpers without imposing that extra all-h gate.
     """
+    validate_s1a_constants()
     prices, rejected = prices.copy(), rejected.copy()
     for frame in (prices, rejected):
         frame["date"] = pd.to_datetime(frame.date)
@@ -164,8 +204,8 @@ def build_pairs(prices, rejected, cfg):
         )
         missing_prefix = np.concatenate(([0], np.cumsum(invalid_sessions)))
         vr = vol_ratio(prices, asset, base, C.S1A_LAMBDA, invalid)
-        if np.any(vr.valid & ((vr.k < C.K_CLIP[0]) | (vr.k > C.K_CLIP[1]))):
-            raise ValueError("S1a clip changed")
+        if np.any(vr.valid & ~np.isfinite(vr.k)):
+            raise ValueError("nonfinite S1a volatility factor on valid row")
         context = {"expiry": None, "roll": None}
         if asset in ("wti", "brent"):
             expiry, roll = W.roll_calendar(asset, cfg)
@@ -429,14 +469,20 @@ def bootstrap(pairs, cfg, block):
                     "by_horizon": by_h,
                 }
             )
-    primary = [r for r in result if r["sample"] == "all"]
-    assert len(primary) == 4
-    adjusted = M.holm_adjust(
-        [np.nan if r["bootstrap"]["p"] is None else r["bootstrap"]["p"] for r in primary]
-    )
-    for row, p in zip(primary, adjusted, strict=True):
-        row["p_holm"] = float(p) if np.isfinite(p) else None
-        row["report_significant"] = bool(p < C.ALPHA) if np.isfinite(p) else None
+    if block == C.BLOCK_LENGTH:
+        primary = [r for r in result if r["sample"] == "all"]
+        assert len(primary) == 4
+        adjusted = M.holm_adjust(
+            [np.nan if r["bootstrap"]["p"] is None else r["bootstrap"]["p"] for r in primary]
+        )
+        for row, p in zip(primary, adjusted, strict=True):
+            row["p_holm"] = float(p) if np.isfinite(p) else None
+            row["report_significant"] = bool(p < C.ALPHA) if np.isfinite(p) else None
+    else:
+        # Sensitivity is CI-only. Retain estimates/draws/CI, not hypothesis outputs.
+        for row in result:
+            for group in [row, *row["by_horizon"]]:
+                group["bootstrap"].pop("p", None)
     return {
         "block": block,
         "replicates": len(draws),
@@ -553,20 +599,28 @@ def run_synthetic(prices, rejected, *, start, end, cutoff, n_bootstrap=20):
 
 
 def git_provenance():
-    """ONLY invoked by explicitly requested official runs; tests mock this boundary."""
+    """Official preflight only; every subprocess is mocked in offline tests."""
 
     def git(*args):
-        return subprocess.run(
-            ["git", *args], cwd=ROOT, check=True, capture_output=True, text=True
-        ).stdout.strip()
+        return git_bytes(*args).decode("utf-8").strip()
 
-    commit = git("rev-parse", "HEAD")
+    commit = valid_commit(git("rev-parse", "HEAD"))
     if git("status", "--porcelain", "--untracked-files=all"):
         raise ValueError("dirty working tree")
-    git("merge-base", "--is-ancestor", commit, "refs/heads/developer")
+    git("fetch", "origin", "+refs/heads/developer:refs/remotes/origin/developer")
+    remote = valid_commit(git("rev-parse", "refs/remotes/origin/developer"))
+    try:
+        # Pin the resolved remote SHA: the ancestry proof and claim use one identity.
+        git("merge-base", "--is-ancestor", commit, remote)
+    except subprocess.CalledProcessError as exc:
+        if exc.returncode == 1:
+            raise ValueError("runner commit not merged into origin/developer") from exc
+        raise RuntimeError("remote developer ancestry verification failed") from exc
     for path in ("configs/test2020.py", "src/eval/run_test2020.py", "tests/test_run_test2020.py"):
         git("ls-files", "--error-unmatch", path)
-    return commit
+    if git("rev-parse", "HEAD") != commit or git("status", "--porcelain", "--untracked-files=all"):
+        raise ValueError("repository changed during preflight")
+    return {"commit": commit, "origin_developer_sha": remote}
 
 
 def validate_metadata(meta):
@@ -597,7 +651,8 @@ def validate_metadata(meta):
         or not lineage.get("reference")
     ):
         raise ValueError("snapshot lineage required")
-    if meta["config_hash"] != protocol_hash():
+    validate_s1a_constants()
+    if meta["config_hash"] != protocol_hash(meta["commit"]):
         raise ValueError("locked config/code hash mismatch")
     if C.DM_GAP_POLICY != W.DM_GAP_POLICY:
         raise ValueError("DM policy changed")
@@ -627,7 +682,7 @@ def load_snapshot(directory, meta):
 
 def write_json(path, data):
     with path.open("xb") as stream:
-        stream.write(encoded(data) + b"\n")
+        stream.write(serialize_json_bytes(data))
 
 
 def publish_file(s3, path):
@@ -653,8 +708,39 @@ def verified_result(directory):
     return json.loads((directory / "summary.json").read_text(encoding="utf-8"))
 
 
+COMMON_MASK_NOTE = (
+    "Test2020 dùng common mask riêng cho từng asset × horizon × sample. "
+    "Một origin thiếu horizon này không tự loại các horizon còn lại. "
+    "K3b s1_quantiles trước đây yêu cầu đủ cả bảy horizon, nên counts giữa hai workflow "
+    "không nhất thiết giống nhau. S(a) vẫn undefined nếu thiếu bất kỳ horizon nào "
+    "trong bảy horizon chính."
+)
+
+
+def failure_message(exc):
+    """Bounded diagnostic only; redact common credential forms before truncation."""
+    message = str(exc)
+    for name, value in os.environ.items():
+        if value and re.search(r"secret|token|password|credential|access_key", name, re.IGNORECASE):
+            message = message.replace(value, "[REDACTED]")
+    message = re.sub(r"(?i)(https?://)[^\s/@]+:[^\s/@]+@", r"\1[REDACTED]@", message)
+    message = re.sub(r"(?i)(https?://[^\s?]+)\?[^\s]+", r"\1?[REDACTED]", message)
+    message = re.sub(r"(?i)\bBearer\s+[^\s,;]+", "Bearer [REDACTED]", message)
+    message = re.sub(r"\b(?:AKIA|ASIA)[A-Z0-9]{16}\b", "[REDACTED]", message)
+    message = re.sub(
+        r"(?i)([\"']?(?:[\w-]*(?:secret|token|password|credential|access[_-]?key|api[_-]?key)[\w-]*)"
+        r"[\"']?\s*[:=]\s*)(?:\"[^\"]*\"|'[^']*'|[^\s,;]+)",
+        r"\1[REDACTED]",
+        message,
+    )
+    return " ".join(message.splitlines())[:500]
+
+
 def run_official(meta, clean_dir, output_root, *, s3=None):
+    provenance = git_provenance()
     validate_metadata(meta)
+    if provenance["commit"] != meta["commit"]:
+        raise ValueError("commit mismatch")
     clean_dir, output_root = Path(clean_dir).resolve(), Path(output_root).resolve()
     if clean_dir.name != "dt=" + meta["snapshot_dt"]:
         raise ValueError("snapshot directory DT mismatch")
@@ -663,23 +749,28 @@ def run_official(meta, clean_dir, output_root, *, s3=None):
     directory = output_root / "eval" / "test2020"
     if directory.exists():
         raise FileExistsError("local test2020 attempt already exists")
-    if git_provenance() != meta["commit"]:
-        raise ValueError("commit mismatch")
     if s3 is None:
         import boto3
         from botocore.config import Config
 
         s3 = boto3.client("s3", config=Config(retries={"total_max_attempts": 1}))
-    claim = {**meta, "protocol": C.protocol(), "claimed_at": datetime.now(UTC).isoformat()}
+    claim = {
+        **meta,
+        **provenance,
+        "protocol": C.protocol(),
+        "claimed_at": datetime.now(UTC).isoformat(),
+    }
+    claim_bytes = serialize_json_bytes(claim)
     directory.mkdir(parents=True, exist_ok=False)  # local exclusive reservation
     claimed = False
     try:
         # No source data, file hash, parquet metadata or prices read before this.
         s3.put_object(
-            Bucket=C.BUCKET, Key=C.PREFIX + "claim.json", Body=encoded(claim), IfNoneMatch="*"
+            Bucket=C.BUCKET, Key=C.PREFIX + "claim.json", Body=claim_bytes, IfNoneMatch="*"
         )
         claimed = True
-        write_json(directory / "claim.json", claim)
+        with (directory / "claim.json").open("xb") as stream:
+            stream.write(claim_bytes)
         write_json(
             directory / "started.json",
             {"run_id": C.RUN_ID, "started_at": datetime.now(UTC).isoformat()},
@@ -700,6 +791,8 @@ def run_official(meta, clean_dir, output_root, *, s3=None):
             "# Test2020 (one attempt)\n\n"
             + W.LIMITATION
             + "\n\nReporting only; no champion change.\n\n"
+            + COMMON_MASK_NOTE
+            + "\n\n"
             + "\n".join(
                 f"- {r['asset']}: S={r['value']}, Holm p={r.get('p_holm')}, reason={r['undefined_reason']}"
                 for r in result["primary"]["groups"]
@@ -713,6 +806,7 @@ def run_official(meta, clean_dir, output_root, *, s3=None):
         failure = {
             "run_id": C.RUN_ID,
             "error_type": type(exc).__name__,
+            "message": failure_message(exc),
             "automatic_retry": False,
             "claim_acquired": claimed,
             "failed_at": datetime.now(UTC).isoformat(),
