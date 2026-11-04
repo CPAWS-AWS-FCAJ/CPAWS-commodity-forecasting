@@ -1,0 +1,5 @@
+# Offline experiments (src/experiments/, e.g. repl-ceemdan-lstm). Not for Lambda images.
+# Keep this file ASCII-only: old pip on Windows reads it as cp1252.
+# torch: install the build that matches the machine (CPU or CUDA); do not add it to the
+# requirements files of the Lambda images.
+-r requirements-dlinear-training.txt

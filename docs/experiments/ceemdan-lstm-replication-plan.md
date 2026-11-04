@@ -1,8 +1,8 @@
-# Minh họa CEEMDAN + LSTM theo ý tưởng của Cao et al. (2019) cho buổi bảo vệ (bản nháp, làm sau demo 8/11)
+# Minh họa CEEMDAN + LSTM theo ý tưởng của Cao et al. (2019) cho buổi bảo vệ (đã chạy 3/11, #83)
 
 - Ngày: 31/10/2026; sửa 2/11/2026 theo review của Long ở #75
 - Người viết: Khải (bản nháp do Claude soạn); người duyệt: Long
-- Trạng thái: **Bản nháp, chưa chạy.** Long approve, merge, rồi mới viết code. Sau khi chốt, thay đổi ghi thành mục mới có ngày ở mục 9, trước khi chạy.
+- Trạng thái: **Đã chạy 3/11 (#83).** Long approve, merge, rồi mới viết code. Sau khi chốt, thay đổi ghi thành mục mới có ngày ở mục 9, trước khi chạy.
 - Khải chốt 31/10: hiện sai số trên mức giá trên slide (chỉ để minh họa); chạy đủ 4 tài sản; chạy trên máy Khải; code ở `src/experiments/`; không chờ toàn văn bài báo (mục 0).
 - Bài tham khảo: Cao, Li, Li (2019), *Financial time series forecasting model based on CEEMDAN and LSTM*, Physica A 519, 127–139, doi 10.1016/j.physa.2018.11.061.
 
@@ -50,7 +50,7 @@ Câu 3 so sánh hai giao thức, **không quy chênh lệch hoàn toàn cho rò 
 - LSTM: 1 lớp, 32 đơn vị, cửa sổ 20, MSE trên giá trị chuẩn hóa. Siêu tham số đóng băng: Adam, learning rate 1e-3, không lịch giảm learning rate, batch 64, tối đa 200 epoch, patience 20 trên loss đoạn early stopping, khôi phục trọng số tốt nhất. Không thử giá trị khác.
 - **Chia train 2014-01-01 → 2016-12-31 theo thời gian thành ba đoạn liền nhau:** 70% đầu để fit, 15% tiếp theo để early stopping, 15% cuối để hiệu chỉnh phân vị. Một mẫu tại ngày gốc t thuộc đoạn chứa t, và chỉ được dùng khi t + 1 cùng đoạn (bỏ mẫu ở ranh giới để target không lấn sang đoạn sau). Cửa sổ đầu vào được nhìn lùi vào đoạn trước vì đó là dữ liệu quá khứ.
 - **Chuẩn hóa:** mỗi tài sản × biến thể × thành phần một scaler (z-score), fit chỉ trên đoạn fit.
-- **Không dùng dữ liệu 2017–2018** trong fit, early stopping, hiệu chỉnh, chuẩn hóa hay dựng đặc trưng.
+- **Không dùng dữ liệu 2017–2018** để fit, early stopping, hiệu chỉnh hay chuẩn hóa ở cả ba biến thể. Dựng đặc trưng cũng vậy, **trừ R-full**: R-full cố ý tách CEEMDAN trên toàn chuỗi 2012–2018, nên đầu vào và target thành phần chứa thông tin 2017–2018 qua bước tách (giao thức đối chứng có rò rỉ, mục 1).
 - **Seed:** chạy 3 seed cố định (0, 1, 2) cho mọi LSTM; báo cáo trung bình và khoảng min–max qua 3 seed. Vẫn chỉ là minh họa, không chứng minh tính ổn định.
 - **Phân vị cho `pinball_skill`:** gắn phân vị thực nghiệm của phần dư return trên đoạn hiệu chỉnh vào r̂. Đoạn này không dùng để fit hay chọn epoch.
 
@@ -83,7 +83,7 @@ Không dùng cache ADR-0007 (cache có cả 2019, và kiểm mẫu không thay �
 ## 6. Thực thi
 
 - Code trong `src/experiments/repl_ceemdan_lstm/`, không import vào Lambda hay `src/forecast/`; PyTorch chỉ cài offline (`requirements-experiments.txt` riêng, không thêm vào `requirements.txt` hay requirements của Lambda). CI chỉ chạy test không cần GPU (gồm test mục 3.3 trên dữ liệu tổng hợp).
-- Chạy trên máy Khải (RTX 4060 8 GB, Ryzen 7 7840H), PyTorch bản CUDA. Tái lập: seed cố định cho Python, NumPy, PyTorch; `torch.use_deterministic_algorithms(True)`, `CUBLAS_WORKSPACE_CONFIG=:4096:8`; ghi phiên bản PyTorch, CUDA, driver vào `env.txt`. Nếu LSTM cuDNN không chạy được ở chế độ tất định thì chạy CPU (108 LSTM: 36 mỗi seed × 3 seed; ước tính vài giờ).
+- Chạy trên máy Khải (RTX 4060 8 GB, Ryzen 7 7840H), chạy PyTorch bản CPU (máy không có torch CUDA). Tái lập: seed cố định cho Python, NumPy, PyTorch; `torch.use_deterministic_algorithms(True)`, `CUBLAS_WORKSPACE_CONFIG=:4096:8`; ghi phiên bản PyTorch, CUDA, driver vào `env.txt`. Nếu LSTM cuDNN không chạy được ở chế độ tất định thì chạy CPU (108 LSTM: 36 mỗi seed × 3 seed; ước tính vài giờ).
 - Kết quả lưu `eval/repl-ceemdan-lstm/` trên S3 kèm SHA-256, không commit dữ liệu giá.
 - Claude Code không đọc hay tóm tắt dữ liệu sau 2018 trong việc này.
 
@@ -94,13 +94,22 @@ Không dùng cache ADR-0007 (cache có cả 2019, và kiểm mẫu không thay �
 - Chạy và làm slide: 12–15/11.
 - Trễ thì bỏ, không ảnh hưởng sản phẩm.
 
-## 8. Ghi trước khi chạy
+## 8. Thông tin lần chạy (điền sau khi chạy)
 
-- `CLEAN_DT` và SHA-256 bản clean: …
-- `cfg_hash` CEEMDAN, thời gian tách lại và kết quả kiểm chéo với cache (mục 3.3): …
-- Commit chạy: …
+Phần đăng ký trước là §1–§7, đã merge ở #75 trước khi viết code; từ đó §1–§7 chỉ đổi câu về R-full ở §3.2 và câu về thiết bị ở §6 (ghi ở mục 9). Mục này điền sau khi chạy (3/11/2026), theo manifest `data/eval/repl-ceemdan-lstm/manifest.json` và `results/summary.json`.
+
+- `CLEAN_DT` và SHA-256 bản clean: `2026-10-22`.
+  - `prices.parquet`: `6f58febf999fc2ba9f148e4efc68e24300c6adc5fdd967418b001c2a310a818c`
+  - `rejected.parquet`: `aba4b9f0e19d1389b2136a80c4312be761bd629130ac5b1df31d9128fcaa2998`
+- `cfg_hash` CEEMDAN, thời gian tách lại và kết quả kiểm chéo với cache (mục 3.3):
+  - `cfg_hash` `4c3229533ae3` (khớp `w252` K3);
+  - tách lại R-causal và R-full mất 1.630 s (khoảng 27 phút) với 8 tiến trình;
+  - kiểm chéo cache: 5.026/5.026 cửa sổ chung trùng từng bit (0 lệch `price_hash`, 0 lệch `n_imf`, sai lệch thành phần lớn nhất 0).
+- Commit chạy: tách CEEMDAN `507a6d8`; train và đo `fff4f32` (commit sạch).
 
 ## 9. Sửa đổi
 
+- 4/11/2026 (**sau khi đã chạy**): đổi tiêu đề từ "(bản nháp, làm sau demo 8/11)" thành "(đã chạy 3/11, #83)"; đổi trạng thái đầu file thành "Đã chạy 3/11 (#83)"; §6 ghi đúng thiết bị đã dùng (bản merge ở #75 ghi PyTorch bản CUDA, thực tế chạy PyTorch bản CPU vì máy không có torch CUDA). Không đổi giao thức, tham số hay kết quả.
+- 4/11/2026 (review Long, #83; **sau khi đã chạy**): sửa câu cuối về dữ liệu 2017–2018 ở §3.2 cho đúng giao thức R-full đã chốt ở mục 1 và mục 3 (trước đó câu này không nêu ngoại lệ của R-full); đổi tiêu đề §8. Không đổi giao thức, tham số hay kết quả.
 - 3/11/2026 (review Long lần 2, #75): chia train thành fit / early stopping / hiệu chỉnh 70/15/15 theo thời gian, bỏ mẫu ở ranh giới; đóng băng learning rate, batch, số epoch, patience; R-causal tách lại CEEMDAN từ dữ liệu ≤ 2018 thay vì dùng cache, cache chỉ để kiểm chéo.
 - 2/11/2026 (review Long, #75): đổi tên thành minh họa ý tưởng, không tuyên bố tái lập đúng giao thức hay chỉ số; câu 3 chỉ so sánh hai giao thức, ghi giới hạn nhân quả; chốt đầu vào/target từng thành phần, quy đổi về giá và log return, chuẩn hóa và early stopping chỉ trên train, phân vị từ đoạn hiệu chỉnh; kiểm nguồn cache bằng `price_hash` và bất biến theo tiền tố, không qua thì tách lại; 3 seed; ghi giới hạn số LSTM của R-raw; MAPE chỉ trên giá > 0.
