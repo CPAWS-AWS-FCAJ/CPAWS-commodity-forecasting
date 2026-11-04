@@ -2,6 +2,7 @@
 
 Chạy:
   python scripts/repl_ceemdan_decompose.py [--lake-dir data/lake] [--processes 8] [--limit N]
+  python scripts/repl_ceemdan_decompose.py --record-digests [--force]
 
 Kế hoạch: docs/experiments/ceemdan-lstm-replication-plan.md mục 3.3. Đọc bản clean
 configs/k3_grid.CLEAN_DT ở lake local (cắt tại 2018-12-31 ngay khi đọc), không gọi AWS, không đọc
@@ -10,6 +11,11 @@ cache ADR-0007. Ghi vào data/eval/repl-ceemdan-lstm/ (gitignore; --limit ghi v�
                             (mỗi ô thành phần: SEQ_LEN giá trị cuối của cửa sổ kết thúc tại end_date)
   r_full_<asset>.parquet    date, imf1, imf2, imf3, rest (một lần tách toàn chuỗi 2012–2018)
   manifest.json             CLEAN_DT, SHA-256 bản clean, cfg + cfg.hash(), phiên bản, commit, thời gian
+  artifacts_sha256.json     SHA-256 của 8 file bản tách, recorded_at, recorded_after_run (false)
+
+--record-digests: chỉ tính SHA-256 các file parquet đang có và ghi artifacts_sha256.json với
+recorded_after_run = true; không tách lại, không sửa manifest.json. File đã có thì dừng (mã 2), trừ
+khi có --force; thiếu parquet thì dừng (mã 3).
 
 --limit N: chỉ N cửa sổ R-causal mỗi tài sản, rải đều trên 2014–2018 (probe thời gian); R-full vẫn
 chạy đủ. Chỉ in số tổng hợp, không in giá hay giá trị IMF. Mã thoát: 2 khi đọc được dữ liệu sau
@@ -21,7 +27,6 @@ from __future__ import annotations
 import argparse
 import json
 import platform
-import subprocess
 import sys
 import time
 from dataclasses import asdict
@@ -39,22 +44,17 @@ sys.path.insert(0, str(ROOT))
 from src.experiments.repl_ceemdan_lstm import config as C
 from src.experiments.repl_ceemdan_lstm.data import CutoffError, asset_series, read_clean
 from src.experiments.repl_ceemdan_lstm.decompose import causal_origins, r_causal, r_full
+from src.experiments.repl_ceemdan_lstm.provenance import (
+    DIGEST_FILE,
+    artifact_names,
+    git_info,
+    git_label,
+    write_digests,
+)
 from src.forecast.decomposition import PYEMD_VERSION
 
 # Phiên bản lúc dựng cache ADR-0007 (cfg 4c3229533ae3), để giải thích khi cfg_hash lệch
 CACHE_VERSIONS = {"EMD-signal": "1.10.0", "numpy": "2.4.6"}
-
-
-def git_info() -> dict:
-    def run(*args: str) -> str:
-        try:
-            return subprocess.run(
-                ["git", *args], cwd=ROOT, capture_output=True, text=True, check=True
-            ).stdout.strip()
-        except (OSError, subprocess.CalledProcessError):
-            return ""
-
-    return {"commit": run("log", "-1", "--format=%H"), "dirty": bool(run("status", "--porcelain"))}
 
 
 def md(rows: list[dict]) -> str:
@@ -70,14 +70,39 @@ def _timed_full(s, cfg):
     return df, n_imf, time.perf_counter() - t
 
 
+def record_digests(out_dir: Path, force: bool) -> int:
+    """Chỉ ghi digest cho bản tách đã có; chỉ in tên file và SHA-256."""
+    target = out_dir / DIGEST_FILE
+    if target.exists() and not force:
+        print(f"DỪNG: {target} đã có. Thêm --force nếu thật sự muốn ghi đè.")
+        return 2
+    missing = [n for n in artifact_names() if not (out_dir / n).exists()]
+    if missing:
+        print(f"DỪNG: thiếu {', '.join(missing)} trong {out_dir}.")
+        return 3
+    doc = write_digests(out_dir, recorded_after_run=True)
+    for name, sha in doc["sha256"].items():
+        print(f"{name}  {sha}")
+    print(f"recorded_at {doc['recorded_at']}, recorded_after_run true: {target}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--lake-dir", default=str(ROOT / "data" / "lake"))
     ap.add_argument("--processes", type=int, default=8)
     ap.add_argument("--limit", type=int, default=None, help="chỉ N cửa sổ mỗi tài sản (probe)")
     ap.add_argument("--out-dir", default=str(ROOT / "data" / C.OUT_SUBDIR))
+    ap.add_argument("--record-digests", action="store_true", help="chỉ ghi digest, không tách lại")
+    ap.add_argument("--force", action="store_true", help="cho --record-digests ghi đè file đã có")
     args = ap.parse_args(argv)
+    if args.force and not args.record_digests:
+        ap.error("--force chỉ dùng với --record-digests")
+    if args.record_digests and args.limit:
+        ap.error("--record-digests không dùng với --limit")
     sys.stdout.reconfigure(encoding="utf-8")  # console Windows mặc định cp1252
+    if args.record_digests:
+        return record_digests(Path(args.out_dir), args.force)
     t0 = time.perf_counter()
     started_at = datetime.now(UTC).isoformat(timespec="seconds")
 
@@ -187,6 +212,8 @@ def main(argv: list[str] | None = None) -> int:
         f"{args.processes} tiến trình: {est_total / 60:.1f} phút."
     )
 
+    git = git_info()
+    print(f"Git: commit {git_label(git['commit'])}, dirty {git_label(git['dirty'])}.")
     manifest = {
         "step": "repl-ceemdan-lstm/decompose",
         "clean_dt": clean.clean_dt,
@@ -202,7 +229,7 @@ def main(argv: list[str] | None = None) -> int:
         "components": list(C.COMPONENTS),
         "seq_len": C.SEQ_LEN,
         "versions": versions,
-        "git": git_info(),
+        "git": git,
         "processes": args.processes,
         "limit": args.limit,
         "started_at": started_at,
@@ -213,6 +240,7 @@ def main(argv: list[str] | None = None) -> int:
     (out / "manifest.json").write_text(
         json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8"
     )
+    write_digests(out, recorded_after_run=False)
     print(f"\nTổng: {manifest['seconds_total']} s. Manifest: {out / 'manifest.json'}")
     if args.limit:
         print("\nLệnh chạy đủ:\n  python scripts/repl_ceemdan_decompose.py --processes 8")

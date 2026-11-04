@@ -8,8 +8,9 @@ Kế hoạch: docs/experiments/ceemdan-lstm-replication-plan.md. Đọc bản t�
 (data/eval/repl-ceemdan-lstm/, kiểm manifest trước) và bản clean ≤ 2018-12-31 ở lake local; không
 gọi AWS. Ghi vào data/eval/repl-ceemdan-lstm/results/ (gitignore): predictions.parquet,
 metrics.parquet, train_log.parquet, summary.json, env.txt (SHA-256 từng file trong summary.json).
-Chỉ in số tổng hợp, không in giá hay giá trị IMF. Mã thoát 2: manifest bước 1 lệch, đọc được dữ
-liệu sau CUTOFF, hoặc smoke không tất định.
+Chỉ in số tổng hợp, không in giá hay giá trị IMF. Mã thoát 2: manifest hoặc digest bản tách của
+bước 1 thiếu hay lệch (artifacts_sha256.json), đọc được dữ liệu sau CUTOFF, hoặc smoke không tất
+định.
 """
 
 from __future__ import annotations
@@ -62,6 +63,13 @@ from src.experiments.repl_ceemdan_lstm.model import (
     predict,
     resolve_device,
 )
+from src.experiments.repl_ceemdan_lstm.provenance import (
+    check_clean_sha256,
+    check_digests,
+    git_info,
+    git_label,
+    read_digests,
+)
 from src.forecast.returns import QUANTILE_LEVELS
 
 # Bước 1 (quyết định Khải 3/11, bước 2 mục 1): số cửa sổ R-causal phải đủ
@@ -93,8 +101,12 @@ def stop(msg: str) -> int:
 
 
 def check_manifest(dec_dir: Path, lake: Path) -> tuple[dict, list[str]]:
-    """Manifest bản tách đầy đủ của bước 1: cfg_hash, SHA-256 bản clean, đủ cửa sổ, đủ file."""
-    m = json.loads((dec_dir / "manifest.json").read_text(encoding="utf-8"))
+    """Bản tách đầy đủ của bước 1 (fail-closed): cfg_hash, SHA-256 bản clean, đủ cửa sổ, SHA-256 của
+    8 file bản tách. Chỉ băm file, không giải mã dòng dữ liệu nào."""
+    try:
+        m = json.loads((dec_dir / "manifest.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        return {}, [f"không đọc được manifest.json: {e}"]
     errs = []
     if m.get("limit"):
         errs.append(f"manifest là bản probe (limit={m['limit']})")
@@ -103,32 +115,16 @@ def check_manifest(dec_dir: Path, lake: Path) -> tuple[dict, list[str]]:
     if m.get("clean_dt") != C.CLEAN_DT:
         errs.append(f"clean_dt {m.get('clean_dt')} ≠ {C.CLEAN_DT}")
     clean_dir = lake / "clean" / "prices" / f"dt={C.CLEAN_DT}"
-    for f, h in m.get("sha256", {}).items():
-        if file_sha256(clean_dir / f) != h:
-            errs.append(f"SHA-256 {f} lệch")
+    errs += check_clean_sha256(m.get("sha256"), clean_dir)
     for a, n in EXPECTED_CAUSAL.items():
-        st = m["assets"].get(a, {})
+        st = m.get("assets", {}).get(a, {})
         rc = st.get("r_causal", {})
         if rc.get("n_origins") != n or rc.get("n_computed") != n:
             errs.append(f"{a}: R-causal {rc.get('n_computed')}/{rc.get('n_origins')} ≠ {n}")
         if "r_full" not in st:
             errs.append(f"{a}: thiếu R-full trong manifest")
-        for kind in ("r_causal", "r_full"):
-            if not (dec_dir / f"{kind}_{a}.parquet").exists():
-                errs.append(f"{a}: thiếu {kind}_{a}.parquet")
+    errs += check_digests(dec_dir)
     return m, errs
-
-
-def git_info() -> dict:
-    def run(*args: str) -> str:
-        try:
-            return subprocess.run(
-                ["git", *args], cwd=ROOT, capture_output=True, text=True, check=True
-            ).stdout.strip()
-        except (OSError, subprocess.CalledProcessError):
-            return ""
-
-    return {"commit": run("log", "-1", "--format=%H"), "dirty": bool(run("status", "--porcelain"))}
 
 
 def env_text(device: torch.device, threads: int) -> str:
@@ -329,10 +325,15 @@ def main(argv: list[str] | None = None) -> int:
     manifest, errs = check_manifest(dec_dir, lake)
     if errs:
         return stop("manifest bước 1: " + "; ".join(errs))
+    digests = read_digests(dec_dir)
+    git = git_info()
+    decompose_commit = (manifest.get("git") or {}).get("commit")
     print(
         f"Manifest bước 1: cfg_hash {manifest['cfg_hash']}, clean dt={manifest['clean_dt']}, "
-        f"SHA-256 khớp, đủ cửa sổ {EXPECTED_CAUSAL}, commit tách {manifest['git']['commit'][:7]}."
+        f"SHA-256 bản clean và 8 file bản tách khớp, đủ cửa sổ {EXPECTED_CAUSAL}, "
+        f"commit tách {git_label(decompose_commit)[:7]}."
     )
+    print(f"Git: commit {git_label(git['commit'])}, dirty {git_label(git['dirty'])}.")
     print(
         f"Thiết bị: {device} (torch {torch.__version__}, CUDA {torch.version.cuda}), "
         f"{args.threads} luồng."
@@ -473,8 +474,9 @@ def main(argv: list[str] | None = None) -> int:
         "train_seconds": round(train_s, 1),
         "device": str(device),
         "threads": args.threads,
-        "git": git_info(),
-        "decompose_manifest_commit": manifest["git"]["commit"],
+        "git": git,
+        "decompose_manifest_commit": decompose_commit,
+        "decomposition_sha256": digests,
         "clean_dt": C.CLEAN_DT,
         "clean_sha256": clean.sha256,
         "cfg_hash": manifest["cfg_hash"],
