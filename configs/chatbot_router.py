@@ -42,7 +42,8 @@ ADVICE_TERMS = (
     "lướt sóng", "vào lệnh", "đặt lệnh", "dồn hết", "bán hết", "all in", "chiến lược",
     "có hợp lý", "đáng mua", "should i buy", "should i sell",
 )  # fmt: skip
-# Có các cụm này cùng tư vấn thì câu cần phân tích dự báo trước khi từ chối phần tư vấn → Haiku
+# Có các cụm này cùng tư vấn thì câu cần phân tích dự báo trước khi từ chối phần tư vấn → Haiku.
+# Tư vấn kèm tài sản và kỳ hạn (TIME_TERMS/TIME_PATTERNS) hoặc hỏi con số cũng sang Haiku.
 ANALYSIS_TERMS = (
     "phân tích", "dự báo", "so sánh", "xu hướng", "nghiêng", "xác suất", "khoảng",
     "tăng hay giảm",

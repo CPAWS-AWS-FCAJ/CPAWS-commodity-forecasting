@@ -37,7 +37,7 @@
 {"id": "R-037", "group": "advice_only", "question": "Giờ mua vàng có hợp lý không bot?", "expected_branch": "simple", "note": ""}
 {"id": "R-038", "group": "advice_only", "question": "Mình có 50 triệu, chia vào vàng với dầu thế nào?", "expected_branch": "simple", "note": ""}
 {"id": "R-039", "group": "advice_only", "question": "Bán bạc luôn hay giữ thêm?", "expected_branch": "simple", "note": ""}
-{"id": "R-040", "group": "advice_only", "question": "Cho mình chiến lược lướt sóng WTI tuần này", "expected_branch": "simple", "note": "có kỳ hạn nhưng chỉ xin chiến lược"}
+{"id": "R-040", "group": "embedded_advice", "question": "Cho mình chiến lược lướt sóng WTI tuần này", "expected_branch": "complex", "note": "xin chiến lược kèm tài sản và kỳ hạn: sang Haiku theo quyết định 1 (đổi nhãn khi khóa luật, 4/11)"}
 {"id": "R-041", "group": "advice_only", "question": "Nên đầu tư vàng hay dầu?", "expected_branch": "simple", "note": "'đầu' và 'dầu' trong cùng câu"}
 {"id": "R-042", "group": "forecast", "question": "Dự báo vàng 3 phiên tới thế nào?", "expected_branch": "complex", "note": ""}
 {"id": "R-043", "group": "forecast", "question": "Ngày mai WTI có tăng không?", "expected_branch": "complex", "note": ""}

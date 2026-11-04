@@ -5,7 +5,8 @@ Thứ tự luật (luật đầu tiên khớp quyết định):
 1. ngoài phạm vi trong ngày → simple; ngoài phạm vi sản phẩm → simple, trừ khi câu còn hỏi về
    tài sản trong phạm vi kèm ý dự báo (câu hỗn hợp) → complex
 2. việc không liên quan, không nhắc tài sản → simple
-3. tư vấn đầu tư: kèm phân tích dự báo/tin → complex, chỉ xin tư vấn → simple
+3. tư vấn đầu tư: kèm phân tích dự báo/tin, hoặc có tài sản kèm kỳ hạn/hỏi con số → complex;
+   chỉ xin tư vấn → simple
 4. tin tức/lý do kèm tài sản → complex
 5. hỏi khái niệm (không có kỳ hạn, không hỏi con số, không hỏi "dự báo" của tài sản) → simple
 6. tài sản kèm ý dự báo, kỳ hạn hoặc hỏi con số → complex
@@ -94,7 +95,8 @@ def route(question: str) -> RouteDecision:
     if t.has(R.OFF_TOPIC_TERMS) and not has_asset:
         return RouteDecision(R.SIMPLE, "off_topic")
     if t.has(R.ADVICE_TERMS):
-        if has_asset and (t.has(R.ANALYSIS_TERMS) or t.has(R.NEWS_TERMS)):
+        # Có tài sản kèm kỳ hạn hoặc hỏi con số thì cần số liệu dự báo trước khi từ chối tư vấn
+        if has_asset and (t.has(R.ANALYSIS_TERMS) or t.has(R.NEWS_TERMS) or has_time or has_number):
             return RouteDecision(R.COMPLEX, "embedded_advice")
         return RouteDecision(R.SIMPLE, "advice_only")
     if has_asset and t.has(R.NEWS_TERMS):

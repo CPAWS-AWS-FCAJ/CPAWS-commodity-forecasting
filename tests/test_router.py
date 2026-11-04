@@ -18,7 +18,7 @@ CASES = [
     for line in (ROOT / "tests" / "router" / "cases.jsonl").read_text(encoding="utf-8").splitlines()
     if line.strip()
 ]
-# Ngưỡng đề xuất cho bộ phát triển (chờ Khải chốt, xem docs/experiments/chatbot-router-proposal.md)
+# Ngưỡng cho bộ phát triển (docs/experiments/chatbot-router-proposal.md mục 4)
 MIN_ACCURACY = 0.95
 MAX_COMPLEX_TO_SIMPLE = 0
 
@@ -99,3 +99,12 @@ def test_out_of_scope_phrase_does_not_count_as_asset():
 def test_horizon_patterns_only_cover_1_to_7_sessions():
     assert route("Mốc thống kê 252 phiên là gì?").branch == R.SIMPLE
     assert route("Xác suất tăng ở kỳ hạn 3 thế nào?").branch == R.COMPLEX
+
+
+def test_advice_with_asset_and_horizon_or_number_goes_to_haiku():
+    """Quyết định 1: xin tư vấn kèm tài sản và kỳ hạn hoặc hỏi con số cần số liệu dự báo."""
+    assert route("Bạc 3 phiên tới, nên đặt lệnh mua không?") == RouteDecision(
+        R.COMPLEX, "embedded_advice"
+    )
+    assert route("Nếu vàng tăng thì nên chốt lời ở mức nào?").rule == "embedded_advice"
+    assert route("Bán bạc luôn hay giữ thêm?") == RouteDecision(R.SIMPLE, "advice_only")

@@ -3,9 +3,10 @@
 - Ngày: 25/10/2026
 - Người soạn: Phước
 - Người duyệt: Khải
-- Trạng thái: **Chờ duyệt** (ngưỡng và các quyết định ở mục 5)
+- Trạng thái: **Luật đã khóa ngày 4/11/2026**, chờ Khải chạy bộ giữ riêng một lần (mục 6). Từ commit khóa, không sửa luật hay cụm từ trước khi có kết quả bộ giữ riêng
 - Căn cứ: ADR-0004 mục 1 (router dùng luật, không gọi LLM; không chắc thì sang Claude Haiku 4.5)
-- Code: `src/chatbot/router.py`, cụm từ ở `configs/chatbot_router.py`, test ở `tests/test_router.py`, bộ câu ở `tests/router/cases.jsonl`
+- Code: `src/chatbot/router.py`, cụm từ ở `configs/chatbot_router.py`, test ở `tests/test_router.py`, bộ câu ở `tests/router/cases.jsonl`, script chấm bộ giữ riêng ở `scripts/eval_router.py`
+- Phạm vi: thử nghiệm trên nhánh `exp/chatbot-router`, chưa nối vào Lambda `/chat`. Demo 8/11 không dùng router; mọi câu đi Haiku (Khải, PR #66)
 
 ## 1. Cách hoạt động
 
@@ -18,7 +19,7 @@ Luật xét theo thứ tự, luật đầu tiên khớp sẽ quyết định:
 | 1 | Dự đoán trong ngày ("chiều nay", "giờ tới"…), kể cả có tên tài sản | simple |
 | 1b | Ngoài phạm vi sản phẩm (xăng, vàng miếng/nhẫn, SJC, bitcoin, cổ phiếu…); nếu sau khi xóa cụm đó câu vẫn hỏi dự báo một tài sản trong phạm vi thì là câu hỗn hợp | simple / complex |
 | 2 | Việc không liên quan (chuyện cười, code, dịch…) và không có tài sản | simple |
-| 3 | Xin tư vấn đầu tư: kèm phân tích/dự báo/tin → complex; chỉ xin tư vấn → simple | complex / simple |
+| 3 | Xin tư vấn đầu tư: có tài sản và kèm phân tích/dự báo/tin, kỳ hạn hoặc hỏi con số → complex; chỉ xin tư vấn → simple | complex / simple |
 | 4 | Có tài sản và hỏi tin tức hay lý do | complex |
 | 5 | Hỏi khái niệm ("là gì", "nghĩa là", "khác nhau", "có phải"…) khi không có kỳ hạn, không hỏi con số và không hỏi "dự báo" của tài sản | simple |
 | 6 | Có tài sản kèm ý dự báo, kỳ hạn hoặc hỏi con số | complex |
@@ -31,10 +32,11 @@ Luật xét theo thứ tự, luật đầu tiên khớp sẽ quyết định:
 
 ## 2. Bộ câu phát triển (`tests/router/cases.jsonl`)
 
-- 83 câu mới (41 simple, 42 complex) thuộc 9 nhóm: chào hỏi và câu về chatbot, khái niệm, ngoài phạm vi, chỉ xin tư vấn, dự báo, nhiều ý, tin tức, tư vấn lồng trong phân tích, câu mơ hồ.
+- 83 câu mới (40 simple, 43 complex) thuộc 9 nhóm: chào hỏi và câu về chatbot, khái niệm, ngoài phạm vi, chỉ xin tư vấn, dự báo, nhiều ý, tin tức, tư vấn lồng trong phân tích, câu mơ hồ.
 - Có câu không dấu, tiếng Anh, tiếng lóng, câu một từ, câu hỏi nối tiếp.
 - Test bắt buộc **không trùng nguyên văn câu nào** với hai bộ benchmark chatbot. Test này đã bắt được 3 câu trùng, và các câu đó đã được viết lại.
 - **Kết quả: 83/83 đúng, 0 câu cần Haiku bị đưa sang Nova.** Con số này **không phải ước lượng độ chính xác thật**, vì luật và bộ câu được viết cùng lúc, bởi cùng một người.
+- Khi khóa luật (4/11), R-040 ("chiến lược lướt sóng WTI tuần này") đổi nhãn từ simple sang complex và chuyển sang nhóm `embedded_advice`, theo quyết định 1 ở mục 5.
 
 ## 3. Phép thử trên bộ benchmark (không dùng để sửa luật)
 
@@ -50,13 +52,22 @@ Luật xét theo thứ tự, luật đầu tiên khớp sẽ quyết định:
 - **NOVA-026, NOVA2-016, NOVA2-024:** câu có tên tài sản kèm từ như "giá", "dự báo", nhưng thực chất hỏi phân bổ vốn, hỏi khái niệm hoặc nhờ dịch. Đi sang Haiku chỉ tốn thêm chi phí; Haiku vẫn trả lời đúng chính sách.
 - **NOVA2-004** ("dự báo được giá cho 1 tháng tới không?") và **NOVA2-006** (tạm biệt kiểu "mai hỏi tiếp"): không khớp luật nào nên đi theo mặc định sang Haiku, đúng như ADR-0004 quy định khi không chắc.
 
-## 4. Ngưỡng đề xuất (chờ Khải chốt)
+**Sau khi sửa luật 3 theo quyết định 1 (4/11):** v1 vẫn 59/60. v2 thành 55/60, **0** câu cần Haiku bị đưa sang Nova: HAIKU2-029, 030 đã đúng, NOVA2-027 ("chiến lược lướt sóng WTI trong tuần này") chuyển sang Haiku (chỉ tốn thêm chi phí). Vì bản sửa được rút ra từ chính HAIKU2-029, 030, hai câu này **không còn là phép đo độc lập**. Bộ giữ riêng ở mục 6 mới đo được chất lượng thật.
+
+## 4. Ngưỡng
 
 1. **Bộ phát triển** (`tests/test_router.py`, chạy trong CI): độ chính xác ≥ 95% và **0** câu cần Haiku bị đưa sang Nova. Hiện đạt 100% và 0.
-2. **Bộ giữ riêng (held-out):** một người **không viết luật** (đề xuất Khải) soạn khoảng 30 câu mới. Router phải đạt độ chính xác ≥ 90% và tối đa 1 câu cần Haiku bị đưa sang Nova. Bộ này mới đo được chất lượng thật của router.
+2. **Bộ giữ riêng (held-out):** Khải (**không viết luật**) soạn khoảng 30 câu mới và giữ riêng tới khi luật đã khóa. Router phải đạt độ chính xác ≥ 90% và tối đa 1 câu cần Haiku bị đưa sang Nova. Bộ này mới đo được chất lượng thật của router. Ngưỡng nằm trong `scripts/eval_router.py` (`MIN_ACCURACY`, `MAX_COMPLEX_TO_SIMPLE`).
 
-## 5. Cần quyết định
+## 5. Quyết định
 
-1. **Sửa luật tư vấn lồng phân tích:** coi câu là tư vấn kèm phân tích (→ complex) khi có tài sản **và** có kỳ hạn hoặc hỏi con số, không chỉ khi có cụm "phân tích/so sánh". Hệ quả: câu chỉ xin chiến lược có kèm kỳ hạn ("chiến lược lướt sóng WTI tuần này") sẽ sang Haiku. Không sao, vì Haiku cũng từ chối tư vấn, chỉ tốn chi phí hơn. Đề xuất: **sửa**, vì lỗi đắt (thiếu số liệu) quan trọng hơn chi phí.
-2. Ngưỡng ở mục 4, và ai soạn bộ giữ riêng.
-3. Router đặt trong Lambda `api` của `POST /chat`; tên luật (`rule`) ghi vào log để theo dõi tỷ lệ định tuyến thực tế sau demo.
+1. **Sửa luật tư vấn lồng phân tích: đã sửa khi khóa luật (Phước, 4/11).** Câu xin tư vấn được coi là kèm phân tích (→ complex) khi có tài sản **và** có cụm phân tích/tin, kỳ hạn hoặc hỏi con số. Hệ quả: câu chỉ xin chiến lược có kèm kỳ hạn ("chiến lược lướt sóng WTI tuần này") sang Haiku. Không sao, vì Haiku cũng từ chối tư vấn, chỉ tốn chi phí hơn; lỗi đắt (thiếu số liệu) quan trọng hơn chi phí.
+2. Ngưỡng ở mục 4; Khải soạn và giữ bộ giữ riêng.
+3. Còn mở, quyết sau khi có kết quả bộ giữ riêng: có mở PR đưa router vào Lambda `api` của `POST /chat` không (Khải quyết). Nếu có, tên luật (`rule`) ghi vào log để theo dõi tỷ lệ định tuyến thực tế.
+
+## 6. Chạy bộ giữ riêng (một lần)
+
+1. Checkout đúng commit luật đã khóa trên `exp/chatbot-router`.
+2. Ghi bộ câu vào một file JSONL **ngoài repo** (không commit trước khi chạy), mỗi dòng: `{"id": "H-001", "question": "...", "expected_branch": "simple"}` (`simple` hoặc `complex`; thêm `group`, `note` tùy ý). Nhãn theo cùng quy ước mục 1: câu cần số liệu dự báo hoặc tin → `complex`.
+3. Chạy: `python scripts/eval_router.py <đường dẫn file>`. Script không gọi mạng, in SHA-256 của file câu hỏi và hai file luật, độ chính xác, số câu cần Haiku bị đưa sang Nova, từng câu sai kèm tên luật, và ĐẠT/KHÔNG ĐẠT theo ngưỡng mục 4.
+4. Chỉ chạy một lần, không sửa luật theo kết quả. Ghi kết quả (cả các mã SHA-256) vào tài liệu này hoặc vào PR router nếu có.
