@@ -1,7 +1,9 @@
 """Offline PR75 regression suite. All prices are generated here, never downloaded."""
 
+import copy
 import importlib
 import json
+import subprocess
 from concurrent.futures import ThreadPoolExecutor
 from threading import Lock
 from types import SimpleNamespace
@@ -16,6 +18,14 @@ from src.data.config import ASSETS
 from src.eval import run_test2020 as R
 from src.features.ceemdan_features import baseline_quantiles
 from src.forecast.vol_scaled import s1_quantiles
+
+
+@pytest.fixture(autouse=True)
+def prohibit_external_processes(monkeypatch):
+    def forbidden(*args, **kwargs):
+        raise AssertionError("unmocked subprocess forbidden in offline runner tests")
+
+    monkeypatch.setattr(R.subprocess, "run", forbidden)
 
 
 @pytest.fixture(scope="module")
@@ -204,8 +214,12 @@ def test_shared_circular_bootstrap_holm_and_sensitivity(case):
                 )
         primary = [g for g in out["groups"] if g["sample"] == "all"]
         assert [g["asset"] for g in primary] == list(C.ASSETS)
-        expected = R.M.holm_adjust([g["bootstrap"]["p"] for g in primary])
-        np.testing.assert_allclose([g["p_holm"] for g in primary], expected)
+        if block == C.BLOCK_LENGTH:
+            expected = R.M.holm_adjust([g["bootstrap"]["p"] for g in primary])
+            np.testing.assert_allclose([g["p_holm"] for g in primary], expected)
+        else:
+            assert all("p_holm" not in g and "report_significant" not in g for g in primary)
+            assert all("p" not in g["bootstrap"] for g in primary)
         for g in primary:
             assert g["value"] == pytest.approx(np.mean([h["value"] for h in g["by_horizon"]]))
 
@@ -230,7 +244,7 @@ def test_reporting_counts_dm_and_periods(case):
 
 @pytest.fixture
 def meta(monkeypatch):
-    monkeypatch.setattr(R, "protocol_hash", lambda: "f" * 64)
+    monkeypatch.setattr(R, "protocol_hash", lambda commit: "f" * 64)
     return {
         "run_id": "test2020",
         "commit": "a" * 40,
@@ -291,7 +305,11 @@ class MemoryS3:
 def harness(tmp_path, monkeypatch, meta):
     # No real official invocation: inject every external boundary, only synthetic frames.
     monkeypatch.setattr(R, "ROOT", tmp_path / "synthetic-repository")
-    monkeypatch.setattr(R, "git_provenance", lambda: meta["commit"])
+    monkeypatch.setattr(
+        R,
+        "git_provenance",
+        lambda: {"commit": meta["commit"], "origin_developer_sha": "d" * 40},
+    )
     monkeypatch.setattr(
         R.subprocess, "run", lambda *a, **k: SimpleNamespace(stdout="synthetic env\n")
     )
@@ -462,10 +480,10 @@ def test_period_membership_and_dm_gap(case):
     assert dm["gaps"] > 0 and dm["p"] is None and dm["undefined_reason"] == "internal_session_gaps"
 
 
-def test_locked_hash_changes_with_config(monkeypatch):
-    before = R.protocol_hash()
+def test_locked_hash_changes_with_config(monkeypatch, committed_blobs):
+    before = R.protocol_hash("a" * 40)
     monkeypatch.setattr(C, "BOOTSTRAP_SEED", 123)
-    assert before != R.protocol_hash()
+    assert before != R.protocol_hash("a" * 40)
 
 
 def test_git_boundary_commands_only_mocked(monkeypatch):
@@ -473,15 +491,25 @@ def test_git_boundary_commands_only_mocked(monkeypatch):
 
     def fake_run(args, **kwargs):
         calls.append(args)
-        return SimpleNamespace(stdout="a" * 40 if args[1] == "rev-parse" else "")
+        value = ""
+        if args[1] == "rev-parse":
+            value = ("a" if args[2] == "HEAD" else "d") * 40
+        return SimpleNamespace(stdout=value.encode())
 
     monkeypatch.setattr(R.subprocess, "run", fake_run)
-    assert R.git_provenance() == "a" * 40
-    assert ["git", "merge-base", "--is-ancestor", "a" * 40, "refs/heads/developer"] in calls
+    assert R.git_provenance() == {"commit": "a" * 40, "origin_developer_sha": "d" * 40}
+    assert [
+        "git",
+        "fetch",
+        "origin",
+        "+refs/heads/developer:refs/remotes/origin/developer",
+    ] in calls
+    assert ["git", "merge-base", "--is-ancestor", "a" * 40, "d" * 40] in calls
     assert len([c for c in calls if c[1] == "ls-files"]) == 3
+    assert not any("refs/heads/developer" in c for c in calls)
 
     def dirty(args, **kwargs):
-        return SimpleNamespace(stdout=" M changed.py" if args[1] == "status" else "a" * 40)
+        return SimpleNamespace(stdout=b" M changed.py" if args[1] == "status" else b"a" * 40)
 
     monkeypatch.setattr(R.subprocess, "run", dirty)
     with pytest.raises(ValueError, match="dirty"):
@@ -799,3 +827,390 @@ def test_bootstrap_nonfinite_replicate_is_not_discarded(case, monkeypatch):
     assert gold["report_significant"] is None
     assert result["replicates"] == cfg.n_bootstrap
     R.encoded(result)
+
+
+@pytest.fixture
+def committed_blobs(monkeypatch):
+    blobs = {
+        "src/eval/run_test2020.py": b"runner\n",
+        "src/forecast/same.py": b"forecast\n",
+        "configs/same.py": b"config\n",
+        "docs/experiments/test2020-plan.md": "Kế hoạch\n".encode(),
+    }
+    calls = []
+
+    def fake_git(*args):
+        calls.append(args)
+        if args[0] == "ls-tree":
+            assert args[4] == "a" * 40
+            return ("\0".join(reversed(blobs)) + "\0").encode()
+        assert args[0] == "show" and args[1].startswith("a" * 40 + ":")
+        return blobs[args[1].split(":", 1)[1]]
+
+    monkeypatch.setattr(R, "git_bytes", fake_git)
+    return blobs, calls
+
+
+def test_json_artifact_serialization_unicode_order_and_newline(tmp_path):
+    left = {"z": [1, None, True], "á": "Tiếng Việt", "a": 2}
+    right = {"a": 2, "á": "Tiếng Việt", "z": [1, None, True]}
+    raw = R.serialize_json_bytes(left)
+    assert raw == R.serialize_json_bytes(right)
+    assert raw.endswith(b"\n") and not raw.endswith(b"\n\n") and b"\r" not in raw
+    assert "Tiếng Việt".encode() in raw and json.loads(raw) == left
+    p = tmp_path / "artifact.json"
+    R.write_json(p, left)
+    assert p.read_bytes() == raw
+
+
+def test_uploaded_artifacts_match_manifest_and_single_claim_serialization(harness, monkeypatch):
+    meta, clean, out, s3, reads = harness
+    serialize = R.serialize_json_bytes
+    claim_calls = []
+
+    def spy(payload):
+        if "claimed_at" in payload:
+            claim_calls.append(payload)
+        return serialize(payload)
+
+    monkeypatch.setattr(R, "serialize_json_bytes", spy)
+    result = R.run_official(meta, clean, out, s3=s3)
+    folder = out / "eval/test2020"
+    hashes = json.loads((folder / "checksums.json").read_bytes())
+    assert len(claim_calls) == 1 and reads == ["read"]
+    assert "checksums.json" not in hashes
+    for name in ("claim.json", "started.json", "summary.json"):
+        raw = (folder / name).read_bytes()
+        assert raw.endswith(b"\n") and not raw.endswith(b"\n\n")
+        assert json.loads(raw)
+        assert raw == s3.objects[C.PREFIX + name]
+        assert R.sha(raw) == R.sha(s3.objects[C.PREFIX + name]) == hashes[name]
+    for name, digest in hashes.items():
+        assert digest == R.sha((folder / name).read_bytes())
+        assert s3.objects[C.PREFIX + name] == (folder / name).read_bytes()
+    assert result["claim"]["commit"] == meta["commit"]
+    assert result["claim"]["origin_developer_sha"] == "d" * 40
+    assert result["claim"]["config_hash"] == meta["config_hash"]
+    text = (folder / "summary.md").read_text(encoding="utf-8")
+    assert R.COMMON_MASK_NOTE in text
+    assert "asset × horizon × sample" in text and "K3b s1_quantiles" in text
+    assert "undefined" in text and "bảy horizon" in text
+    assert result["primary"] == {"groups": []} and result["synthetic_fixture"]
+
+
+def test_conditional_claim_failure_never_retries_or_overwrites(harness):
+    meta, clean, out, _, reads = harness
+    calls = []
+
+    class DenyClaim:
+        def put_object(self, **kwargs):
+            calls.append(kwargs)
+            assert kwargs["IfNoneMatch"] == "*"
+            raise FileExistsError("PreconditionFailed")
+
+    with pytest.raises(FileExistsError):
+        R.run_official(meta, clean, out, s3=DenyClaim())
+    assert len(calls) == 1 and not reads
+    failure = json.loads((out / "eval/test2020/failure.json").read_bytes())
+    assert not failure["claim_acquired"] and not failure["automatic_retry"]
+    assert not (out / "eval/test2020/claim.json").exists()
+
+
+@pytest.mark.parametrize("local_state", ["stale", "unpublished_local_commit"])
+def test_remote_not_local_branch_decides_merge(monkeypatch, local_state):
+    calls = []
+
+    def git(*args):
+        calls.append(args)
+        if args == ("rev-parse", "HEAD"):
+            return b"a" * 40
+        if args == ("rev-parse", "refs/remotes/origin/developer"):
+            return b"d" * 40
+        if args[0] == "merge-base" and local_state == "unpublished_local_commit":
+            raise subprocess.CalledProcessError(1, ["git", *args])
+        assert "refs/heads/developer" not in args
+        return b""
+
+    monkeypatch.setattr(R, "git_bytes", git)
+    if local_state == "stale":
+        assert R.git_provenance()["origin_developer_sha"] == "d" * 40
+    else:
+        with pytest.raises(ValueError, match="not merged"):
+            R.git_provenance()
+    assert calls.index(
+        ("fetch", "origin", "+refs/heads/developer:refs/remotes/origin/developer")
+    ) < calls.index(("rev-parse", "refs/remotes/origin/developer"))
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        "fetch",
+        "no_origin",
+        "remote_missing",
+        "invalid_sha",
+        "not_ancestor",
+        "ancestor_error",
+        "status_error",
+        "dirty",
+        "head_changed",
+    ],
+)
+def test_git_preflight_failures_no_claim_or_snapshot(harness, monkeypatch, failure):
+    meta, clean, out, s3, reads = harness
+    heads = 0
+
+    def git(*args):
+        nonlocal heads
+        if args == ("rev-parse", "HEAD"):
+            heads += 1
+            return (("b" if failure == "head_changed" and heads > 1 else "a") * 40).encode()
+        if args[0] == "status":
+            if failure == "status_error":
+                raise subprocess.CalledProcessError(128, ["git", *args])
+            return b" M file" if failure == "dirty" else b""
+        if args[0] == "fetch" and failure in ("fetch", "no_origin"):
+            raise subprocess.CalledProcessError(128, ["git", *args])
+        if args == ("rev-parse", "refs/remotes/origin/developer"):
+            if failure == "remote_missing":
+                raise subprocess.CalledProcessError(128, ["git", *args])
+            return b"invalid" if failure == "invalid_sha" else b"d" * 40
+        if args[0] == "merge-base" and failure in ("not_ancestor", "ancestor_error"):
+            raise subprocess.CalledProcessError(
+                1 if failure == "not_ancestor" else 128, ["git", *args]
+            )
+        return b""
+
+    monkeypatch.setattr(R, "git_bytes", git)
+    monkeypatch.setattr(R, "git_provenance", REAL_GIT_PROVENANCE)
+    with pytest.raises((ValueError, RuntimeError, subprocess.CalledProcessError)) as caught:
+        R.run_official(meta, clean, out, s3=s3)
+    if failure == "not_ancestor":
+        assert "not merged" in str(caught.value)
+    if failure == "ancestor_error":
+        assert "verification failed" in str(caught.value)
+    assert not reads and not s3.objects and not (out / "eval/test2020").exists()
+
+
+# Keep the real boundary while harness substitutes it; its Git calls remain mocked.
+REAL_GIT_PROVENANCE = R.git_provenance
+
+
+def test_protocol_blobs_ignore_checkout_newlines_and_use_exact_paths(
+    tmp_path, monkeypatch, committed_blobs
+):
+    blobs, calls = committed_blobs
+    monkeypatch.setattr(R, "ROOT", tmp_path)
+    for relative, content in blobs.items():
+        p = tmp_path / relative
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(content)
+    first = R.protocol_hash("a" * 40)
+    for relative, content in blobs.items():
+        (tmp_path / relative).write_bytes(content.replace(b"\n", b"\r\n"))
+    assert R.protocol_hash("a" * 40) == first
+    expected = R.sha(
+        R.encoded({"protocol": C.protocol(), "code": {p: R.sha(v) for p, v in blobs.items()}})
+    )
+    assert first == expected
+    shows = [c[1].split(":", 1)[1] for c in calls if c[0] == "show"]
+    assert shows[: len(blobs)] == sorted(blobs)
+    blobs["src/forecast/same.py"] = b"committed change\n"
+    assert R.protocol_hash("a" * 40) != first
+
+
+def test_protocol_tree_order_does_not_change_hash(monkeypatch, committed_blobs):
+    blobs, _ = committed_blobs
+    before = R.protocol_hash("a" * 40)
+    old_git = R.git_bytes
+
+    def reordered(*args):
+        if args[0] == "ls-tree":
+            return ("\0".join(sorted(blobs)) + "\0").encode()
+        return old_git(*args)
+
+    monkeypatch.setattr(R, "git_bytes", reordered)
+    assert R.protocol_hash("a" * 40) == before
+
+
+def test_missing_committed_blob_is_fail_closed(monkeypatch, committed_blobs):
+    original = R.git_bytes
+
+    def missing(*args):
+        if args[0] == "show":
+            raise subprocess.CalledProcessError(128, ["git", *args], stderr=b"missing blob")
+        return original(*args)
+
+    monkeypatch.setattr(R, "git_bytes", missing)
+    with pytest.raises(subprocess.CalledProcessError):
+        R.protocol_hash("a" * 40)
+
+
+@pytest.mark.parametrize("drift", ["lambda", "k3b_clip", "core_clip"])
+def test_s1a_constant_drift_blocks_claim_and_forecasts(harness, monkeypatch, drift):
+    meta, clean, out, s3, reads = harness
+    if drift == "lambda":
+        monkeypatch.setitem(R.K3B.S1_LAMBDA, "S1a", 0.97)
+    elif drift == "k3b_clip":
+        monkeypatch.setattr(R.K3B, "K_CLIP", (0.6, 2.0))
+    else:
+        monkeypatch.setattr(R.vol_scale_core, "K_CLIP", (0.5, 3.0))
+    with pytest.raises(ValueError, match="configuration drift"):
+        R.run_official(meta, clean, out, s3=s3)
+    assert not reads and not s3.objects
+    with pytest.raises(ValueError, match="configuration drift"):
+        R.validate_s1a_constants()
+
+
+def test_s1a_constants_match():
+    R.validate_s1a_constants()
+    assert C.S1A_LAMBDA == R.K3B.S1_LAMBDA["S1a"]
+    assert C.K_CLIP == R.K3B.K_CLIP == R.vol_scale_core.K_CLIP
+
+
+@pytest.mark.parametrize("message", ["snapshot SHA256 mismatch", "x" * 700, ""])
+def test_failure_message_json_bounds_and_no_retry(harness, monkeypatch, message):
+    meta, clean, out, s3, reads = harness
+    calls = []
+
+    def fail(*args):
+        calls.append(1)
+        raise ValueError(message)
+
+    monkeypatch.setattr(R, "load_snapshot", fail)
+    with pytest.raises(ValueError):
+        R.run_official(meta, clean, out, s3=s3)
+    raw = (out / "eval/test2020/failure.json").read_bytes()
+    failure = json.loads(raw)
+    assert failure["error_type"] == "ValueError" and failure["message"] == message[:500]
+    assert len(failure["message"]) <= 500 and not failure["automatic_retry"]
+    assert raw == s3.objects[C.PREFIX + "failure.json"]
+    claim = s3.objects[C.PREFIX + "claim.json"]
+    with pytest.raises(FileExistsError):
+        R.run_official(meta, clean, out, s3=s3)
+    assert calls == [1] and not reads and s3.objects[C.PREFIX + "claim.json"] == claim
+
+
+@pytest.mark.parametrize(
+    "message,secrets",
+    [
+        ("password=hunter2 token=abcdef", ["hunter2", "abcdef"]),
+        ('{"aws_secret_access_key": "private key value"}', ["private key value"]),
+        ("Authorization: Bearer abc.def.ghi", ["abc.def.ghi"]),
+        ("https://user:passwd@example.test/x?X-Amz-Signature=hidden", ["passwd", "hidden"]),
+        ("Access AKIA1234567890123456 denied", ["AKIA1234567890123456"]),
+    ],
+)
+def test_failure_message_redacts_secrets(message, secrets):
+    safe = R.failure_message(ValueError(message))
+    assert "[REDACTED]" in safe
+    assert all(s not in safe for s in secrets)
+
+
+def test_failure_message_redacts_environment_secret(monkeypatch):
+    monkeypatch.setenv("AWS_SESSION_TOKEN", "unlabelled-sensitive-value")
+    assert "unlabelled-sensitive-value" not in R.failure_message(
+        ValueError("failed unlabelled-sensitive-value")
+    )
+
+
+@pytest.mark.parametrize("block", [10, 40])
+def test_sensitivity_ci_only_preserves_calculations(case, monkeypatch, block):
+    pairs, cfg = case
+    calls = []
+    original = R.centered_bootstrap
+
+    def record(observed, reps):
+        result = original(observed, reps)
+        calls.append(copy.deepcopy(result))
+        return result
+
+    monkeypatch.setattr(R, "centered_bootstrap", record)
+    result = R.bootstrap(pairs, cfg, block)
+    cursor = 0
+    for group in result["groups"]:
+        assert "p_holm" not in group and "report_significant" not in group
+        for row in [*group["by_horizon"], group]:
+            if row["bootstrap"].get("n_replicates") == 0:
+                assert "p" not in row["bootstrap"]
+                continue
+            expected = calls[cursor]
+            cursor += 1
+            expected.pop("p")
+            assert row["bootstrap"] == expected
+        assert group["value"] == pytest.approx(np.mean([h["value"] for h in group["by_horizon"]]))
+    assert cursor == len(calls)
+    assert '"p"' not in json.dumps(result)
+
+
+def test_preflight_order_before_claim_and_protected_read(harness, monkeypatch):
+    meta, clean, out, s3, reads = harness
+    events = []
+    validate = R.validate_metadata
+    put = s3.put_object
+    loader = R.load_snapshot
+
+    def git():
+        events.append("git")
+        return {"commit": meta["commit"], "origin_developer_sha": "d" * 40}
+
+    def config(value):
+        events.append("config_protocol")
+        return validate(value)
+
+    def claim(**kw):
+        if kw["Key"] == C.PREFIX + "claim.json":
+            events.append("claim")
+        return put(**kw)
+
+    def read(*args):
+        events.append("read")
+        return loader(*args)
+
+    monkeypatch.setattr(R, "git_provenance", git)
+    monkeypatch.setattr(R, "validate_metadata", config)
+    monkeypatch.setattr(s3, "put_object", claim)
+    monkeypatch.setattr(R, "load_snapshot", read)
+    R.run_official(meta, clean, out, s3=s3)
+    assert events == ["git", "config_protocol", "claim", "read"]
+    assert reads == ["read"]
+
+
+REAL_PROTOCOL_HASH = R.protocol_hash
+
+
+def test_official_claim_binds_computed_blob_hash(harness, monkeypatch, committed_blobs):
+    meta, clean, out, s3, reads = harness
+    monkeypatch.setattr(R, "protocol_hash", REAL_PROTOCOL_HASH)
+    expected = R.protocol_hash(meta["commit"])
+    meta["config_hash"] = expected
+    R.run_official(meta, clean, out, s3=s3)
+    claim = json.loads(s3.objects[C.PREFIX + "claim.json"])
+    assert claim["config_hash"] == expected and claim["commit"] == meta["commit"]
+    assert reads == ["read"]
+
+
+@pytest.mark.parametrize("failure", ["missing_blob", "hash_mismatch"])
+def test_protocol_validation_failure_prevents_claim_and_read(harness, monkeypatch, failure):
+    meta, clean, out, s3, reads = harness
+    if failure == "missing_blob":
+
+        def fail(commit):
+            raise subprocess.CalledProcessError(128, ["git", "show", commit + ":missing"])
+
+        monkeypatch.setattr(R, "protocol_hash", fail)
+    else:
+        meta["config_hash"] = "0" * 64
+    with pytest.raises((ValueError, subprocess.CalledProcessError)):
+        R.run_official(meta, clean, out, s3=s3)
+    assert not reads and not s3.objects and not (out / "eval/test2020").exists()
+
+
+@pytest.mark.parametrize("bad", [np.nan, np.inf, -np.inf])
+def test_nonfinite_volatility_factor_remains_fail_closed(data, monkeypatch, bad):
+    def invalid_ratio(prices, asset, base, lam, rejected):
+        return SimpleNamespace(k=np.full(len(base), bad), valid=np.ones(len(base), bool))
+
+    monkeypatch.setattr(R, "vol_ratio", invalid_ratio)
+    with pytest.raises(ValueError, match="nonfinite S1a"):
+        R.build_pairs(*data, R.settings("2014-03-04", "2014-03-04", "2014-03-14", 2))
