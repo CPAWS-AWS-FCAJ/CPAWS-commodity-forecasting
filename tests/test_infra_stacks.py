@@ -1,9 +1,10 @@
 """Kiểm tra các stack CDK: alarm theo dõi đúng Lambda, lịch khớp config, luồng ingest → predict.
 
-Cần aws-cdk-lib (có trong infra\\.venv, không có trong CI) nên tự bỏ qua khi thiếu.
-Chạy: infra\\.venv\\Scripts\\activate rồi pytest tests/test_infra_stacks.py (từ gốc repo).
+Cần aws-cdk-lib (có trong infra .venv, không có trong CI) nên tự bỏ qua khi thiếu.
+Chạy: infra .venv Scripts activate rồi pytest tests/test_infra_stacks.py (từ gốc repo).
 """
 
+import json
 import sys
 from pathlib import Path
 
@@ -12,7 +13,6 @@ import pytest
 pytest.importorskip("aws_cdk")
 
 INFRA_DIR = Path(__file__).resolve().parents[1] / "infra"
-
 
 PREDICT_TAG = "def5678"
 
@@ -26,7 +26,9 @@ def _synth(
     sys.path.insert(0, str(INFRA_DIR))
     try:
         import aws_cdk as cdk
+        from aws_cdk import aws_cognito as cognito
         from aws_cdk.assertions import Template
+        from stacks.cpaws_api_stack import CpawsApiStack
         from stacks.cpaws_data_stack import CpawsDataStack
         from stacks.cpaws_ops_stack import CpawsOpsStack
         from stacks.cpaws_serving_stack import CpawsServingStack
@@ -51,10 +53,27 @@ def _synth(
             predict_function_name=predict_function_name("dev"),
         )
         serving = CpawsServingStack(app, "CpawsServing", env_name="dev")
+
+        auth_stack = cdk.Stack(app, "CpawsAuth")
+        user_pool = cognito.UserPool(
+            auth_stack,
+            "TestUserPool",
+            self_sign_up_enabled=False,
+        )
+
+        api = CpawsApiStack(
+            app,
+            "CpawsApi",
+            env_name="dev",
+            forecasts_table=serving.forecasts_table,
+            user_pool=user_pool,
+        )
+
         return {
             "data": Template.from_stack(data).to_json(),
             "ops": Template.from_stack(ops).to_json(),
             "serving": Template.from_stack(serving).to_json(),
+            "api": Template.from_stack(api).to_json(),
         }
     finally:
         sys.path.remove(str(INFRA_DIR))
@@ -114,7 +133,6 @@ def test_alarms_watch_the_deployed_lambdas(templates):
         assert alarm["Properties"]["MetricName"] == "Errors"
         assert alarm["Properties"]["Namespace"] == "AWS/Lambda"
         watched.add(dims["FunctionName"])
-    # Mỗi Lambda đúng một alarm, không alarm nào theo dõi tên không tồn tại
     assert watched == fn_names
 
 
@@ -127,7 +145,6 @@ def test_ingest_success_and_failure_both_invoke_predict(templates):
     target = {"Fn::GetAtt": [predict_id, "Arn"]}
     assert cfg["DestinationConfig"]["OnSuccess"]["Destination"] == target
     assert cfg["DestinationConfig"]["OnFailure"]["Destination"] == target
-    # Predict không retry và không nối tiếp đi đâu
     pcfg = _event_invoke_config(t, predict_id)
     assert pcfg["MaximumRetryAttempts"] == 0
     assert "DestinationConfig" not in pcfg
@@ -139,7 +156,6 @@ def test_predict_lambda_configuration(templates):
     assert fn["MemorySize"] == 1024 and fn["Timeout"] == 120
     assert fn["PackageType"] == "Image" and fn["Architectures"] == ["x86_64"]
     assert "VpcConfig" not in fn
-    # ImageUri là Fn::Join(<account>.dkr.ecr...<repo>, ":<tag>"): phần cuối mang tag
     image_parts = fn["Code"]["ImageUri"]["Fn::Join"][1]
     assert image_parts[-1].endswith(f":{PREDICT_TAG}")
     assert "PredictRepo" in str(image_parts)
@@ -178,14 +194,12 @@ def test_predict_role_is_least_privilege(templates):
     assert shadow["Action"] == "s3:PutObject"
     assert _render(shadow["Resource"]).endswith("/eval/shadow/*")
 
-    # Không có action hay resource "*" trong policy riêng của role
     for st in by_sid.values():
         assert "*" not in str(st["Action"])
         assert st.get("Resource") != "*"
 
 
 def test_predict_table_name_matches_serving_stack(templates):
-    # CpawsServing có nhiều bảng (Forecasts, NewsLabels): tìm theo tên predict ghi vào
     _table(templates["serving"], "cpaws-dev-forecasts")
 
 
@@ -219,7 +233,6 @@ def test_scheduler_role_only_invokes_ingest_lambda(templates):
 
 
 def test_only_ingest_role_may_invoke_predict(templates):
-    """Ngoài destination của ingest, không role nào trong stack được gọi Lambda predict."""
     t = templates["data"]
     predict_arn = {"Fn::GetAtt": [_function_id(t, "cpaws-dev-predict"), "Arn"]}
     ingest_fn = t["Resources"][_function_id(t, "cpaws-dev-ingest")]["Properties"]
@@ -235,8 +248,6 @@ def test_only_ingest_role_may_invoke_predict(templates):
     assert holders == [[{"Ref": ingest_role_id}]]
 
 
-# Schedule group chứa lịch ingest. Cố ý ghi cứng ở đây (không import từ infra/stacks/shared.py):
-# đổi group là đổi quyền assume của role Scheduler nên phải sửa test có chủ đích.
 EXPECTED_SCHEDULE_GROUP = "default"
 
 
@@ -278,12 +289,10 @@ def test_scheduler_trust_policy_is_scoped_to_account_and_schedule_group(template
     assert statement["Action"] == "sts:AssumeRole"
     assert statement["Principal"] == {"Service": "scheduler.amazonaws.com"}
 
-    # Chỉ một khối điều kiện StringEquals, có đủ aws:SourceAccount và aws:SourceArn
     assert set(statement["Condition"]) == {"StringEquals"}
     equals = statement["Condition"]["StringEquals"]
     assert set(equals) == {"aws:SourceAccount", "aws:SourceArn"}
     assert _render(equals["aws:SourceAccount"]) == "${AWS::AccountId}"
-    # AWS yêu cầu ARN của schedule group, không phải ARN của từng schedule
     assert _render(equals["aws:SourceArn"]) == (
         "arn:${AWS::Partition}:scheduler:${AWS::Region}:${AWS::AccountId}"
         f":schedule-group/{EXPECTED_SCHEDULE_GROUP}"
@@ -339,9 +348,6 @@ def test_predict_role_has_no_ssm_permissions():
         assert not any(action.startswith("ssm:") for action in actions)
 
 
-# ---------- bảng NewsLabels (contract POST /chat, ADR-0003 mục 6) ----------
-
-
 def _table(template: dict, table_name: str) -> dict:
     (table,) = [
         r
@@ -369,7 +375,6 @@ def test_news_labels_table_matches_contract(templates):
         {"AttributeName": "sk", "AttributeType": "S"},
     ]
     assert props["BillingMode"] == "PAY_PER_REQUEST"
-    # không index, không stream: chỉ Query theo khóa chính
     assert "GlobalSecondaryIndexes" not in props and "LocalSecondaryIndexes" not in props
     assert "StreamSpecification" not in props
     assert table["DeletionPolicy"] == "Retain" and table["UpdateReplacePolicy"] == "Retain"
@@ -377,14 +382,28 @@ def test_news_labels_table_matches_contract(templates):
 
 def test_forecasts_table_is_unchanged_by_news_labels(templates):
     tables = _items(templates["serving"], "AWS::DynamoDB::Table")
-    # Forecasts, NewsLabels và chat-usage (tests/test_infra_chat_api.py kiểm bảng chat-usage)
-    assert len(tables) == 3
+    assert len(tables) == 4
+
     forecasts = _table(templates["serving"], "cpaws-dev-forecasts")
     assert next(k for k, r in tables.items() if r is forecasts).startswith("ForecastsTable")
     assert forecasts["Properties"]["KeySchema"] == [
         {"AttributeName": "asset", "KeyType": "HASH"},
         {"AttributeName": "base_date", "KeyType": "RANGE"},
     ]
+
+    accuracy = _table(templates["serving"], "cpaws-dev-accuracy")
+    accuracy_props = accuracy["Properties"]
+
+    assert accuracy_props["KeySchema"] == [
+        {"AttributeName": "pk", "KeyType": "HASH"},
+        {"AttributeName": "sk", "KeyType": "RANGE"},
+    ]
+    assert accuracy_props["BillingMode"] == "PAY_PER_REQUEST"
+    assert "GlobalSecondaryIndexes" not in accuracy_props
+    assert "LocalSecondaryIndexes" not in accuracy_props
+    assert "TimeToLiveSpecification" not in accuracy_props
+    assert accuracy["DeletionPolicy"] == "Retain"
+    assert accuracy["UpdateReplacePolicy"] == "Retain"
 
 
 def _news_policy(statement_fn) -> list[dict]:
@@ -419,13 +438,111 @@ def _news_policy(statement_fn) -> list[dict]:
 )
 def test_news_labels_statements_are_least_privilege(statement_fn, action):
     (st,) = _news_policy(statement_fn)
-    assert st["Effect"] == "Allow" and st["Action"] == action  # đúng một action
+    assert st["Effect"] == "Allow" and st["Action"] == action
     resource = _render(st["Resource"])
-    assert resource.endswith(":table/cpaws-dev-news-labels")  # đúng bảng, không index, không *
+    assert resource.endswith(":table/cpaws-dev-news-labels")
     assert "*" not in resource
 
 
 def test_existing_lambdas_have_no_news_labels_access(templates):
     for name in ("data", "ops", "serving"):
-        for p in _resources(templates[name], "AWS::IAM::Policy"):
-            assert "news-labels" not in str(p["Properties"]["PolicyDocument"])
+        for policy in _resources(templates[name], "AWS::IAM::Policy"):
+            assert "news-labels" not in str(policy["Properties"]["PolicyDocument"])
+
+
+def test_accuracy_api_lambda_configuration(templates: dict) -> None:
+    """Accuracy API Lambda có runtime và environment đúng."""
+    functions = _items(templates["api"], "AWS::Lambda::Function")
+
+    matches = [
+        item
+        for item in functions.values()
+        if item["Properties"].get("FunctionName") == "cpaws-dev-accuracy-api"
+    ]
+    assert len(matches) == 1
+
+    properties = matches[0]["Properties"]
+    assert properties["Runtime"] == "python3.12"
+    assert properties["Handler"] == "handler.handler"
+    assert properties["MemorySize"] == 256
+    assert properties["Timeout"] == 10
+
+    variables = properties["Environment"]["Variables"]
+    assert variables["ACCURACY_TABLE_NAME"] == "cpaws-dev-accuracy"
+    assert variables["ALLOWED_ORIGIN"] == "http://localhost:5173"
+
+    expected_assets = {"gold", "silver", "brent", "wti"}
+    assert json.loads(variables["MODEL_VERSIONS"]) == {
+        asset: "baseline-q252" for asset in expected_assets
+    }
+    assert json.loads(variables["CHAMPION_EFFECTIVE_BASE_DATES"]) == {
+        asset: "2026-10-26" for asset in expected_assets
+    }
+
+
+def test_accuracy_api_iam_is_read_only_and_table_scoped(templates: dict) -> None:
+    """Accuracy API chỉ được đọc đúng bảng Accuracy."""
+    policies = _items(templates["api"], "AWS::IAM::Policy")
+
+    matches = []
+    for policy in policies.values():
+        statements = policy["Properties"]["PolicyDocument"]["Statement"]
+        for statement in statements:
+            if statement.get("Sid") == "AccuracyReadOnly":
+                matches.append(statement)
+
+    assert len(matches) == 1
+
+    statement = matches[0]
+    actions = statement["Action"]
+    if isinstance(actions, str):
+        actions = [actions]
+
+    assert set(actions) == {"dynamodb:GetItem", "dynamodb:Query"}
+    assert statement["Effect"] == "Allow"
+
+    resource = json.dumps(statement["Resource"])
+    assert ":table/cpaws-dev-accuracy" in resource
+    assert "*" not in resource
+
+
+def test_accuracy_get_route_uses_cognito_and_accuracy_lambda(templates: dict) -> None:
+    """GET /accuracy/{asset} dùng Cognito và Accuracy Lambda."""
+    resources = _items(templates["api"], "AWS::ApiGateway::Resource")
+
+    accuracy_resource_id = next(
+        resource_id
+        for resource_id, resource in resources.items()
+        if resource["Properties"].get("PathPart") == "accuracy"
+    )
+
+    asset_resource_id = next(
+        resource_id
+        for resource_id, resource in resources.items()
+        if resource["Properties"].get("PathPart") == "{asset}"
+        and resource["Properties"].get("ParentId") == {"Ref": accuracy_resource_id}
+    )
+
+    methods = _items(templates["api"], "AWS::ApiGateway::Method")
+    matches = [
+        method["Properties"]
+        for method in methods.values()
+        if method["Properties"].get("HttpMethod") == "GET"
+        and method["Properties"].get("ResourceId") == {"Ref": asset_resource_id}
+    ]
+
+    assert len(matches) == 1
+
+    method = matches[0]
+    assert method["AuthorizationType"] == "COGNITO_USER_POOLS"
+    assert "AuthorizerId" in method
+    assert method["RequestParameters"]["method.request.path.asset"] is True
+
+    accuracy_function_id = _function_id(
+        templates["api"],
+        "cpaws-dev-accuracy-api",
+    )
+
+    integration = json.dumps(method["Integration"]["Uri"])
+    assert accuracy_function_id in integration
+    assert method["Integration"]["Type"] == "AWS_PROXY"
