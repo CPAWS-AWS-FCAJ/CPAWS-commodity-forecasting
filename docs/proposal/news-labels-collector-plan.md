@@ -1,759 +1,714 @@
-# Kế hoạch triển khai Fed/EIA NewsLabels Collector
+# NewsLabels Collector – Implementation Plan
 
-**Trạng thái:** Tài liệu kế hoạch triển khai
+**Trạng thái:** Proposed – cập nhật theo các quyết định tại cuộc họp ngày 30/10/2026 và review PR #52
 **Môi trường:** `cpaws-dev`
-**Thành phần liên quan:** S3, DynamoDB `NewsLabels`, chatbot News Retrieval
-**Phạm vi:** Thu thập tin tức Fed/EIA chính thức, quy trình gán nhãn thủ công, xác thực và ghi dữ liệu.
+**Phạm vi:** Thu thập metadata tin tức/sự kiện chính thức, tạo hàng chờ để gán nhãn thủ công và ghi dữ liệu đã gán nhãn vào DynamoDB `NewsLabels`.
+**Ngoài phạm vi:** Tự động tóm tắt, tự động phân loại bằng Bedrock, chatbot xử lý nội dung tin tức và thay đổi logic dự báo.
 
 ---
 
-## 1. Mục tiêu và phạm vi
+## 1. Mục tiêu và bối cảnh
 
-Mục tiêu của dự án là xây dựng một collector có khả năng thu thập metadata tin tức chính thức từ Federal Reserve và U.S. Energy Information Administration (EIA), chuẩn bị dữ liệu cho quy trình gán nhãn thủ công, xác thực nhãn đã hoàn thiện và ghi các bản ghi hợp lệ vào bảng DynamoDB `NewsLabels` hiện có.
+NewsLabels Collector là thành phần hỗ trợ quy trình thu thập và gán nhãn tin tức/sự kiện phục vụ CPAWS.
 
-Quy trình được tách biệt giữa thu thập tin tức và gán nhãn:
+Trong giai đoạn trước bảo vệ, quy trình gán nhãn được thực hiện thủ công bởi Phước. Collector chỉ chịu trách nhiệm phát hiện các bản tin chính thức thuộc phạm vi theo dõi, tạo metadata để Phước xử lý và đưa dữ liệu đã gán nhãn vào DynamoDB.
 
-- Collector tìm kiếm và chuẩn hóa metadata tin tức chính thức từ Fed/EIA.
-- Metadata sau khi thu thập được lưu trong S3 với prefix `pending/`.
-- Phước trực tiếp thực hiện tóm tắt và gán nhãn thủ công.
-- File nhãn đã hoàn thiện được tải lên S3 với prefix `labels/`.
-- Collector xác thực file nhãn và ghi các bản ghi hợp lệ vào DynamoDB.
-- Chatbot truy xuất dữ liệu đã ghi thông qua hợp đồng News Retrieval hiện có.
+Quy trình được thiết kế theo nguyên tắc tách biệt:
 
-### 1.1. Phạm vi thực hiện
+1. Collector thu thập metadata và tạo hàng chờ trong S3.
+2. Phước đọc metadata, kiểm tra nguồn tin và tự viết summary, nhãn.
+3. Phước lưu kết quả gán nhãn vào S3.
+4. Collector đọc kết quả đã gán nhãn và ghi vào DynamoDB `NewsLabels`.
+5. Chatbot sử dụng dữ liệu trong `NewsLabels` theo contract hiện hành.
 
-1. Thu thập metadata từ các nguồn Fed/EIA chính thức đã được phê duyệt.
-2. Chuẩn hóa URL, tiêu đề, tên nguồn và thời điểm xuất bản của bài viết.
-3. Tạo mã định danh ổn định cho từng bài viết (`article_id`).
-4. Lưu metadata đã thu thập vào S3 `pending/`.
-5. Đọc file nhãn được chuẩn bị thủ công từ S3 `labels/`.
-6. Xác thực cấu trúc file nhãn và mối liên hệ với bài viết đã thu thập.
-7. Chuyển đổi nhãn hợp lệ theo hợp đồng dữ liệu DynamoDB `NewsLabels` hiện có.
-8. Ghi dữ liệu bằng cơ chế ghi có điều kiện nhằm ngăn bản ghi trùng lặp và ghi đè.
-9. Áp dụng IAM theo nguyên tắc quyền tối thiểu.
-10. Bổ sung kiểm thử, logging và các biện pháp bảo vệ vận hành.
+Trong giai đoạn này, Collector **không gọi Bedrock để tự gán nhãn**. Quyết định sử dụng nhãn thủ công đến giai đoạn bảo vệ được ghi nhận trong ADR-0013.
 
-### 1.2. Ngoài phạm vi
+Tham chiếu:
+- ADR-0013: Quyết định sử dụng quy trình gán nhãn thủ công đến giai đoạn bảo vệ.
+- RFC #44: Quy tắc ghi dữ liệu có điều kiện vào `NewsLabels`.
+- PR #52: Kế hoạch triển khai NewsLabels Collector.
+- PR #77: Phương án đóng gói dữ liệu tin tức đã gán nhãn thủ công cho demo.
 
-- Tự động tóm tắt hoặc gán nhãn bằng Amazon Bedrock.
-- Gọi Amazon Nova hoặc các foundation model khác.
-- Tự động thực thi prompt hoặc retry quá trình gán nhãn bằng model.
-- Thay thế trách nhiệm gán nhãn thủ công của Phước.
-- Tạo thêm một bảng `NewsLabels` trùng lặp.
-- Thay đổi hợp đồng API News Retrieval của chatbot nếu chưa có PR riêng được review.
-- Triển khai hạ tầng AWS trong PR tài liệu này.
+## 2. Phạm vi thu thập và nguồn dữ liệu
 
-**Quyết định quy trình:** Cho đến khi bảo vệ dự án, Phước trực tiếp chuẩn bị summary và nhãn thủ công. Collector chỉ chịu trách nhiệm thu thập, xác thực và ghi dữ liệu, không phải dịch vụ gán nhãn bằng AI.
+### 2.1. Nguồn tin chính thức
 
----
+Collector theo dõi các nguồn chính thức sau:
 
-## 2. Nguồn tin và lịch phát hành
-
-Chỉ sử dụng các nguồn tin chính thức từ Federal Reserve và EIA.
-
-### 2.1. Federal Reserve — FOMC
-
-Nguồn chính thức:
-
-- Lịch họp FOMC: https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm
-- Tin tức và sự kiện Federal Reserve: https://www.federalreserve.gov/newsevents.htm
-
-Collector cần nhận diện các tài liệu FOMC chính thức, bao gồm:
-
-- Tuyên bố chính sách FOMC.
-- Implementation notes khi có liên quan.
-- Biên bản họp FOMC nếu nằm trong phạm vi thu thập được phê duyệt.
-- Các thông báo chính thức liên quan đến cuộc họp và chính sách tiền tệ.
-
-**Quy tắc xử lý thời điểm xuất bản:**
-
-- Tuyên bố chính sách FOMC thông thường được công bố lúc 2:00 PM theo giờ miền Đông Hoa Kỳ (ET).
-- Họp báo thường bắt đầu vào khoảng 2:30 PM ET.
-- Các thông báo lịch sử hoặc ngoại lệ phải sử dụng thời điểm xuất bản thực tế từ nguồn chính thức.
-- Không suy đoán timestamp lịch sử dựa trên lịch phát hành thông thường hiện tại.
-
-Lịch FOMC chính thức là nguồn tham chiếu cho ngày họp và các tài liệu liên quan. Collector không được mặc định tất cả tài liệu trong cùng một cuộc họp đều có cùng thời điểm xuất bản.
-
-**Yêu cầu backfill:** Phạm vi thời gian backfill lịch sử FOMC và loại tài liệu cần thu thập phải được xác nhận trước khi triển khai.
-
-### 2.2. EIA — Weekly Petroleum Status Report
-
-Nguồn chính thức:
-
-- Weekly Petroleum Status Report: https://www.eia.gov/petroleum/supply/weekly/
-- EIA Information Releases: https://ir.eia.gov/
-
-WPSR thông thường được công bố vào thứ Tư lúc 10:30 AM ET. Trong các tuần có ngày nghỉ lễ, lịch phát hành có thể thay đổi.
-
-Collector cần:
-
-- Kiểm tra trang phát hành chính thức để xác định báo cáo và ngày phát hành thực tế.
-- Ghi nhận timestamp xuất bản từ nguồn chính thức khi có thể.
-- Không mặc định thứ Tư nào cũng có báo cáo được phát hành.
-- Xử lý trường hợp báo cáo bị trì hoãn hoặc đổi lịch mà không tạo bài viết trùng lặp.
-
-### 2.3. EIA — Today in Energy
-
-Nguồn chính thức:
-
-- Today in Energy: https://www.eia.gov/todayinenergy/
-- Giới thiệu Today in Energy: https://www.eia.gov/todayinenergy/about.php
-
-Today in Energy cung cấp các bài viết và phân tích về năng lượng nhiều lần trong tuần. Nguồn này không có một giờ phát hành cố định để collector hard-code.
-
-Collector cần phát hiện bài viết mới từ trang chính thức hoặc RSS feed đã được xác nhận, nếu sử dụng. Thời điểm xuất bản phải lấy từ thông tin thực tế có trên nguồn.
-
-### 2.4. Cấu hình nguồn và các thông tin cần xác nhận
-
-| Hạng mục | Yêu cầu | Trạng thái |
+| Nguồn | Nội dung theo dõi | URL |
 |---|---|---|
-| FOMC calendar URL | Sử dụng lịch chính thức của Federal Reserve | Đã xác định |
-| FOMC article URLs | Trích xuất các tài liệu được liên kết chính thức | Đã xác định ở cấp nguồn |
-| FOMC historical backfill | Xác nhận khoảng thời gian và loại tài liệu | TBD |
-| WPSR URL | Sử dụng trang báo cáo tuần chính thức của EIA | Đã xác định |
-| WPSR release time | Thông thường thứ Tư 10:30 AM ET; kiểm tra lịch thực tế | Có ngoại lệ ngày lễ |
-| Today in Energy URL | Sử dụng trang chính thức của EIA | Đã xác định |
-| Today in Energy publication time | Đọc timestamp thực tế, không hard-code | Đã xác định |
-| RSS/feed endpoints | Xác nhận endpoint chính thức và điều khoản sử dụng | TBD |
-| Quyền truy cập và lưu trữ | Kiểm tra điều khoản sử dụng và chính sách truy cập tự động | Cần xác minh |
+| Federal Reserve – FOMC | FOMC statements và minutes | https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm |
+| EIA – Weekly Petroleum Status Report (WPSR) | Báo cáo tồn kho và tình hình cung ứng dầu hàng tuần | https://www.eia.gov/petroleum/supply/weekly/ |
+| EIA – Short-Term Energy Outlook (STEO) | Báo cáo triển vọng năng lượng ngắn hạn | https://www.eia.gov/outlooks/steo/ |
+| EIA – Today in Energy | Bài viết liên quan trực tiếp đến thị trường dầu thô | https://www.eia.gov/todayinenergy/ |
 
-Không tự tạo feed URL hoặc mặc định cấu trúc HTML của một trang web là API ổn định. Mọi RSS, API hoặc HTML parser được sử dụng phải được ghi rõ và kiểm thử với nguồn chính thức thực tế.
+Chỉ sử dụng nguồn chính thức của Federal Reserve và EIA. Không lấy nội dung từ trang tổng hợp tin tức hoặc nguồn không thuộc phạm vi đã thống nhất.
 
----
+### 2.2. Phạm vi bài viết được thu thập
 
-## 3. Quy trình thu thập và gán nhãn thủ công
+Collector chỉ đưa vào hàng chờ các nội dung thuộc một trong các nhóm sau:
 
-### 3.1. Quy trình tổng thể
+- FOMC statements.
+- FOMC minutes.
+- Weekly Petroleum Status Report (WPSR).
+- Short-Term Energy Outlook (STEO) và các bản cập nhật/dự báo chính thức liên quan.
 
-1. Collector kiểm tra các nguồn Fed/EIA chính thức đã được phê duyệt.
+Đối với mục Today in Energy, chỉ thu thập bài viết có tiêu đề đề cập trực tiếp đến ít nhất một trong các từ khóa hoặc chủ đề:
+
+- Crude oil.
+- Brent.
+- WTI.
+- STEO.
+
+Không thu thập toàn bộ bài viết Today in Energy nếu không liên quan trực tiếp đến phạm vi trên.
+
+### 2.3. Thời điểm công bố và múi giờ
+
+Thời điểm công bố phải được xác định theo lịch hoặc metadata của nguồn chính thức:
+
+| Nguồn | Quy tắc xác định thời điểm |
+|---|---|
+| FOMC | Sử dụng thời điểm công bố ghi trên lịch hoặc trang phát hành chính thức của Federal Reserve. |
+| WPSR | Theo lịch phát hành chính thức của EIA; thời điểm công bố thông thường là 10:30 AM Eastern Time vào thứ Tư, có thể thay đổi do ngày nghỉ hoặc điều chỉnh lịch. |
+| STEO | Theo lịch phát hành chính thức của EIA cho từng kỳ báo cáo. |
+| Today in Energy | Sử dụng thời điểm xuất bản được công bố trong metadata hoặc trang bài viết; không tự gán giờ cố định nếu nguồn không cung cấp. |
+
+Lưu timestamp theo UTC trong dữ liệu nội bộ. Khi đối chiếu lịch chạy Scheduler, sử dụng múi giờ `America/New_York`.
+
+Không tự suy luận thời điểm xuất bản từ thời điểm Collector phát hiện bài viết.
+
+### 2.4. Backfill
+
+Backfill các bản tin FOMC từ ngày 28/10/2026 được thực hiện theo cùng quy trình và quy tắc chống ghi đè như dữ liệu thu thập mới.
+
+Không tạo dữ liệu giả để thay thế bản tin chính thức. Nếu không tìm được metadata đáng tin cậy hoặc không xác định được thời điểm công bố, ghi nhận trường hợp đó để xử lý thủ công thay vì tự tạo giá trị.
+
+## 3. Quy trình xử lý dữ liệu
+
+Quy trình gán nhãn thủ công trong giai đoạn trước bảo vệ được thực hiện theo quyết định tại ADR-0013.
+
+### 3.1. Luồng tổng thể
+
+Quy trình gồm hai giai đoạn chính:
+
+**Giai đoạn A – Tạo hàng chờ**
+
+1. Collector truy cập các nguồn chính thức trong phạm vi.
 2. Phát hiện bài viết hoặc báo cáo mới.
-3. Trích xuất và chuẩn hóa metadata bài viết.
-4. Xác thực các trường metadata bắt buộc.
-5. Tạo `article_id` ổn định.
-6. Lưu metadata vào S3 `pending/`.
-7. Phước xem xét dữ liệu đang chờ và thực hiện tóm tắt, gán nhãn thủ công.
-8. Phước tải file nhãn hoàn chỉnh lên S3 `labels/`.
-9. Collector đọc các file nhãn đã hoàn thiện từ `labels/`.
-10. Collector xác thực cấu trúc nhãn và thông tin tham chiếu bài viết.
-11. Collector chuyển đổi nhãn hợp lệ theo hợp đồng `NewsLabels` hiện có.
-12. Collector ghi bản ghi bằng `PutItem` có điều kiện.
-13. Collector ghi log kết quả xử lý và lỗi phát sinh.
+3. Chuẩn hóa metadata tối thiểu.
+4. Tạo file `pending/<article_id>.json` trong S3.
+5. Không đọc toàn bộ nội dung bài viết và không tự tạo summary hoặc nhãn.
 
-### 3.2. Trách nhiệm của các S3 prefix
+**Giai đoạn B – Ghi nhãn đã hoàn tất**
 
-| Prefix | Mục đích | Người ghi | Người đọc |
+1. Phước đọc metadata trong `pending/`.
+2. Phước kiểm tra nguồn chính thức và tự viết summary, nhãn.
+3. Phước tạo file `labels/<article_id>.json`.
+4. Ở lần chạy tiếp theo, Collector phát hiện file nhãn tương ứng.
+5. Collector đọc file trong `labels/`, kiểm tra schema và tính hợp lệ.
+6. Collector ghi một item cho mỗi asset vào DynamoDB `NewsLabels` bằng conditional `PutItem`.
+7. Nếu file nhãn chưa tồn tại hoặc không hợp lệ, Collector không ghi dữ liệu vào DynamoDB.
+
+Không đưa dữ liệu chưa được gán nhãn vào `NewsLabels`.
+
+### 3.2. Cơ chế theo dõi trạng thái trong S3
+
+Sử dụng hai prefix cố định:
+
+- `pending/`: metadata bài viết chờ Phước gán nhãn.
+- `labels/`: dữ liệu đã được Phước gán nhãn.
+
+Ví dụ:
+
+```text
+pending/
+  <article_id>.json
+
+labels/
+  <article_id>.json
+```
+
+Collector sử dụng `s3:ListBucket` với điều kiện `s3:prefix` để liệt kê các object thuộc phạm vi được cấp quyền.
+
+Quy tắc truy cập:
+
+- Collector được `ListBucket` trong phạm vi prefix `pending/` và `labels/`.
+- Collector được `PutObject` vào `pending/*`.
+- Collector được `GetObject` từ `labels/*`.
+- Collector **không được `GetObject` từ `pending/*`**.
+- Collector không cần đọc nội dung file pending để xác định file nhãn đã tồn tại.
+- Việc đối chiếu trạng thái hàng chờ được thực hiện dựa trên danh sách object key và `article_id`.
+
+Collector không sử dụng DynamoDB `GetItem` để kiểm tra trạng thái xử lý. Không tạo thêm marker table hoặc yêu cầu quyền đọc DynamoDB ngoài phạm vi đã thống nhất.
+
+File trong `labels/` là dấu hiệu cho biết Phước đã hoàn tất việc gán nhãn. Collector chỉ đọc nội dung file này khi xử lý dữ liệu đã gán nhãn.
+
+### 3.3. Metadata trong pending
+
+File `pending/<article_id>.json` chỉ chứa metadata cần thiết để Phước xác định và mở bài viết.
+
+Ví dụ:
+
+```json
+{
+  "article_id": "example-article-id",
+  "title": "Official release title",
+  "link": "https://www.example.gov/official-release",
+  "published_at": "2026-11-05T14:30:00Z",
+  "source": "EIA",
+  "fetched_at": "2026-11-05T15:00:00Z"
+}
+```
+
+Các trường bắt buộc:
+
+- `article_id`: định danh ổn định của bài viết.
+- `title`: tiêu đề gốc.
+- `link`: URL nguồn chính thức.
+- `published_at`: thời điểm xuất bản từ nguồn.
+- `source`: tên nguồn phát hành.
+
+`fetched_at` được sử dụng để ghi nhận thời điểm Collector phát hiện hoặc thu thập metadata.
+
+Không lưu toàn bộ nội dung bài viết, không lưu summary do Collector tự tạo và không lưu nhãn dự đoán.
+
+### 3.4. File labels
+
+Phước tạo file `labels/<article_id>.json` theo schema đã thống nhất trong benchmark `tests/labeling/real_cases_v3.json`.
+
+Ví dụ cấu trúc:
+
+```json
+{
+  "title": "Official release title",
+  "summary": "A concise factual Vietnamese summary of the official release.",
+  "url": "https://www.example.gov/official-release",
+  "published_at_utc": "2026-11-05T14:30:00Z",
+  "source": "EIA",
+  "release_type": "WPSR",
+  "expected": {
+    "relevant": true,
+    "event_type": "oil_supply",
+    "asset_labels": {
+      "gold": {
+        "impact_score": 0,
+        "direction": "neutral",
+        "confidence": 0.8,
+        "evidence": "Evidence supporting the label."
+      },
+      "silver": {
+        "impact_score": 0,
+        "direction": "neutral",
+        "confidence": 0.8,
+        "evidence": "Evidence supporting the label."
+      },
+      "brent": {
+        "impact_score": 2,
+        "direction": "bearish",
+        "confidence": 0.9,
+        "evidence": "Evidence supporting the label."
+      },
+      "wti": {
+        "impact_score": 2,
+        "direction": "bearish",
+        "confidence": 0.9,
+        "evidence": "Evidence supporting the label."
+      }
+    }
+  }
+}
+```
+
+Đây là ví dụ minh họa cấu trúc, không phải nhãn mặc định cho dữ liệu thực tế.
+
+Quy tắc gán nhãn:
+
+- `title`: giữ nguyên tiêu đề tiếng Anh của nguồn chính thức.
+- `summary`: viết bằng tiếng Việt, tối đa 1–2 câu và không quá 300 ký tự.
+- `summary` chỉ nêu thông tin thực tế có trong nguồn, không đưa ý kiến hoặc suy đoán.
+- `url`: trỏ đến nguồn chính thức.
+- `published_at_utc`: thời điểm công bố quy đổi về UTC.
+- `source`: nguồn phát hành.
+- `release_type`: loại bản tin hoặc báo cáo.
+- `expected.relevant`: xác định bản tin có liên quan đến phạm vi CPAWS hay không.
+- `expected.event_type`: phân loại loại sự kiện.
+- `expected.asset_labels`: phải có nhãn cho đủ bốn asset `gold`, `silver`, `brent`, `wti`.
+- Mỗi asset label phải có `impact_score`, `direction`, `confidence`, `evidence`.
+
+`tests/labeling/real_cases_v3.json` là benchmark để đối chiếu schema và chất lượng nhãn, không phải nguồn dữ liệu production.
+
+### 3.5. Kiểm tra trước khi ghi DynamoDB
+
+Collector phải kiểm tra:
+
+1. File labels có tồn tại và đọc được hay không.
+2. JSON có hợp lệ hay không.
+3. Các trường bắt buộc có đầy đủ hay không.
+4. URL có thuộc nguồn chính thức tương ứng hay không.
+5. `published_at_utc` có định dạng timestamp UTC hợp lệ hay không.
+6. `asset_labels` có đủ bốn asset hay không.
+7. Các giá trị nhãn có đúng kiểu dữ liệu và phạm vi được schema cho phép hay không.
+
+Nếu dữ liệu không hợp lệ:
+
+- Không ghi item tương ứng vào DynamoDB.
+- Ghi log lỗi đủ để truy vết.
+- Không tự sửa hoặc tự suy luận nhãn.
+- Giữ nguyên file labels để Phước kiểm tra và sửa thủ công.
+
+## 4. Kiến trúc triển khai AWS
+
+### 4.1. Thành phần
+
+| Thành phần | Vai trò |
+|---|---|
+| EventBridge Scheduler | Kích hoạt Collector theo lịch. |
+| Lambda NewsLabels Collector | Thu thập metadata, kiểm tra file labels và ghi dữ liệu đã gán nhãn. |
+| S3 `cpaws-dev-lake` | Lưu metadata pending và dữ liệu labels. |
+| DynamoDB `NewsLabels` | Lưu dữ liệu tin tức/sự kiện đã gán nhãn. |
+| CloudWatch Logs | Lưu log hoạt động của Lambda. |
+| CloudWatch Alarm | Phát hiện lỗi Lambda. |
+| SNS `cpaws-dev-alarms` | Nhận thông báo từ alarm. |
+
+### 4.2. CDK stack
+
+Tạo stack riêng:
+
+`CpawsNews`
+
+Stack này tham chiếu đến các tài nguyên đã tồn tại:
+
+- S3 lake bucket `cpaws-dev-lake`.
+- DynamoDB table `NewsLabels`.
+- SNS topic `cpaws-dev-alarms`.
+
+Không thêm Collector vào `CpawsData`.
+
+Không tạo lại bucket hoặc DynamoDB table nếu tài nguyên tương ứng đã được quản lý ở stack khác.
+
+Stack chỉ chịu trách nhiệm tạo và cấu hình tài nguyên thuộc phạm vi NewsLabels Collector.
+
+### 4.3. Lambda
+
+Lambda Collector chịu trách nhiệm:
+
+- Lấy dữ liệu từ các nguồn chính thức.
+- Chuẩn hóa metadata.
+- Tạo file pending.
+- Liệt kê trạng thái các object theo prefix.
+- Đọc file labels đã hoàn tất.
+- Kiểm tra schema.
+- Ghi item vào DynamoDB bằng conditional `PutItem`.
+- Ghi log và báo lỗi khi xử lý thất bại.
+
+Không tích hợp Bedrock trong Lambda Collector.
+
+Không đưa logic chatbot hoặc logic dự báo vào Lambda này.
+
+### 4.4. EventBridge Scheduler
+
+Lịch chạy dự kiến:
+
+```text
+cron(30 15 ? * MON-FRI *)
+```
+
+Cấu hình:
+
+```text
+ScheduleExpressionTimezone=America/New_York
+```
+
+Lịch chạy tương ứng 15:30 theo giờ New York, từ thứ Hai đến thứ Sáu.
+
+Việc sử dụng timezone được cấu hình trực tiếp trong Scheduler, không tự cộng hoặc trừ giờ trong code Lambda.
+
+Scheduler chỉ kích hoạt Collector. Không dùng lịch chạy để giả định rằng mọi nguồn đều đã phát hành dữ liệu.
+
+### 4.5. Retry và xử lý lỗi
+
+Cấu hình retry của Scheduler target:
+
+```text
+MaximumRetryAttempts = 0
+```
+
+Không tự động retry ở tầng Scheduler.
+
+Lỗi trong quá trình xử lý phải được ghi log rõ ràng để có thể xác định nguồn, bài viết và bước xử lý bị lỗi.
+
+Conditional `PutItem` là cơ chế bảo vệ dữ liệu khi gặp bản ghi trùng, không phải lý do để retry vô hạn.
+
+### 4.6. CloudWatch Logs và Alarm
+
+Log retention:
+
+```text
+1 month
+```
+
+Thời gian lưu log thống nhất với Lambda predict hiện có.
+
+Tạo CloudWatch Alarm theo dõi metric `Errors` của Lambda Collector.
+
+Alarm gửi thông báo đến SNS topic hiện có:
+
+```text
+cpaws-dev-alarms
+```
+
+Không tạo SNS topic mới nếu topic hiện tại đáp ứng được yêu cầu.
+
+## 5. Quyền IAM
+
+### 5.1. Nguyên tắc
+
+Áp dụng least privilege. Collector chỉ có quyền cần thiết cho đúng prefix và đúng DynamoDB table.
+
+Không cấp quyền rộng trên toàn bộ bucket hoặc toàn bộ DynamoDB.
+
+Không sử dụng long-term access keys.
+
+### 5.2. IAM của Collector
+
+| Service | Action | Resource / Condition | Mục đích |
 |---|---|---|---|
-| `pending/` | Metadata bài viết đã thu thập, đang chờ gán nhãn | Collector | Phước |
-| `labels/` | Summary và nhãn thủ công đã hoàn thiện | Phước | Collector |
+| S3 | `s3:ListBucket` | Bucket `cpaws-dev-lake`, giới hạn `s3:prefix` | Liệt kê object trong phạm vi pending và labels. |
+| S3 | `s3:PutObject` | `pending/*` | Tạo metadata hàng chờ. |
+| S3 | `s3:GetObject` | `labels/*` | Đọc dữ liệu đã được gán nhãn. |
+| DynamoDB | `dynamodb:PutItem` | Table `NewsLabels` | Ghi dữ liệu đã gán nhãn. |
 
-Hai prefix phải được tách biệt.
+Không cấp cho Collector:
 
-File metadata trong `pending/` không phải file nhãn hoàn chỉnh và tuyệt đối không được ghi trực tiếp vào `NewsLabels`.
+- `s3:GetObject` trên `pending/*`.
+- `s3:DeleteObject`.
+- `dynamodb:GetItem`.
+- `dynamodb:Scan`.
+- `dynamodb:DeleteItem`.
+- `dynamodb:UpdateItem`.
+- `bedrock:InvokeModel`.
 
-### 3.3. Cấu trúc dữ liệu pending
+Đối với `s3:ListBucket`, policy phải giới hạn prefix bằng điều kiện `s3:prefix`, không cấp quyền liệt kê toàn bucket không giới hạn.
 
-Mỗi item trong `pending/` cần chứa đủ thông tin để Phước nhận diện và gán nhãn bài viết.
+### 5.3. IAM của Phước
 
-Các metadata dự kiến gồm:
+Quyền của Phước được cấp riêng, không gộp vào execution role của Collector.
 
-- `article_id` ổn định.
-- URL gốc của bài viết.
-- URL đã chuẩn hóa, nếu khác URL gốc.
-- Tiêu đề bài viết.
-- Tên nguồn.
-- Thời điểm xuất bản, nếu có.
-- Thời điểm collector thu thập.
-- Metadata đặc thù của nguồn cần thiết cho việc truy vết.
+| Service | Action | Resource / Condition | Mục đích |
+|---|---|---|---|
+| S3 | `s3:ListBucket` | Bucket `cpaws-dev-lake`, prefix `pending/` | Liệt kê metadata đang chờ. |
+| S3 | `s3:GetObject` | `pending/*` | Đọc metadata để mở nguồn chính thức. |
+| S3 | `s3:PutObject` | `labels/*` | Lưu dữ liệu đã gán nhãn. |
 
-S3 object key và cấu trúc JSON chính xác phải được chốt trong PR triển khai.
+Không cấp quyền xóa pending hoặc labels nếu không có yêu cầu riêng được phê duyệt.
 
-Collector không được mặc định rằng đã có nhãn chỉ vì một item đã tồn tại trong `pending/`.
+### 5.4. IAM review
 
-### 3.4. Trách nhiệm gán nhãn thủ công
+Policy phải được review theo đúng phạm vi tài nguyên và prefix.
 
-Phước chịu trách nhiệm:
+- Collector role không được đọc `pending/*`.
+- Phước có quyền đọc `pending/*` và ghi `labels/*`.
+- Collector chỉ đọc `labels/*`.
+- Không có quyền Bedrock trong Collector role.
+- Không có quyền Scan hoặc GetItem trên DynamoDB.
 
-- Đọc và kiểm tra bài viết gốc từ nguồn chính thức.
-- Chuẩn bị summary ngắn gọn.
-- Xác định bài viết có liên quan đến các tài sản được hỗ trợ hay không.
-- Gán impact score và direction theo quy tắc labeling đã thống nhất.
-- Lưu file nhãn hoàn chỉnh vào `labels/`.
+Các thay đổi IAM phải được review trước khi tích hợp.
 
-File nhãn phải chứa thông tin tham chiếu ổn định đến bài viết tương ứng trong `pending/`.
+## 6. Quy tắc ghi DynamoDB NewsLabels
 
-Quy tắc đối chiếu phải được xác định và xác thực trong quá trình triển khai, ưu tiên sử dụng `article_id` và URL gốc để truy vết.
+### 6.1. Nguyên tắc ghi
 
-Nếu file nhãn chưa tồn tại, sai định dạng hoặc không thể đối chiếu với bài viết trong `pending/`, collector không được tạo bản ghi `NewsLabels`.
+Chỉ ghi dữ liệu đã được Phước gán nhãn và vượt qua kiểm tra schema.
 
-### 3.5. Các giới hạn của collector
-
-Collector không được:
-
-- Gọi Amazon Bedrock.
-- Gọi Nova hoặc foundation model khác.
-- Tự tạo summary bài viết.
-- Tự tạo nhãn tài sản.
-- Retry quá trình labeling bằng model.
-- Tự chỉnh sửa nhãn thủ công để làm cho dữ liệu có vẻ hợp lệ.
-
-Quy trình này không yêu cầu quyền `bedrock:InvokeModel`.
-
----
-
-## 4. Hợp đồng dữ liệu và ánh xạ DynamoDB
-
-### 4.1. Bảng DynamoDB hiện có
-
-Sử dụng bảng DynamoDB `NewsLabels` hiện có. Không tạo bảng trùng lặp.
-
-Thiết kế khóa hiện tại:
-
-- Partition key: `asset`
-- Sort key: `sk`
-
-Các giá trị asset được hỗ trợ:
+Mỗi file labels có thể tạo tối đa bốn item tương ứng với:
 
 - `gold`
 - `silver`
 - `brent`
 - `wti`
 
-Collector phải tuân thủ hợp đồng dữ liệu hiện tại trong `docs/api/contract.md`.
+Mỗi item phải giữ được thông tin nguồn để truy vết bài viết gốc và nhãn đã gán.
 
-Nếu quá trình triển khai cần thay đổi contract, thay đổi đó phải được nêu rõ và review riêng, không được tự ý đưa vào một cấu trúc item khác.
+Không ghi dữ liệu pending vào DynamoDB.
 
-### 4.2. Sort key
+### 6.2. Conditional PutItem
 
-Sử dụng định dạng đã thống nhất:
+Thực hiện ghi bằng `PutItem` có điều kiện theo RFC #44.
 
-`<published_at>#<article_id>`
+Condition expression phải sử dụng chính xác:
 
-Ví dụ:
+```text
+attribute_not_exists(asset) AND attribute_not_exists(sk)
+```
 
-`2026-10-13T10:45:00Z#3f9a1c0b7e2d4a61`
+Mục tiêu:
 
-Phần timestamp phải được chuẩn hóa về UTC.
+- Không ghi đè item đã tồn tại.
+- Không làm thay đổi dữ liệu đã được ghi trước đó.
+- Khi item trùng khóa, xử lý như bản ghi đã tồn tại và ghi nhận kết quả phù hợp trong log.
+- Không xóa hoặc cập nhật item cũ để thay thế bằng dữ liệu mới.
 
-Timestamp trong `sk` phải trùng với giá trị `published_at` của bản ghi.
+Không sử dụng `PutItem` không có điều kiện.
 
-### 4.3. Định danh bài viết
+Không thêm cơ chế `GetItem` trước khi ghi để kiểm tra trùng. Conditional `PutItem` là cơ chế bảo vệ dữ liệu tại thời điểm ghi.
 
-Tạo `article_id` ổn định từ URL bài viết bằng SHA-256.
+### 6.3. Xử lý bản ghi trùng
 
-Có thể sử dụng 16 ký tự hexadecimal đầu tiên của SHA-256 để tạo mã định danh, phù hợp với quy ước trong `docs/api/contract.md`.
+Nếu DynamoDB trả về lỗi conditional check do item đã tồn tại:
 
-Trước khi tính hash, implementation phải sử dụng một biểu diễn URL nhất quán và xác định.
+- Không ghi đè.
+- Không xóa item hiện tại.
+- Không retry cùng một item theo cách bỏ qua điều kiện.
+- Ghi nhận trạng thái duplicate/already exists trong log.
+- Tiếp tục xử lý các asset khác nếu không có lỗi nghiêm trọng ảnh hưởng toàn bộ lần chạy.
 
-Các nguyên tắc:
+Nếu lỗi không phải conditional check, ghi log và xử lý theo cơ chế lỗi đã định nghĩa.
 
-- Cùng một URL đầu vào theo quy tắc chuẩn hóa đã thống nhất phải tạo ra cùng một `article_id`.
-- Không tự ý loại bỏ query parameters nếu chưa xác định chúng không ảnh hưởng đến danh tính bài viết.
-- Không sử dụng riêng tiêu đề bài viết làm khóa định danh.
-- Lưu URL được sử dụng để tạo `article_id` để có thể truy vết và kiểm tra.
+### 6.4. Truy vết
 
-Quy tắc chuẩn hóa URL chi tiết phải được xác định và kiểm thử trong PR triển khai.
+Dữ liệu được ghi vào `NewsLabels` phải giữ các trường cần thiết để xác định:
 
-### 4.4. Các trường dữ liệu DynamoDB
+- Bài viết nguồn.
+- URL chính thức.
+- Thời điểm xuất bản.
+- Nguồn phát hành.
+- Loại sự kiện.
+- Asset tương ứng.
+- Nhãn và bằng chứng gán nhãn.
 
-Item cuối cùng phải tuân thủ hợp đồng `NewsLabels` hiện có.
+Không tự tạo thêm schema hoặc thay đổi contract DynamoDB ngoài phạm vi RFC #44 và contract API đã thống nhất.
 
-Các trường nghiệp vụ bắt buộc theo contract:
+## 7. Bảo mật và chất lượng dữ liệu
 
-| Trường | Ý nghĩa | Quy tắc xác thực |
+### 7.1. Nguồn dữ liệu
+
+Chỉ chấp nhận nguồn chính thức trong danh sách tại mục 2.
+
+URL phải được kiểm tra theo domain nguồn tương ứng. Không coi nội dung từ URL không xác định là dữ liệu chính thức.
+
+### 7.2. Prompt injection
+
+Dù giai đoạn này không sử dụng Bedrock, nội dung tin tức vẫn được xem là dữ liệu không đáng tin cậy.
+
+Không xem nội dung bài viết, tiêu đề hoặc metadata từ nguồn bên ngoài là chỉ thị thực thi.
+
+Không thực thi mã, lệnh hoặc nội dung nhúng trong dữ liệu thu thập.
+
+Không đưa nội dung bài viết vào prompt hoặc quy trình tự động thực thi trong phạm vi Collector.
+
+### 7.3. Chất lượng nhãn
+
+Phước chịu trách nhiệm kiểm tra nội dung nguồn và gán nhãn thủ công.
+
+Summary phải:
+
+- Giữ đúng ý nghĩa của nguồn chính thức.
+- Viết bằng tiếng Việt.
+- Không quá 300 ký tự.
+- Không đưa nhận định đầu tư hoặc dự báo chủ quan.
+- Không thêm dữ kiện không có trong nguồn.
+
+Nhãn cho từng asset phải có bằng chứng hỗ trợ. Không suy diễn rằng một sự kiện ảnh hưởng giống nhau đến cả bốn asset.
+
+### 7.4. Chatbot
+
+Chatbot tiếp tục sử dụng contract hiện hành để đọc dữ liệu NewsLabels.
+
+Bộ lọc `min_impact >= 2` trong `get_news` được giữ nguyên theo quyết định hiện tại.
+
+Collector không thay đổi logic truy vấn, cách lọc tin hoặc cách chatbot giải thích kết quả.
+
+## 8. Kiểm thử và tiêu chí nghiệm thu
+
+### 8.1. Unit tests
+
+Kiểm thử các nhóm chức năng:
+
+- Chuẩn hóa metadata từ nguồn chính thức.
+- Tạo file pending đúng schema.
+- Xác định bài viết thuộc phạm vi theo dõi.
+- Bỏ qua bài viết ngoài phạm vi.
+- Liệt kê object theo prefix.
+- Phát hiện file labels tương ứng.
+- Đọc và parse file labels.
+- Kiểm tra trường bắt buộc.
+- Kiểm tra đủ bốn asset.
+- Từ chối dữ liệu sai schema.
+- Ghi DynamoDB bằng conditional `PutItem`.
+- Xử lý conditional check failure.
+- Xử lý lỗi S3 và DynamoDB.
+- Không gọi Bedrock.
+
+### 8.2. IAM tests / review
+
+Xác nhận Collector role:
+
+- Có `PutObject` trên `pending/*`.
+- Có `GetObject` trên `labels/*`.
+- Có `ListBucket` giới hạn bằng `s3:prefix`.
+- Có `PutItem` trên đúng bảng `NewsLabels`.
+- Không có `GetObject` trên `pending/*`.
+- Không có `DeleteObject`.
+- Không có DynamoDB `GetItem`, `Scan`, `UpdateItem`, `DeleteItem`.
+- Không có `bedrock:InvokeModel`.
+
+Xác nhận quyền Phước được tách riêng khỏi Collector role.
+
+### 8.3. Integration tests
+
+Kiểm thử luồng:
+
+1. Collector phát hiện một bản tin chính thức mới.
+2. Collector tạo `pending/<article_id>.json`.
+3. Phước tạo `labels/<article_id>.json`.
+4. Collector phát hiện file labels.
+5. Collector đọc và kiểm tra schema.
+6. Collector ghi item cho các asset vào `NewsLabels`.
+7. Chạy lại Collector với cùng dữ liệu.
+8. Xác nhận item đã tồn tại không bị ghi đè.
+
+Kiểm thử thêm các trường hợp:
+
+- Không có file labels.
+- File labels JSON không hợp lệ.
+- Thiếu asset label.
+- Timestamp sai định dạng.
+- URL không thuộc nguồn chính thức.
+- DynamoDB trả về conditional check failure.
+- S3 hoặc DynamoDB phát sinh lỗi.
+
+### 8.4. Tiêu chí nghiệm thu
+
+Chỉ xem Collector đạt yêu cầu khi:
+
+- Thu thập đúng các nguồn và phạm vi đã thống nhất.
+- Chỉ tạo pending metadata, không tự gán nhãn.
+- Đọc được labels do Phước tạo.
+- Ghi đúng schema DynamoDB.
+- Conditional `PutItem` hoạt động và không ghi đè.
+- IAM đúng least privilege.
+- Scheduler sử dụng đúng timezone.
+- Alarm gửi đến SNS hiện có.
+- Log retention là một tháng.
+- Unit tests và integration tests đạt.
+- PR đã được review và merge theo quy trình dự án.
+
+## 9. Timeline và phương án demo
+
+### 9.1. Demo ngày 08/11/2026
+
+Demo ngày 08/11 sử dụng bộ JSON tin tức đã được gán nhãn thủ công và đóng gói trong Lambda Chat API theo phương án PR #77.
+
+Đường dẫn package:
+
+```text
+infra/lambda/chat_api/news/
+```
+
+Bộ dữ liệu demo được Phước gán nhãn thủ công từ các bản tin chính thức có thật.
+
+Đây không phải dữ liệu giả, không phải fixture mô phỏng tác động và không phụ thuộc vào Collector.
+
+Trong cấu hình demo này:
+
+```text
+NEWS_TABLE_NAME=
+```
+
+Collector không phải dependency của demo ngày 08/11. Việc Collector chưa hoàn tất không làm ảnh hưởng đến luồng chatbot đã chuẩn bị cho bảo vệ.
+
+### 9.2. Timeline triển khai Collector
+
+| Thời gian | Công việc | Người phụ trách |
 |---|---|---|
-| `asset` | Tài sản liên quan | `gold`, `silver`, `brent`, `wti` |
-| `sk` | Thời điểm xuất bản và định danh bài viết | `<published_at>#<article_id>` |
-| `title` | Tiêu đề bài viết | Không rỗng, tối đa 300 ký tự |
-| `summary` | Nội dung tóm tắt thủ công | 1–3 câu, tối đa 600 ký tự |
-| `link` | URL bài viết | URL HTTP hoặc HTTPS hợp lệ |
-| `source` | Đơn vị phát hành | Chuỗi tên nguồn |
-| `published_at` | Thời điểm xuất bản gốc | UTC, định dạng `YYYY-MM-DDTHH:MM:SSZ`, không có phần lẻ giây |
-| `impact_score` | Mức độ tác động dự kiến | Số nguyên từ 0–3 |
-| `direction` | Hướng tác động dự kiến | `bullish`, `bearish`, `mixed` hoặc `uncertain` |
+| 09–15/11/2026 | Triển khai Collector code và CDK trong PR riêng | Tuấn |
+| Trong quá trình triển khai | Review CDK | `@CTMT1406` |
+| Trong quá trình triển khai | Review IAM | Tuấn |
+| Trước 22/11/2026 | Hoàn thành lần chạy thực tế và có dữ liệu trong NewsLabels trước thời điểm freeze | Tuấn phối hợp Phước |
+| Sau khi có dữ liệu | Kiểm tra tích hợp với contract và chatbot | Nhóm phụ trách API/chatbot |
 
-`asset` và `sk` là hai khóa DynamoDB. Bảy trường còn lại là các trường nghiệp vụ của NewsLabels.
+Mọi thay đổi code hoặc CDK phải đi qua PR, được review và merge trước khi xem là hoàn tất tích hợp.
 
-Các trường bổ sung như `article_id`, `confidence`, `event_type`, `fetched_at` hoặc `labeled_at` chỉ được thêm nếu phù hợp với contract và được chấp thuận trong PR triển khai.
+### 9.3. Phương án nếu Collector chậm tiến độ
 
-**Bắt buộc xác minh contract:** Mapper phải tuân thủ `docs/api/contract.md`. Không được tự ý đổi tên, bỏ hoặc thay đổi kiểu dữ liệu của các trường hiện có.
+Nếu Collector chưa hoàn tất trước thời điểm demo:
 
-### 4.5. Ánh xạ tài sản
+- Tiếp tục sử dụng bộ JSON tin tức chính thức đã được Phước gán nhãn thủ công.
+- Đóng gói dữ liệu trong Lambda Chat API theo PR #77.
+- Không chờ Collector để thực hiện demo.
+- Không đưa dữ liệu giả hoặc nhãn tự sinh vào demo.
+- Không thay đổi logic chatbot chỉ để phụ thuộc vào Collector.
 
-Một bài viết có thể liên quan đến nhiều tài sản được hỗ trợ.
+Nếu Collector hoàn thành sau demo, nhóm tiếp tục triển khai và kiểm thử theo timeline mục 9.2.
 
-Collector cần tạo một item DynamoDB cho mỗi tài sản có liên quan, với:
+### 9.4. Phương án dữ liệu dự phòng
 
-- Cùng `article_id` cho cùng một bài viết.
-- Partition key riêng theo từng tài sản.
-- Sort key tương ứng.
-- Giá trị nhãn đã được xác thực cho tài sản đó.
+Dữ liệu dự phòng phải là các bản tin hoặc báo cáo chính thức có thật từ Federal Reserve hoặc EIA, được Phước kiểm tra và gán nhãn thủ công.
 
-Quy tắc tạo item DynamoDB:
+Bộ dữ liệu này được đóng gói theo cấu trúc mà Chat API đang sử dụng.
 
-- `relevant=false`: không tạo item cho bất kỳ tài sản nào.
-- `relevant=true`: chỉ tạo item cho tài sản có `impact_score > 0`.
-- Tài sản có `impact_score=0` vẫn phải được giữ trong file nhãn thủ công để đáp ứng schema, nhưng không tạo item trong `NewsLabels`.
-- Mỗi item được tạo phải sử dụng đúng `asset` và `sk` theo `docs/api/contract.md`.
-- Không suy luận hoặc tự thay đổi nhãn của tài sản trong quá trình ánh xạ.
+Không sử dụng dữ liệu sample tự tạo để giả lập bản tin thật.
 
----
+Không thay thế nguồn chính thức bằng bài viết tổng hợp hoặc nội dung không thể xác minh.
 
-## 5. Schema nhãn và kiểm soát chất lượng
+Phương án dự phòng chỉ phục vụ demo; không thay thế mục tiêu triển khai Collector và ghi dữ liệu thực tế vào NewsLabels trước thời điểm freeze 22/11.
 
-### 5.1. Nguồn schema
+## 10. Quyết định, trách nhiệm và các giá trị cần chốt
 
-Sử dụng:
+### 10.1. Các quyết định đã thống nhất
 
-`docs/prompts/news-labeling-schema.json`
-
-Schema này là tài liệu tham chiếu cấu trúc để xác thực file nhãn hoàn chỉnh, với điều kiện phải xác nhận rằng nó tương thích với định dạng đầu vào của quy trình gán nhãn thủ công.
-
-Implementation phải phân biệt ba cấu trúc:
-
-1. Cấu trúc JSON của file nhãn thủ công trong S3.
-2. Cấu trúc item DynamoDB mà `NewsLabels` yêu cầu.
-3. Contract phản hồi của chatbot trong `docs/api/contract.md`.
-
-Các cấu trúc này có liên quan nhưng không mặc định giống nhau.
-
-Collector phải ánh xạ tường minh từ file nhãn đã xác thực sang cấu trúc item DynamoDB.
-
-### 5.2. Bộ benchmark labeling
-
-`tests/labeling/real_cases_v3.json` từ commit `bdc6976` chứa bộ 50 trường hợp Fed/EIA thực tế đã được khóa để đánh giá chất lượng labeling.
-
-Đây là bộ benchmark, không phải thư mục dữ liệu đầu vào production.
-
-Quy tắc:
-
-- Giữ benchmark tách biệt với `pending/` và `labels/`.
-- Không tự động ghi benchmark vào `NewsLabels`.
-- Không xem benchmark là nhãn production đang hoạt động.
-- Giữ nguyên bộ benchmark đã khóa khi thực hiện đánh giá chất lượng.
-- Sử dụng benchmark để đánh giá hướng dẫn gán nhãn thủ công hoặc một quy trình labeling riêng đã được phê duyệt.
-
-### 5.3. Quy tắc xác thực
-
-File nhãn phải được xác thực theo schema `docs/prompts/news-labeling-schema.json` trước khi xử lý.
-
-**Xác thực cấu trúc file:**
-
-- File phải có đủ các trường cấp gốc `relevant`, `asset_labels`, `event_type` và `notes`.
-- Trường `relevant` phải có kiểu boolean.
-- `asset_labels` phải có đủ bốn tài sản `gold`, `silver`, `brent`, `wti`.
-- Mỗi tài sản phải có đủ `impact_score`, `direction`, `confidence` và `evidence`.
-- `impact_score` phải là số nguyên thuộc phạm vi 0–3.
-- `direction` phải thuộc một trong các giá trị `bullish`, `bearish`, `mixed`, `uncertain`.
-- `confidence` phải thuộc một trong các giá trị `high`, `medium`, `low`.
-- `evidence` phải tuân thủ kiểu dữ liệu và quy tắc trong schema.
-- `event_type` phải thuộc danh sách giá trị được định nghĩa trong schema.
-- `notes` phải tuân thủ kiểu dữ liệu và quy tắc trong schema.
-- Không chấp nhận trường bổ sung nếu schema quy định `additionalProperties=false`.
-
-**Quy tắc tạo item DynamoDB:**
-
-- Nếu `relevant=false`, không tạo item cho bất kỳ tài sản nào.
-- Nếu `relevant=true`, chỉ tạo item cho tài sản có `impact_score > 0`.
-- Tài sản có `impact_score=0` vẫn được giữ trong file nhãn thủ công nhưng không tạo item trong `NewsLabels`.
-- Không tự suy luận hoặc thay đổi `direction`, `impact_score`, `confidence` hay `evidence`.
-- Không tự sửa hoặc bổ sung nhãn để làm cho file vượt qua validation.
-
-**Quy tắc ánh xạ:**
-
-- Metadata bài viết như `title`, `summary`, `link`, `source` và `published_at` phải được đối chiếu với bài viết tương ứng trong `pending/`.
-- Chỉ tạo item DynamoDB sau khi cả file nhãn và metadata bài viết đều vượt qua validation.
-- Quy tắc tạo item phải tuân theo mục 4.5 và contract `docs/api/contract.md`.
-
-Không tự bổ sung quy tắc nghiệp vụ như `impact_score=0` bắt buộc phải có `direction=uncertain` nếu quy tắc đó chưa được quy định trong schema được phê duyệt.
-
-### 5.4. Xử lý nhãn không hợp lệ hoặc chưa hoàn thiện
-
-- File nhãn chưa tồn tại: giữ bài viết ở trạng thái chờ.
-- File JSON sai định dạng: từ chối và ghi log.
-- File không hợp lệ theo schema: từ chối và ghi log.
-- Không đối chiếu được file với bài viết gốc: từ chối.
-- Nhãn chứa asset không hỗ trợ hoặc score không hợp lệ: từ chối.
-- Không ghi một phần dữ liệu rồi đánh dấu bài viết là đã hoàn tất.
-- Cung cấp đủ thông tin lỗi để Phước có thể sửa file mà không ghi toàn bộ nội dung bài viết không cần thiết vào log.
-
-### 5.5. Prompt injection và dữ liệu không đáng tin cậy
-
-Nội dung bài viết, tiêu đề, summary, URL và nội dung file nhãn phải được xem là dữ liệu không đáng tin cậy.
-
-Ngay cả khi labeling được thực hiện thủ công:
-
-- Không thực thi các chỉ dẫn được nhúng trong bài viết.
-- Không xem nội dung bài viết là chỉ dẫn dành cho collector.
-- Không cho phép nội dung bài viết thay đổi cấu hình collector, IAM permissions hoặc quy trình xử lý.
-- Xác thực mọi trường trước khi sử dụng trong log, object key hoặc DynamoDB.
-- Tránh ghi toàn bộ nội dung không đáng tin cậy vào log.
-- Không sử dụng nội dung bài viết để tạo câu lệnh thực thi hoặc policy động.
-
----
-
-## 6. Idempotency và xử lý dữ liệu trùng lặp
-
-Collector phải an toàn khi chạy lặp lại.
-
-### 6.1. Định danh ổn định
-
-Sử dụng cặp khóa `asset` và `sk` để xác định danh tính bản ghi DynamoDB.
-
-Các lần thu thập lặp lại cùng một bài viết phải tạo ra cùng `article_id`.
-
-Các lần ingest lặp lại cùng một file nhãn phải tạo ra cùng khóa DynamoDB.
-
-### 6.2. Ghi có điều kiện
-
-Sử dụng DynamoDB `PutItem` có điều kiện để ngăn ghi đè bản ghi đã tồn tại.
-
-Điều kiện phải xác nhận khóa đích chưa tồn tại, sử dụng `attribute_not_exists` trên khóa phù hợp với thiết kế thực tế của bảng.
-
-Hành vi mong đợi:
-
-| Tình huống | Kết quả mong đợi |
+| Nội dung | Quyết định |
 |---|---|
-| Bản ghi asset/article mới | Ghi mới |
-| Xử lý lại cùng một bản ghi | Bỏ qua do trùng |
-| Bản ghi đã tồn tại nhưng nội dung nhãn khác | Không ghi đè |
-| File nhãn không hợp lệ | Từ chối |
-| Một bài viết liên quan nhiều asset | Ghi một item cho mỗi asset liên quan |
-| Một thao tác ghi asset thất bại | Ghi log lỗi và báo cáo chính xác trạng thái xử lý một phần |
+| Quy trình gán nhãn trước bảo vệ | Phước gán nhãn thủ công. |
+| Bedrock trong Collector | Không sử dụng. |
+| Prefix metadata chờ xử lý | `pending/`. |
+| Prefix dữ liệu đã gán nhãn | `labels/`. |
+| Cơ chế nhận biết đã gán nhãn | Đối chiếu object key trong S3; file labels là dấu hiệu hoàn tất. |
+| Collector đọc pending | Không có `GetObject` trên `pending/*`. |
+| Collector đọc labels | Có `GetObject` trên `labels/*`. |
+| Collector ghi DynamoDB | Conditional `PutItem` theo RFC #44. |
+| Condition expression | `attribute_not_exists(asset) AND attribute_not_exists(sk)`. |
+| Marker table riêng | Không sử dụng. |
+| Bedrock IAM | Không cấp `bedrock:InvokeModel`. |
+| CDK stack | Tạo stack riêng `CpawsNews`, không thêm vào `CpawsData`. |
+| Scheduler | `cron(30 15 ? * MON-FRI *)`, timezone `America/New_York`. |
+| Scheduler retry | `MaximumRetryAttempts = 0`. |
+| Alarm | Lambda Errors gửi đến SNS `cpaws-dev-alarms`. |
+| Log retention | Một tháng. |
+| Demo 08/11 | Dùng JSON tin tức chính thức đã gán nhãn thủ công, đóng gói trong Lambda Chat API theo PR #77. |
+| Thời hạn dữ liệu thực tế | Có dữ liệu trong NewsLabels trước freeze 22/11/2026. |
 
-Không sử dụng `PutItem` không có điều kiện trong quy trình ingest production.
+### 10.2. Các giá trị cần xác nhận
 
-**Lưu ý tương thích contract:**
+Các giá trị chưa có quyết định cuối cùng phải được giữ ở trạng thái `TBD`. Không tự đặt giá trị mặc định trong code hoặc CDK trước khi có xác nhận.
 
-Chính sách bỏ qua bản ghi trùng và không ghi đè trong kế hoạch này khác với hành vi replay được mô tả trong contract hiện tại.
-
-Trước khi triển khai production, cần thống nhất và cập nhật contract thông qua PR riêng được review. PR triển khai Collector không được tự ý thay đổi contract hoặc âm thầm triển khai hai chính sách khác nhau.
-
-Đối với bảng có partition key `asset` và sort key `sk`, implementation sử dụng conditional expression kiểm tra khóa partition chưa tồn tại, ví dụ `attribute_not_exists(asset)`, để ngăn ghi đè item có cùng khóa chính.
-
-### 6.3. Chỉnh sửa và gán nhãn lại
-
-Collector không được tự động ghi đè nhãn đã tồn tại.
-
-Nếu Phước cần sửa nhãn sau khi dữ liệu đã được ingest, phải sử dụng một quy trình chỉnh sửa riêng đã được phê duyệt.
-
-Quy trình chỉnh sửa phải bảo đảm khả năng truy vết và không làm suy yếu cơ chế idempotency của collector.
-
-Cơ chế chỉnh sửa cụ thể là quyết định triển khai và phải được ghi rõ trước khi đưa vào production.
-
----
-
-## 7. Tính toàn vẹn theo thời điểm, độ tin cậy và bảo mật
-
-### 7.1. Point-in-time integrity
-
-News features không được làm rò rỉ thông tin tương lai vào quá trình dự báo lịch sử.
-
-- Sử dụng timestamp xuất bản gốc, không sử dụng timestamp thu thập, làm thời điểm của sự kiện tin tức.
-- Chuẩn hóa timestamp về UTC.
-- Một tin tức không được phép xuất hiện trong dữ liệu đầu vào của forecast nếu thời điểm cutoff của forecast sớm hơn thời điểm xuất bản tin đó.
-- Không thay thế timestamp xuất bản bị thiếu bằng thời điểm thu thập.
-- Các bài viết thiếu timestamp đáng tin cậy phải được đưa vào khu vực cách ly hoặc loại khỏi quá trình tạo feature theo thời gian.
-- Lưu đủ metadata nguồn để có thể kiểm tra lại timestamp đã sử dụng.
-
-Logic tạo feature ở các bước downstream phải áp dụng nhất quán cùng quy tắc cutoff.
-
-### 7.2. Múi giờ và lịch chạy
-
-Sử dụng múi giờ IANA:
-
-`America/New_York`
-
-Không hard-code một UTC offset cố định cho Eastern Time vì chênh lệch múi giờ thay đổi theo daylight saving time.
-
-Lịch chạy phải tính đến:
-
-- Ngày họp FOMC và thời điểm công bố thực tế.
-- Lịch phát hành WPSR thông thường vào thứ Tư.
-- Thay đổi lịch do ngày nghỉ của EIA và Federal Reserve.
-- Các thông báo bị trì hoãn hoặc phát hành ngoài lịch.
-- Lịch xuất bản thay đổi của Today in Energy.
-
-EventBridge expression, tần suất chạy và cách xử lý daylight saving time phải được xác minh trong PR triển khai.
-
-### 7.3. Độ tin cậy và retry
-
-Retry không được tạo bản ghi DynamoDB trùng lặp.
-
-- Retry các lỗi tạm thời từ nguồn tin, S3 hoặc DynamoDB với số lần giới hạn và backoff.
-- Không retry lỗi xác thực dữ liệu vĩnh viễn như thể đó là lỗi tạm thời.
-- Giữ lại định danh của các item thất bại để có thể xử lý lại.
-- Không xóa file pending hoặc label chỉ vì một lần xử lý thất bại.
-- Ghi nhận rõ trạng thái thành công một phần khi một bài viết tạo nhiều bản ghi asset nhưng chỉ một số thao tác ghi thành công.
-
-Số lần retry, backoff, timeout và cơ chế dead-letter phải được chốt trong quá trình triển khai.
-
-### 7.4. Secrets và quyền truy cập
-
-- Không lưu AWS access key dài hạn trong source code.
-- Sử dụng execution role của collector.
-- Tuân thủ nguyên tắc least privilege.
-- Không ghi credentials, token hoặc nội dung bài viết không cần thiết vào log.
-- Giới hạn quyền S3 và DynamoDB theo đúng tài nguyên cần sử dụng.
-- Không cấp quyền gọi model cho collector.
-
----
-
-## 8. Hạ tầng, IAM, giám sát và chi phí
-
-### 8.1. Quyền sở hữu hạ tầng
-
-Hạ tầng của collector phải được triển khai thông qua CDK project hiện có và được review trong PR riêng, không gộp việc triển khai vào thay đổi tài liệu này.
-
-PR triển khai phải xác định:
-
-- CDK stack chịu trách nhiệm.
-- Lambda hoặc tài nguyên thực thi khác.
-- Execution role.
-- Tham chiếu S3 bucket và prefix.
-- Tham chiếu bảng `NewsLabels` hiện có.
-- EventBridge schedule và timezone.
-- Log group và thời gian lưu log.
-- Cấu hình thông báo lỗi và alarm.
-
-Không tạo bảng `NewsLabels` trùng lặp hoặc tạo các shared resources không cần thiết.
-
-Ranh giới stack và người phụ trách phải được xác nhận với platform/CDK owner trước khi triển khai.
-
-### 8.2. IAM permissions
-
-Bảng dưới đây xác định ranh giới quyền truy cập dự kiến cho Collector và Phước. Implementation phải xác minh chính xác bucket ARN, object ARN và prefix conditions trong CDK trước khi triển khai.
-
-| Principal | Action | Phạm vi tài nguyên | Mục đích |
+| Nội dung | Trạng thái | Người phụ trách | Hạn xác nhận |
 |---|---|---|---|
-| Collector | `s3:PutObject` | `pending/*` | Lưu metadata đã thu thập |
-| Collector | `s3:GetObject` | `pending/*` | Đọc metadata để đối chiếu file nhãn với bài viết gốc |
-| Collector | `s3:GetObject` | `labels/*` | Đọc nhãn thủ công đã hoàn thiện |
-| Collector | `s3:ListBucket` | Bucket với prefix conditions cho `pending/` và `labels/` | Chỉ liệt kê các prefix cần thiết |
-| Collector | `dynamodb:PutItem` | Bảng `NewsLabels` hiện có | Ghi bản ghi đã xác thực |
-| Phước | `s3:GetObject` | `pending/*` | Đọc metadata đang chờ gán nhãn |
-| Phước | `s3:ListBucket` | Bucket với prefix condition `pending/` | Liệt kê metadata đang chờ |
-| Phước | `s3:PutObject` | `labels/*` | Tải file nhãn hoàn chỉnh |
+| Tên construct và tên resource cụ thể trong stack `CpawsNews` | TBD | Tuấn | Trước khi hoàn tất CDK PR, 15/11/2026 |
+| Timeout và memory chính thức của Lambda Collector | TBD | Tuấn | Trước khi hoàn tất CDK PR, 15/11/2026 |
+| Giới hạn số lượng bài viết tối đa mỗi lần chạy | TBD | Tuấn | Trước khi hoàn tất Collector code, 15/11/2026 |
+| Cách xử lý cụ thể khi nguồn chính thức thay đổi cấu trúc hoặc không truy cập được | TBD | Tuấn | Trước lần chạy thực tế đầu tiên |
+| Xác nhận cuối cùng về schema item `NewsLabels` theo contract/RFC đang được tích hợp | TBD | Tuấn phối hợp người phụ trách NewsLabels contract | Trước integration test |
+| Xác nhận quyền truy cập S3 của Phước trên môi trường `cpaws-dev` | TBD | Người phụ trách IAM và Phước | Trước lần gán nhãn thực tế đầu tiên |
 
-**Ràng buộc quyền truy cập:**
+Các giá trị trong bảng chỉ được chuyển khỏi `TBD` sau khi có xác nhận của người phụ trách tương ứng.
 
-- Collector chỉ được ghi object trong `pending/*`.
-- Collector chỉ được đọc object trong `pending/*` và `labels/*`.
-- Collector chỉ được liệt kê hai prefix `pending/` và `labels/`.
-- Phước chỉ được đọc và liệt kê dữ liệu trong `pending/`.
-- Phước chỉ được ghi object trong `labels/*`.
-- Không cấp `bedrock:InvokeModel` cho Collector.
-- Không cấp `dynamodb:Scan` hoặc quyền đọc DynamoDB rộng cho Collector.
-- Không cấp quyền truy cập toàn bộ bucket cho Phước.
-- Không cấp `s3:DeleteObject` nếu chưa có lý do và phê duyệt riêng.
-- Không cấp quyền trên các prefix không liên quan.
-- `s3:ListBucket` phải sử dụng bucket ARN và điều kiện `s3:prefix` phù hợp. Các object actions phải sử dụng object ARN.
-- Không sử dụng quyền `s3:*` hoặc `dynamodb:*` thay cho các action cụ thể.
-- Kiểm tra IAM policy bằng unit test, CDK assertions hoặc policy simulation trước khi deploy.
+### 10.3. Trách nhiệm
 
-**Yêu cầu xác minh khi triển khai:**
-
-1. Xác nhận tên S3 bucket và ARN thực tế.
-2. Xác nhận execution role của Collector.
-3. Xác nhận IAM principal mà Phước sẽ sử dụng.
-4. Kiểm tra quyền đọc `pending/*` của Collector thực sự hoạt động.
-5. Kiểm tra Collector không thể ghi vào `labels/*`.
-6. Kiểm tra Phước không thể đọc `labels/*` hoặc ghi vào `pending/*`.
-7. Kiểm tra quyền đọc hiện có của chatbot không bị thay đổi.
-
-Quyền đọc hiện có của chatbot phải được giữ riêng biệt. Kế hoạch Collector này không cho phép mở rộng quyền chatbot một cách tùy tiện.
-
-### 8.3. Giám sát và cảnh báo
-
-Implementation cần cung cấp structured logs và các chỉ số vận hành cho:
-
-- Số lượng bài viết phát hiện từ nguồn.
-- Số lượng metadata mới được ghi vào pending.
-- Số lượng bài viết trùng bị bỏ qua.
-- Số lượng file nhãn được phát hiện.
-- Số lượng file nhãn hợp lệ và không hợp lệ.
-- Số lượng bản ghi DynamoDB được ghi thành công.
-- Số lượng conditional write bị từ chối do trùng.
-- Số lượng lỗi tạm thời và lỗi vĩnh viễn.
-- Thời gian xử lý và lỗi thực thi.
-
-Sử dụng quy ước alerting hiện có của dự án.
-
-Tên SNS topic dự kiến cho môi trường development:
-
-`cpaws-dev-alarms`
-
-Phải xác nhận SNS topic ARN thực tế, trạng thái subscription, ngưỡng cảnh báo và thời gian lưu log với platform owner.
-
-Không tự tạo hoặc hard-code topic ARN hay thời gian lưu log chưa được xác minh.
-
-### 8.4. Chi phí
-
-Quy trình đã thống nhất loại bỏ model inference khỏi collector.
-
-Các thành phần chi phí dự kiến:
-
-- Compute và thời gian thực thi collector.
-- EventBridge scheduling.
-- S3 storage và requests.
-- DynamoDB writes.
-- CloudWatch logs và metrics.
-- SNS notifications nếu được cấu hình.
-
-Collector không phát sinh chi phí inference Bedrock/Nova theo quy trình này vì việc gán nhãn được thực hiện thủ công bởi Phước.
-
-Implementation cần tránh polling không cần thiết, ghi dữ liệu trùng, logging quá mức và backfill lịch sử không giới hạn.
-
----
-
-## 9. Kế hoạch triển khai, kiểm thử và rollout
-
-### 9.1. Trình tự triển khai
-
-1. Xác nhận URL nguồn chính thức, feed endpoint, điều khoản truy cập và cách lấy timestamp.
-2. Xác nhận phạm vi backfill FOMC và quy tắc thu thập WPSR/Today in Energy.
-3. Xác nhận định dạng metadata pending và quy ước S3 object key.
-4. Xác nhận định dạng file nhãn thủ công và mối liên hệ với `news-labeling-schema.json`.
-5. Xác nhận ánh xạ DynamoDB theo `docs/api/contract.md`.
-6. Xác nhận IAM policy và CDK stack ownership.
-7. Triển khai chức năng thu thập và tạo pending objects.
-8. Triển khai chức năng phát hiện và xác thực file nhãn thủ công.
-9. Triển khai conditional DynamoDB writes.
-10. Bổ sung logs, metrics, retry và alerts.
-11. Chạy unit tests và integration tests.
-12. Tạo PR triển khai riêng để review.
-13. Chỉ deploy sau khi hoàn tất review và phê duyệt theo quy trình nhóm.
-
-### 9.2. Các kiểm thử bắt buộc
-
-**Kiểm thử nguồn và chuẩn hóa dữ liệu**
-
-- Phân tích URL từ nguồn chính thức.
-- Chuẩn hóa URL bài viết.
-- Tạo `article_id` ổn định.
-- Phân tích publication timestamp.
-- Chuyển đổi UTC.
-- Xử lý timestamp bị thiếu hoặc không hợp lệ.
-- Phát hiện trùng lặp qua nhiều lần chạy.
-
-**Kiểm thử S3 workflow**
-
-- Tạo metadata object trong pending.
-- Phân tách đúng các prefix.
-- Đọc file nhãn hợp lệ.
-- Xử lý khi chưa có file nhãn.
-- Xử lý JSON sai định dạng.
-- Xử lý `article_id` không tồn tại hoặc không khớp.
-- Xử lý schema không hợp lệ.
-- Không xóa nhầm file pending hoặc labels.
-
-**Kiểm thử xác thực nhãn**
-
-- Các giá trị asset được hỗ trợ.
-- Impact score và direction hợp lệ.
-- Giới hạn độ dài summary.
-- Trường bắt buộc và kiểu dữ liệu.
-- Xử lý bài viết không liên quan.
-- Nhãn asset trùng lặp.
-- Ánh xạ sang DynamoDB contract.
-
-**Kiểm thử DynamoDB**
-
-- Ghi bản ghi mới.
-- Từ chối bản ghi trùng bằng conditional write.
-- Không ghi đè nhãn đã tồn tại.
-- Một bài viết có nhiều asset liên quan.
-- Báo cáo lỗi ghi một phần.
-- Partition key và sort key chính xác.
-
-**Kiểm thử bảo mật và tính toàn vẹn**
-
-- Collector không có quyền gọi Bedrock.
-- Collector không thể ghi ngoài `pending/`.
-- Collector chỉ đọc được `labels/`.
-- Phước chỉ đọc được `pending/` và ghi được `labels/`.
-- Không có quyền S3 hoặc DynamoDB quá rộng.
-- Tin tức tương lai bị loại khỏi forecast có cutoff sớm hơn.
-- Nội dung bài viết không đáng tin cậy không thể thay đổi quy trình xử lý.
-
-**Kiểm thử vận hành**
-
-- Retry khi gặp lỗi tạm thời.
-- Không tạo vòng lặp retry với lỗi xác thực vĩnh viễn.
-- Structured logging.
-- Alarm được gửi thành công.
-- Lịch chạy xử lý đúng daylight saving time và thay đổi lịch ngày lễ của Eastern Time.
-
-### 9.3. Các mốc tiến độ
-
-Các mốc thời gian được ghi nhận trong kế hoạch của nhóm:
-
-| Mốc | Ngày mục tiêu | Kết quả cần đạt |
-|---|---|---|
-| Hoàn thành collector implementation | 03/11/2026 | Code và kiểm thử ban đầu |
-| Có dữ liệu thực tế | 05/11/2026 | Dữ liệu Fed/EIA thực tế và nhãn đã xác thực |
-| Bảo vệ/demo | 08/11/2026 | Quy trình có thể demo và JSON fallback |
-
-Đây là các mốc mục tiêu, không phải bằng chứng rằng công việc đã hoàn thành. Người phụ trách phải cập nhật trạng thái thực tế trong project tracker.
-
-### 9.4. Phương án dự phòng khi demo
-
-Nếu việc thu thập nguồn chính thức hoặc gán nhãn thủ công không khả dụng trong buổi demo:
-
-- Sử dụng JSON fixture được nhận diện rõ ràng.
-- Đánh dấu các bản ghi fixture là dữ liệu mẫu/demo.
-- Giữ fixture tách biệt khỏi `pending/` và `labels/` production.
-- Không trình bày dữ liệu fixture như tin tức chính thức đang được thu thập trực tiếp.
-- Nếu khả thi, demo vẫn phải đi qua cùng quy trình validation và DynamoDB mapping.
-
----
-
-## 10. Tiêu chí nghiệm thu và các quyết định cần chốt
-
-### 10.1. Tiêu chí nghiệm thu
-
-Collector đủ điều kiện review khi:
-
-1. Chỉ thu thập metadata từ các nguồn Fed/EIA chính thức đã được phê duyệt.
-2. Lưu metadata đã thu thập vào `pending/`.
-3. Phước có thể đọc pending và tải nhãn hoàn chỉnh vào `labels/` bằng đúng IAM permissions.
-4. Collector chỉ đọc các file nhãn hoàn chỉnh từ `labels/`.
-5. Nhãn không hợp lệ hoặc không khớp bài viết bị từ chối và ghi log.
-6. Nhãn hợp lệ được ánh xạ đúng theo contract `NewsLabels` hiện có.
-7. Conditional writes ngăn bản ghi trùng và ghi đè ngoài ý muốn.
-8. Không có lời gọi Bedrock/Nova model.
-9. Quy tắc point-in-time ngăn rò rỉ dữ liệu tương lai.
-10. IAM tuân thủ least privilege.
-11. Unit tests và integration tests bao phủ các luồng xử lý quan trọng.
-12. Logs và alerts cung cấp đủ thông tin để vận hành và xử lý sự cố.
-13. Implementation được review và phê duyệt thông qua PR riêng trước khi merge hoặc deploy.
-
-### 10.2. Các quyết định phải xác nhận trước khi triển khai
-
-| Quyết định | Nội dung cần xác nhận |
+| Người phụ trách | Trách nhiệm |
 |---|---|
-| Official feed/API endpoints | URL chính xác và phương thức truy cập được phép |
-| Source terms | Quyền lưu trữ và truy cập tự động |
-| FOMC backfill | Khoảng thời gian lịch sử và loại tài liệu cần thu thập |
-| Timestamp extraction | Trường timestamp chính xác và cách xử lý fallback |
-| Today in Energy schedule | Tần suất phát hiện bài mới; không giả định giờ phát hành cố định |
-| Pending object format | JSON schema và quy ước object key |
-| Manual label format | Trường bắt buộc và quy tắc đối chiếu `article_id` |
-| Schema compatibility | `news-labeling-schema.json` có phải schema đầu vào chính thức cho nhãn thủ công hay không |
-| DynamoDB mapping | Các trường và ràng buộc chính xác theo `docs/api/contract.md` |
-| Idempotency | Conditional expression cuối cùng và quy trình sửa nhãn |
-| CDK ownership | Stack, construct và người chịu trách nhiệm |
-| EventBridge | Schedule expression và cách xử lý `America/New_York` |
-| Reliability | Retry, timeout và xử lý item thất bại |
-| Monitoring | ARN, thresholds và subscriptions của `cpaws-dev-alarms` |
-| Logging | Thời gian lưu log và chính sách dữ liệu nhạy cảm |
-| Backfill/demo fixtures | Người phụ trách và cách tách biệt với dữ liệu production |
+| Tuấn | Triển khai Collector code và CDK; review IAM; phối hợp kiểm thử tích hợp. |
+| `@CTMT1406` | Review CDK. |
+| Phước | Kiểm tra nguồn chính thức, viết summary và gán nhãn thủ công, lưu file vào `labels/`. |
+| Người phụ trách API/Chatbot | Duy trì contract và kiểm tra khả năng sử dụng dữ liệu NewsLabels. |
+| Khải và Tiến | Review lại kế hoạch sau khi cập nhật theo các quyết định đã thống nhất. |
 
-Các giá trị chưa được xác nhận phải tiếp tục được đánh dấu `TBD` cho đến khi người phụ trách xác nhận. Không tự điền URL, ARN, lịch chạy, thời gian lưu log hoặc quyền IAM dựa trên suy đoán.
+### 10.4. Quy trình review
 
-### 10.3. Quy tắc quản lý thay đổi
+Sau khi cập nhật tài liệu:
 
-Tài liệu này xác định kế hoạch cho quy trình collector sử dụng manual labeling.
-
-Mọi implementation làm thay đổi trách nhiệm đã thống nhất, data contract, ranh giới IAM hoặc quy trình labeling đều phải được đưa ra review.
-
-Tất cả thay đổi Git phục vụ tích hợp hoặc triển khai phải tuân thủ quy trình PR và review của dự án. Tài liệu này không cấp quyền deploy hoặc merge trực tiếp.
+1. Gửi lại PR #52 để Khải review.
+2. Gửi lại PR #52 để Tiến review.
+3. Tiếp nhận và xử lý các nhận xét còn lại.
+4. Chỉ xem tài liệu được thông qua khi các review cần thiết đã được xác nhận.
+5. Các thay đổi code, IAM và CDK tiếp theo phải được thực hiện qua PR riêng và tuân thủ quy trình review/merge của dự án.
