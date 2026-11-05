@@ -2,12 +2,21 @@
   "asset": "silver",
   "items": [
     {
+      "title": "Weekly Petroleum Status Report (week ending October 30, 2026)",
+      "summary": "Tuần kết thúc 30/10, tồn kho dầu thô thương mại Mỹ giảm 0,9 triệu thùng xuống 409,8 triệu thùng, thấp hơn trung bình 5 năm 4%. Tồn kho xăng giảm 0,2 triệu thùng và nhiên liệu chưng cất giảm 3,6 triệu thùng; tổng tồn kho thương mại giảm 8,2 triệu thùng.",
+      "link": "https://www.eia.gov/petroleum/supply/weekly/archive/2026/2026_11_04/wpsr_2026_11_04.php",
+      "source": "EIA",
+      "published_at": "2026-11-04T15:30:00Z",
+      "impact_score": 0,
+      "direction": "uncertain"
+    },
+    {
       "title": "Federal Reserve issues FOMC statement",
       "summary": "FOMC giữ lãi suất mục tiêu ở 3,75–4,00% với phiếu 10–2; hai thành viên Lisa Cook và Beth Hammack phản đối vì muốn tăng thêm 0,25 điểm %. Thông cáo nói lạm phát vẫn cao, kinh tế tăng trưởng mạnh và Ủy ban cần thêm thông tin để chọn mức lãi suất phù hợp.",
       "link": "https://www.federalreserve.gov/newsevents/pressreleases/monetary20261028a.htm",
       "source": "Federal Reserve",
       "published_at": "2026-10-28T18:00:00Z",
-      "impact_score": 2,
+      "impact_score": 1,
       "direction": "bearish"
     },
     {
