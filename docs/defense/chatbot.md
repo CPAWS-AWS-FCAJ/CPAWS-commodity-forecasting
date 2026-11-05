@@ -1,6 +1,6 @@
 # Chatbot hỏi đáp dự báo CPAWS
 
-> Bản nháp chương Chatbot cho báo cáo bảo vệ, cập nhật ngày 05/11/2026. Trạng thái triển khai và số liệu là tại ngày viết; mọi con số lấy từ tài liệu và kết quả trong repo, chỗ nào là suy luận thì ghi rõ.
+> Bản nháp chương Chatbot cho báo cáo cuối kỳ (trình bày trước hội đồng thực tập FCAJ-AWS), cập nhật ngày 05/11/2026. Trạng thái triển khai và số liệu là tại ngày viết; mọi con số lấy từ tài liệu và kết quả trong repo, chỗ nào là suy luận thì ghi rõ.
 
 ## 1. Mục tiêu và phạm vi
 
@@ -93,6 +93,8 @@ Tool đọc thẳng bảng DynamoDB `Forecasts` (bản ghi mới nhất của t�
 | Dầu: giá USD/bbl chỉ cho q10, q50, q90, kèm giá phiên gần nhất | Cùng lý do với dòng đầu |
 
 Kết quả còn có ngày cơ sở, ngày dự báo, `model_version`, cờ dữ liệu mẫu, nguồn dữ liệu chưa cập nhật, cờ chuyển hợp đồng dầu, tỷ giá và câu disclaimer. Lỗi trả dạng `{"error", "message"}` (`invalid_asset`, `invalid_horizon`, `not_found`) để model nói rõ là chưa có bản ghi, thay vì bịa số. Đây là dữ liệu nội bộ giữa Lambda và model; API công khai không đổi.
+
+Theo ADR-0005 sửa ngày 04/11/2026 (PR [#91](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/91), chưa merge tại ngày viết), web hiển thị giá và khoảng giá vàng, bạc; chatbot vẫn giữ tool v2, không trả giá vàng, bạc, tới khi có PR riêng.
 
 ### 5.2. `get_news(asset, from_date?, to_date?, min_impact?)`
 
