@@ -26,6 +26,9 @@ HANDLER = ROOT / "infra" / "lambda" / "chat_api" / "handler.py"
 PUBLISHED_AT = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 DIRECTIONS = {"bullish", "bearish", "mixed", "uncertain"}
 SOURCES = {"Federal Reserve": "www.federalreserve.gov", "EIA": "www.eia.gov"}
+WPSR_1104 = (
+    "https://www.eia.gov/petroleum/supply/weekly/archive/2026/2026_11_04/wpsr_2026_11_04.php"
+)
 
 
 def _load(asset: str) -> dict:
@@ -126,3 +129,13 @@ def test_handler_reads_news_dir(monkeypatch):
     assert [it["link"] for it in res["items"]] == [
         "https://www.federalreserve.gov/newsevents/pressreleases/monetary20261028a.htm"
     ]
+
+
+@pytest.mark.parametrize("asset", N.ASSETS)
+def test_demo_day_default_range(asset):
+    # hôm demo 8/11 khoảng mặc định là 1/11–8/11: chỉ có WPSR 4/11, mức 1 cho dầu (tồn kho cùng giảm)
+    repo = N.JsonFileNewsRepository(NEWS_DIR)
+    assert N.get_news({"asset": asset, "to_date": "2026-11-08"}, repo)["items"] == []
+    res = N.get_news({"asset": asset, "to_date": "2026-11-08", "min_impact": 1}, repo)
+    expected = {"brent": [(WPSR_1104, "bullish")], "wti": [(WPSR_1104, "bullish")]}
+    assert [(it["link"], it["direction"]) for it in res["items"]] == expected.get(asset, [])
