@@ -699,6 +699,19 @@ def test_empty_accuracy_evidence_is_fail_closed_but_synthesizes():
     assert env["ROLLING_EVIDENCE_JSON"] == "{}"
 
 
+def test_repo_accuracy_evidence_file_fits_lambda_env():
+    """File evidence thật (app.py đọc) synth được, vào env nguyên vẹn, env dưới 4 KB."""
+    evidence = json.loads(
+        (ROOT / "docs/eval/evidence/rolling-release-cutover-2026-10-30.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert evidence["shadow_release"]["approved"] is True  # Khải duyệt ở #89
+    env = _accuracy_fn(_synth(accuracy_evidence=evidence)["data"])["Environment"]["Variables"]
+    assert json.loads(env["ROLLING_EVIDENCE_JSON"]) == evidence
+    assert sum(len(k) + len(v) for k, v in env.items() if isinstance(v, str)) < 4096
+
+
 def test_accuracy_job_role_is_least_privilege(templates):
     t = templates["data"]
     role_id = _accuracy_fn(t)["Role"]["Fn::GetAtt"][0]
