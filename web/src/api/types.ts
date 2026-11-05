@@ -164,6 +164,58 @@ export interface ApiErrorBody {
   message: string;
 }
 
+// ---------- POST /chat (docs/api/contract.md, mục "POST /chat") ----------
+
+export type ChatRole = "user" | "assistant";
+
+export interface ChatHistoryItem {
+  role: ChatRole;
+  text: string;
+}
+
+export interface ChatRequest {
+  question: string;
+  context?: { asset?: AssetId; page?: "home" | "product" };
+  history?: ChatHistoryItem[];
+}
+
+export interface ChatCitation {
+  title: string;
+  source: string;
+  published_at: string;
+  link: string;
+}
+
+export interface ChatForecastUsed {
+  asset: AssetId;
+  base_date: string;
+  model_version: string;
+  is_sample: boolean;
+  stale: boolean;
+}
+
+export interface ChatQuota {
+  limit: number;
+  used: number;
+  remaining: number;
+  reset_at: string;
+}
+
+export interface ChatResponse {
+  request_id: string;
+  /** Văn bản thuần (không Markdown/HTML): hiển thị như text, không tự biến URL thành link. */
+  answer: string;
+  branch: "simple" | "complex";
+  prompt_version: string;
+  forecasts_used: ChatForecastUsed[];
+  /** Link chỉ được lấy từ đây (server chỉ giữ tin do get_news trả và có link trong answer). */
+  citations: ChatCitation[];
+  truncated: boolean;
+  blocked: boolean;
+  quota: ChatQuota | null;
+  disclaimer: string;
+}
+
 export function isAssetId(value: string | undefined): value is AssetId {
   return value !== undefined && (ASSET_IDS as readonly string[]).includes(value);
 }

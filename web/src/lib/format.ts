@@ -43,6 +43,20 @@ export function formatDayMonth(iso: string): string {
   return `${day}/${month}`;
 }
 
+/** Ngày theo giờ Việt Nam của một thời điểm UTC: "2026-10-28T18:00:00Z" → "29/10/2026". */
+export function formatDateVn(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return formatDate(iso);
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Ho_Chi_Minh",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).formatToParts(date);
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((p) => p.type === type)?.value ?? "";
+  return `${part("day")}/${part("month")}/${part("year")}`;
+}
+
 /** Thời điểm UTC (ISO 8601) hiển thị theo giờ Việt Nam. */
 export function formatDateTimeVn(iso: string): string {
   return new Intl.DateTimeFormat(VN, {
