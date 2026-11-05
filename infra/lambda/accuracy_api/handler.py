@@ -6,6 +6,7 @@ import hashlib
 import json
 import logging
 import os
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from urllib.parse import quote
 
@@ -92,6 +93,59 @@ def _run_pk(asset: str, model: str, run_id: str) -> str:
     return "RUN#" + "#".join(_component(value) for value in (asset, model, run_id))
 
 
+def _is_sha256(value) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) == 64
+        and all(char in "0123456789abcdef" for char in value)
+    )
+
+
+def _parse_utc(value):
+    if not isinstance(value, str) or not value:
+        raise ValueError("invalid_timestamp")
+
+    parsed = datetime.fromisoformat(value)
+
+    if parsed.tzinfo is None or parsed.utcoffset() != UTC.utcoffset(parsed):
+        raise ValueError("timestamp_not_utc")
+
+    return parsed.astimezone(UTC)
+
+
+def _is_utc_timestamp(value) -> bool:
+    try:
+        _parse_utc(value)
+        return True
+    except (ValueError, TypeError, OverflowError):
+        return False
+
+
+def _is_date(value) -> bool:
+    if not isinstance(value, str):
+        return False
+    try:
+        return date.fromisoformat(value).isoformat() == value
+    except ValueError:
+        return False
+
+
+def _is_count(value) -> bool:
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, int):
+        return value >= 0
+    if isinstance(value, Decimal):
+        return value.is_finite() and value >= 0 and value == value.to_integral_value()
+    return False
+
+
+def _count(value) -> int:
+    if not _is_count(value):
+        raise AccuracyUnavailable("count_invalid")
+    return int(value)
+
+
 def _expected_metric_keys(meta: dict) -> set[str]:
     window = meta.get("window")
     if not isinstance(window, dict):
@@ -102,7 +156,7 @@ def _expected_metric_keys(meta: dict) -> set[str]:
         window.get("window_end"),
         window.get("target_cutoff_date"),
     )
-    if not all(isinstance(value, str) and value for value in values):
+    if not all(_is_date(value) for value in values):
         raise AccuracyUnavailable("window_dates_invalid")
 
     parts = ("all", "rolling_8w", *values)
@@ -153,6 +207,238 @@ def _verify_meta(meta: dict) -> None:
         raise AccuracyUnavailable("meta_hash_mismatch")
 
 
+def _valid_snapshot(snapshot) -> bool:
+    """Validate the exact Snapshot.identity structure written by Sources."""
+
+    if not isinstance(snapshot, dict):
+        return False
+
+    dt = snapshot.get("dt")
+    if not _is_date(dt):
+        return False
+
+    objects = snapshot.get("objects")
+    if not isinstance(objects, list) or len(objects) != 3:
+        return False
+
+    expected_files = {
+        "quality.json",
+        "prices.parquet",
+        "rejected.parquet",
+    }
+    actual_files = set()
+    buckets = set()
+    expected_prefix = f"clean/prices/dt={dt}/"
+
+    for item in objects:
+        if not isinstance(item, dict):
+            return False
+
+        if not all(
+            isinstance(item.get(key), str) and item[key].strip()
+            for key in ("bucket", "key", "etag", "last_modified")
+        ):
+            return False
+
+        if not _is_sha256(item.get("sha256")):
+            return False
+
+        if item.get("version_id") is not None and not isinstance(item["version_id"], str):
+            return False
+
+        if not _is_utc_timestamp(item["last_modified"]):
+            return False
+
+        key = item["key"]
+        filename = key.rsplit("/", 1)[-1]
+
+        if filename not in expected_files:
+            return False
+
+        if not key.endswith(expected_prefix + filename):
+            return False
+
+        actual_files.add(filename)
+        buckets.add(item["bucket"])
+
+    return actual_files == expected_files and len(buckets) == 1
+
+
+def _valid_approval(approval, policy) -> bool:
+    """Validate the approval structure produced by Evidence.for_record."""
+
+    if not isinstance(approval, dict):
+        return False
+
+    if approval.get("approved") is not True:
+        return False
+
+    if not all(
+        isinstance(approval.get(key), str) and approval[key].strip()
+        for key in ("reference", "approved_by", "approved_at")
+    ):
+        return False
+
+    if not _is_utc_timestamp(approval["approved_at"]):
+        return False
+
+    if policy == "POST_CUTOVER":
+        return (
+            _is_utc_timestamp(approval.get("cutover_at"))
+            and approval.get("conditional_write") is True
+            and approval.get("input_asof_checked") is True
+        )
+
+    if policy == "LEGACY_ACCEPT_WITH_EVIDENCE":
+        return (
+            approval.get("no_overwrite") is True
+            and approval.get("scheduled_run") is True
+            and approval.get("input_asof_checked") is True
+            and _is_sha256(approval.get("snapshot_digest"))
+        )
+
+    return False
+
+
+def _verify_provenance(meta: dict) -> None:
+    """Fail closed when writer identity or input lineage is incomplete."""
+
+    identity = meta.get("identity")
+    implementation = meta.get("implementation")
+    actual = meta.get("actual_lineage")
+    inputs = meta.get("input_lineage")
+
+    if not isinstance(identity, dict):
+        raise AccuracyUnavailable("identity_missing")
+
+    expected_identity = {
+        "asset": meta["asset"],
+        "model_version": meta["model_version"],
+        "effective": meta["effective"],
+        "config_hash": meta["config_hash"],
+        "target_cutoff_date": meta["window"]["target_cutoff_date"],
+    }
+
+    for key, expected in expected_identity.items():
+        if identity.get(key) != expected:
+            raise AccuracyUnavailable("identity_mismatch")
+
+    revision = identity.get("revision")
+    if isinstance(revision, bool) or not isinstance(revision, int) or revision < 0:
+        raise AccuracyUnavailable("identity_revision_invalid")
+
+    job_date = identity.get("job_date")
+    if not _is_date(job_date):
+        raise AccuracyUnavailable("identity_job_date_invalid")
+
+    if not meta["run_id"].startswith(job_date + "-"):
+        raise AccuracyUnavailable("identity_run_id_mismatch")
+
+    if meta["run_order"] != f"{job_date.replace('-', '')}#{revision:04d}":
+        raise AccuracyUnavailable("identity_run_order_mismatch")
+
+    if not _is_sha256(identity.get("eligible_record_fingerprint")):
+        raise AccuracyUnavailable("eligible_fingerprint_invalid")
+
+    if not _is_sha256(identity.get("source_fingerprint")):
+        raise AccuracyUnavailable("source_fingerprint_invalid")
+
+    if not _valid_snapshot(actual):
+        raise AccuracyUnavailable("actual_lineage_invalid")
+
+    if _canonical(identity.get("snapshot")) != _canonical(actual):
+        raise AccuracyUnavailable("snapshot_binding_mismatch")
+
+    if not isinstance(implementation, dict):
+        raise AccuracyUnavailable("implementation_missing")
+
+    code = implementation.get("code_sha256")
+    libraries = implementation.get("libraries")
+    rules = implementation.get("publication_rules")
+
+    if not isinstance(code, dict) or not code:
+        raise AccuracyUnavailable("implementation_code_invalid")
+
+    if any(
+        not isinstance(path, str) or not path or not _is_sha256(value)
+        for path, value in code.items()
+    ):
+        raise AccuracyUnavailable("implementation_code_invalid")
+
+    if not isinstance(libraries, dict) or not libraries:
+        raise AccuracyUnavailable("implementation_libraries_invalid")
+
+    if any(
+        not isinstance(name, str) or not name or not isinstance(value, str) or not value
+        for name, value in libraries.items()
+    ):
+        raise AccuracyUnavailable("implementation_libraries_invalid")
+
+    if not isinstance(rules, dict) or not rules:
+        raise AccuracyUnavailable("publication_rules_invalid")
+
+    if not isinstance(inputs, list):
+        raise AccuracyUnavailable("input_lineage_invalid")
+
+    if not _is_utc_timestamp(meta.get("evaluated_at")):
+        raise AccuracyUnavailable("evaluated_at_invalid")
+
+    proofs_by_digest = {}
+
+    for proof in inputs:
+        if not isinstance(proof, dict):
+            raise AccuracyUnavailable("input_proof_invalid")
+
+        policy = proof.get("policy")
+        approval = proof.get("approval")
+        snapshot = proof.get("snapshot")
+        record_digest = proof.get("record_digest")
+
+        if not _valid_approval(approval, policy):
+            raise AccuracyUnavailable("input_approval_invalid")
+
+        if _parse_utc(approval["approved_at"]) > _parse_utc(meta["evaluated_at"]):
+            raise AccuracyUnavailable("input_approval_after_evaluation")
+
+        if not _valid_snapshot(snapshot):
+            raise AccuracyUnavailable("input_snapshot_invalid")
+
+        if not _is_sha256(record_digest):
+            raise AccuracyUnavailable("input_record_digest_invalid")
+
+        if not _is_utc_timestamp(proof.get("max_input_published_at")):
+            raise AccuracyUnavailable("input_published_at_invalid")
+
+        if policy == "LEGACY_ACCEPT_WITH_EVIDENCE" and approval["snapshot_digest"] != _digest(
+            snapshot
+        ):
+            raise AccuracyUnavailable("input_snapshot_digest_mismatch")
+
+        if record_digest in proofs_by_digest:
+            raise AccuracyUnavailable("duplicate_input_record_digest")
+
+        proofs_by_digest[record_digest] = proof
+
+    observations = meta.get("observations")
+    if not isinstance(observations, list):
+        raise AccuracyUnavailable("observations_invalid")
+
+    for observation in observations:
+        if not isinstance(observation, dict):
+            raise AccuracyUnavailable("observation_invalid")
+
+        record_digest = observation.get("record_digest")
+        if not _is_sha256(record_digest):
+            raise AccuracyUnavailable("observation_record_digest_invalid")
+
+        proof = proofs_by_digest.get(record_digest)
+        if proof is None:
+            raise AccuracyUnavailable("observation_proof_missing")
+
+        if _canonical(observation.get("input_lineage")) != _canonical(proof):
+            raise AccuracyUnavailable("observation_proof_mismatch")
+
+
 def _verify_meta_identity(
     meta: dict,
     *,
@@ -179,7 +465,7 @@ def _verify_meta_identity(
     if not isinstance(model, str) or not model:
         raise AccuracyUnavailable("model_version_invalid")
 
-    if not isinstance(effective, str) or not effective:
+    if not _is_date(effective):
         raise AccuracyUnavailable("effective_date_invalid")
 
     if meta.get("evaluation_kind") != "rolling_8w":
@@ -188,11 +474,11 @@ def _verify_meta_identity(
     if meta.get("sample") != "all":
         raise AccuracyUnavailable("sample_invalid")
 
-    if not isinstance(meta.get("config_hash"), str) or not meta["config_hash"]:
-        raise AccuracyUnavailable("config_hash_missing")
+    if not _is_sha256(meta.get("config_hash")):
+        raise AccuracyUnavailable("config_hash_invalid")
 
-    if not isinstance(meta.get("evaluated_at"), str) or not meta["evaluated_at"]:
-        raise AccuracyUnavailable("evaluated_at_missing")
+    if not _is_utc_timestamp(meta.get("evaluated_at")):
+        raise AccuracyUnavailable("evaluated_at_invalid")
 
     window = meta.get("window")
     if not isinstance(window, dict):
@@ -201,29 +487,35 @@ def _verify_meta_identity(
     if (
         window.get("basis") != "base_date"
         or window.get("days") != 56
-        or window.get("window_start") is None
-        or window.get("window_end") is None
-        or window.get("target_cutoff_date") is None
+        or not all(
+            _is_date(window.get(key))
+            for key in (
+                "window_start",
+                "window_end",
+                "target_cutoff_date",
+            )
+        )
     ):
         raise AccuracyUnavailable("window_invalid")
+
+    if not (window["window_start"] <= window["target_cutoff_date"] <= window["window_end"]):
+        raise AccuracyUnavailable("window_dates_invalid")
 
     first_eligible = window.get("first_eligible_base_date")
     last_eligible = meta.get("last_eligible_base_date")
 
-    if first_eligible is not None:
-        if not isinstance(first_eligible, str) or first_eligible < effective:
-            raise AccuracyUnavailable("first_eligible_base_date_invalid")
-
-        if not isinstance(last_eligible, str) or last_eligible < first_eligible:
+    if first_eligible is None:
+        if last_eligible is not None:
             raise AccuracyUnavailable("eligible_date_range_invalid")
-
-        if last_eligible > window["window_end"]:
-            raise AccuracyUnavailable("eligible_date_after_window_end")
-    elif last_eligible is not None:
+    elif (
+        not _is_date(first_eligible)
+        or not _is_date(last_eligible)
+        or not effective <= first_eligible <= last_eligible
+        or last_eligible > window["window_end"]
+    ):
         raise AccuracyUnavailable("eligible_date_range_invalid")
 
-    if window["target_cutoff_date"] < window["window_start"]:
-        raise AccuracyUnavailable("cutoff_before_window_start")
+    _verify_provenance(meta)
 
 
 def _verify_metric_provenance(
@@ -250,6 +542,61 @@ def _verify_metric_provenance(
     for field, expected_value in expected.items():
         if item.get(field) != expected_value:
             raise AccuracyUnavailable("metric_provenance_mismatch")
+
+
+def _verify_metric_values(metric: str, value: dict) -> None:
+    """Validate metric status, counts, ranges and units."""
+
+    n_obs = value.get("n_obs")
+    if not _is_count(n_obs):
+        raise AccuracyUnavailable("metric_n_obs_invalid")
+
+    status = value.get("status")
+    metric_value = value.get("value")
+    reason = value.get("undefined_reason")
+
+    if status not in ("ok", "undefined"):
+        raise AccuracyUnavailable("metric_status_invalid")
+
+    if status == "undefined":
+        if metric_value is not None:
+            raise AccuracyUnavailable("metric_undefined_value_invalid")
+        if reason != "no_evaluable_obs":
+            raise AccuracyUnavailable("metric_undefined_reason_invalid")
+        if n_obs != 0:
+            raise AccuracyUnavailable("metric_undefined_count_invalid")
+    else:
+        if n_obs <= 0 or reason is not None:
+            raise AccuracyUnavailable("metric_defined_count_invalid")
+
+        if isinstance(metric_value, bool) or not isinstance(metric_value, (int, float, Decimal)):
+            raise AccuracyUnavailable("metric_value_invalid")
+
+        number = Decimal(str(metric_value))
+        if not number.is_finite():
+            raise AccuracyUnavailable("metric_value_invalid")
+
+        if metric in ("coverage_80", "sign_accuracy", "up_rate"):
+            if not Decimal(0) <= number <= Decimal(1):
+                raise AccuracyUnavailable("metric_value_out_of_range")
+        elif metric in ("width_80", "width_80_pct") and number < 0:
+            raise AccuracyUnavailable("metric_value_out_of_range")
+
+    if metric == "coverage_80":
+        covered = value.get("covered_count")
+        dates = value.get("n_base_dates")
+
+        if not _is_count(covered) or not _is_count(dates):
+            raise AccuracyUnavailable("coverage_count_invalid")
+
+        if covered > n_obs or dates > n_obs:
+            raise AccuracyUnavailable("coverage_count_out_of_range")
+
+    if metric == "width_80" and value.get("unit") != "log_return":
+        raise AccuracyUnavailable("width_unit_invalid")
+
+    if metric == "width_80_pct" and value.get("unit") != "percent":
+        raise AccuracyUnavailable("width_pct_unit_invalid")
 
 
 def _metric_groups(
@@ -309,6 +656,8 @@ def _metric_groups(
             )
             if key in item
         }
+
+        _verify_metric_values(metric, metric_value)
         by_horizon[horizon][metric] = metric_value
 
     for horizon in HORIZONS:
@@ -323,6 +672,12 @@ def _metric_groups(
 
     if set(overall) != set(DISPLAY_METRICS):
         raise AccuracyUnavailable("overall_metric_set_invalid")
+
+    for metric in METRICS:
+        value = overall.get(metric)
+        if not isinstance(value, dict):
+            raise AccuracyUnavailable("overall_metric_invalid")
+        _verify_metric_values(metric, value)
 
     if len(stored_by_horizon) != 7:
         raise AccuracyUnavailable("meta_horizon_count_invalid")
@@ -351,6 +706,15 @@ def _metric_groups(
     if _canonical(width["overall"]) != _canonical(overall["width_80_pct"]):
         raise AccuracyUnavailable("overall_derived_width_mismatch")
 
+    overall_derived = width["overall"]
+    if not isinstance(overall_derived, dict):
+        raise AccuracyUnavailable("overall_derived_width_invalid")
+
+    _verify_metric_values("width_80_pct", overall_derived)
+
+    if overall_derived["n_obs"] != overall["width_80"]["n_obs"]:
+        raise AccuracyUnavailable("overall_derived_width_n_obs_mismatch")
+
     derived_horizons = width["by_horizon"]
     if not isinstance(derived_horizons, list) or len(derived_horizons) != 7:
         raise AccuracyUnavailable("derived_horizon_count_invalid")
@@ -363,34 +727,10 @@ def _metric_groups(
 
         metric = {key: value for key, value in entry.items() if key != "h"}
 
-        n_obs = metric.get("n_obs")
+        _verify_metric_values("width_80_pct", metric)
 
-        if isinstance(n_obs, bool):
-            raise AccuracyUnavailable("derived_horizon_n_obs_invalid")
-
-        if isinstance(n_obs, Decimal):
-            if not n_obs.is_finite() or n_obs != n_obs.to_integral_value():
-                raise AccuracyUnavailable("derived_horizon_n_obs_invalid")
-            n_obs = int(n_obs)
-        elif not isinstance(n_obs, int):
-            raise AccuracyUnavailable("derived_horizon_n_obs_invalid")
-
-        if n_obs < 0:
-            raise AccuracyUnavailable("derived_horizon_n_obs_invalid")
-
-        metric["n_obs"] = n_obs
-
-        if metric.get("status") not in ("ok", "undefined"):
-            raise AccuracyUnavailable("derived_horizon_status_invalid")
-
-        if metric.get("unit") != "percent":
-            raise AccuracyUnavailable("derived_horizon_unit_invalid")
-
-        if metric["status"] == "undefined" and metric.get("value") is not None:
-            raise AccuracyUnavailable("derived_horizon_value_invalid")
-
-        if metric["status"] == "ok" and metric.get("value") is None:
-            raise AccuracyUnavailable("derived_horizon_value_invalid")
+        if metric["n_obs"] != by_horizon[horizon]["width_80"]["n_obs"]:
+            raise AccuracyUnavailable("derived_width_n_obs_mismatch")
 
     return overall, expected_by_horizon, derived
 
@@ -470,6 +810,43 @@ def _read_cycle(table, asset: str):
         or evidence.get("schedule_evidence_status") != "not_audited_mvp"
     ):
         raise AccuracyUnavailable("evaluation_evidence_invalid")
+
+    issuance_status = evidence.get("issuance_evidence_status")
+    if issuance_status not in (
+        "verified_eligible_rows",
+        "no_eligible_rows",
+    ):
+        raise AccuracyUnavailable("issuance_evidence_status_invalid")
+
+    expected_count = _count(evidence.get("expected_count"))
+    published_count = _count(evidence.get("published_count"))
+    missing_count = _count(evidence.get("missing_count"))
+
+    if expected_count != published_count + missing_count:
+        raise AccuracyUnavailable("evaluation_count_mismatch")
+
+    if published_count > expected_count:
+        raise AccuracyUnavailable("published_count_exceeds_expected")
+
+    eligible_count = _count(overall["coverage_80"]["n_obs"])
+    observations = meta.get("observations")
+
+    if not isinstance(observations, list):
+        raise AccuracyUnavailable("observations_invalid")
+
+    if len(observations) != eligible_count:
+        raise AccuracyUnavailable("observation_count_mismatch")
+
+    if issuance_status == "verified_eligible_rows":
+        if eligible_count == 0:
+            raise AccuracyUnavailable("issuance_evidence_without_observations")
+
+        if not meta["input_lineage"]:
+            raise AccuracyUnavailable("verified_issuance_without_input_lineage")
+
+    elif issuance_status == "no_eligible_rows":
+        if eligible_count != 0:
+            raise AccuracyUnavailable("eligible_observations_without_issuance_evidence")
 
     # Detect a concurrent promotion after the RUN partition has been read.
     after = _read_state(table, asset)

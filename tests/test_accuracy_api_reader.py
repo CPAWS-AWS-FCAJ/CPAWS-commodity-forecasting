@@ -9,6 +9,7 @@ import pytest
 
 from src.eval.rolling_accuracy import canonical as writer_canonical
 from src.eval.rolling_accuracy import digest as writer_digest
+from src.eval.rolling_accuracy import implementation_identity
 
 API_DIR = Path(__file__).resolve().parents[1] / "infra" / "lambda" / "accuracy_api"
 
@@ -24,7 +25,8 @@ reader = importlib.import_module("handler")
 ASSET = "gold"
 MODEL = "baseline-q252"
 EFFECTIVE = "2026-10-26"
-RUN_ID = "synthetic-run-001"
+JOB_DATE = "2026-11-07"
+REVISION = 1
 RUN_ORDER = "20261107#0001"
 WINDOW = {
     "basis": "base_date",
@@ -38,6 +40,7 @@ WINDOW = {
 
 def metric_value(metric: str, horizon: int | None = None) -> dict:
     n = 24
+
     if metric == "coverage_80":
         return {
             "value": 0.8,
@@ -46,6 +49,7 @@ def metric_value(metric: str, horizon: int | None = None) -> dict:
             "n_base_dates": n,
             "status": "ok",
         }
+
     if metric == "width_80":
         return {
             "value": 0.012 + (horizon or 0) * 0.001,
@@ -53,10 +57,13 @@ def metric_value(metric: str, horizon: int | None = None) -> dict:
             "unit": "log_return",
             "status": "ok",
         }
+
     if metric == "sign_accuracy":
         return {"value": 0.6, "n_obs": n, "status": "ok"}
+
     if metric == "up_rate":
         return {"value": 0.52, "n_obs": n, "status": "ok"}
+
     if metric == "width_80_pct":
         return {
             "value": 1.2 + (horizon or 0) * 0.1,
@@ -64,20 +71,94 @@ def metric_value(metric: str, horizon: int | None = None) -> dict:
             "unit": "percent",
             "status": "ok",
         }
+
     raise AssertionError(metric)
+
+
+def make_snapshot() -> dict:
+    return {
+        "dt": "2026-11-06",
+        "objects": [
+            {
+                "bucket": "cpaws-dev-lake",
+                "key": f"clean/prices/dt=2026-11-06/{filename}",
+                "etag": f"etag-{index}",
+                "version_id": None,
+                "last_modified": "2026-11-06T10:00:00+00:00",
+                "sha256": str(index) * 64,
+            }
+            for index, filename in enumerate(
+                ("quality.json", "prices.parquet", "rejected.parquet"),
+                start=1,
+            )
+        ],
+    }
+
+
+def make_input_lineage(snapshot: dict) -> list[dict]:
+    approval = {
+        "approved": True,
+        "reference": "test-approval-001",
+        "approved_by": "test-reviewer",
+        "approved_at": "2026-11-06T12:00:00+00:00",
+        "no_overwrite": True,
+        "scheduled_run": True,
+        "input_asof_checked": True,
+        "snapshot_digest": writer_digest(snapshot),
+        "pre_cutover_verified": True,
+    }
+
+    return [
+        {
+            "policy": "LEGACY_ACCEPT_WITH_EVIDENCE",
+            "approval": approval,
+            "snapshot": copy.deepcopy(snapshot),
+            "record_digest": "a" * 64,
+            "max_input_published_at": "2026-11-06T11:00:00+00:00",
+        }
+    ]
+
+
+def make_identity(
+    *,
+    model: str = MODEL,
+    effective: str = EFFECTIVE,
+) -> dict:
+    config_hash = "a" * 64
+    snapshot = make_snapshot()
+
+    return {
+        "asset": ASSET,
+        "model_version": model,
+        "effective": effective,
+        "job_date": JOB_DATE,
+        "revision": REVISION,
+        "config_hash": config_hash,
+        "snapshot": copy.deepcopy(snapshot),
+        "target_cutoff_date": WINDOW["target_cutoff_date"],
+        "eligible_record_fingerprint": "b" * 64,
+        "source_fingerprint": "c" * 64,
+    }
+
+
+# Giữ RUN_ID để các test có thể đối chiếu run mặc định.
+RUN_ID = f"{JOB_DATE}-{writer_digest(make_identity())[:20]}"
 
 
 def make_run(
     *,
     model: str = MODEL,
     effective: str = EFFECTIVE,
-    run_id: str = RUN_ID,
     run_order: str = RUN_ORDER,
 ) -> tuple[dict, list[dict], dict]:
     """Build a complete synthetic RUN partition using the writer's item shape."""
 
-    pk = reader._run_pk(ASSET, model, run_id)
     config_hash = "a" * 64
+    snapshot = make_snapshot()
+    identity = make_identity(model=model, effective=effective)
+
+    run_id = f"{JOB_DATE}-{writer_digest(identity)[:20]}"
+    pk = reader._run_pk(ASSET, model, run_id)
 
     overall = {metric: metric_value(metric) for metric in reader.METRICS}
     overall["width_80_pct"] = metric_value("width_80_pct")
@@ -136,6 +217,19 @@ def make_run(
         "missing_count": 0,
     }
 
+    input_lineage = make_input_lineage(snapshot)
+    observation_proof = input_lineage[0]
+
+    observation_count = overall["coverage_80"]["n_obs"]
+
+    observations = [
+        {
+            "record_digest": observation_proof["record_digest"],
+            "input_lineage": copy.deepcopy(observation_proof),
+        }
+        for _ in range(observation_count)
+    ]
+
     meta = {
         "PK": pk,
         "SK": "META",
@@ -148,8 +242,11 @@ def make_run(
         "sample": "all",
         "evaluated_at": "2026-11-07T14:00:00Z",
         "config_hash": config_hash,
-        "identity": {"synthetic": True},
-        "implementation": {"version": "test"},
+        "identity": identity,
+        "implementation": implementation_identity(),
+        "actual_lineage": copy.deepcopy(snapshot),
+        "input_lineage": input_lineage,
+        "observations": observations,
         "window": copy.deepcopy(WINDOW),
         "last_eligible_base_date": "2026-11-07",
         "evaluation_evidence": evidence,
@@ -238,11 +335,7 @@ class FakeDynamo:
 def configure_reader(monkeypatch):
     def configure(table):
         monkeypatch.setattr(reader, "TABLE_NAME", "test-accuracy")
-        monkeypatch.setattr(
-            reader,
-            "MODEL_VERSIONS",
-            {ASSET: MODEL},
-        )
+        monkeypatch.setattr(reader, "MODEL_VERSIONS", {ASSET: MODEL})
         monkeypatch.setattr(
             reader,
             "CHAMPION_EFFECTIVE_BASE_DATES",
@@ -408,15 +501,10 @@ def test_state_change_to_unknown_run_fails_closed(configure_reader):
         items=[meta, *metrics],
         state_sequence=[state, changed, changed, changed],
     )
-    # First attempt sees a changed pointer. The second attempt must read
-    # the same pointer before and after its RUN query.
-    table.state_sequence = [state, changed, changed, changed]
     configure_reader(table)
 
     response = invoke()
 
-    # The changed pointer references a different run identity, so the
-    # second attempt must fail closed rather than reuse the old RUN.
     assert response["statusCode"] == 503
 
 
@@ -456,7 +544,7 @@ def reseal_meta(meta: dict) -> None:
     meta["payload_hash"] = reader._digest(payload)
 
 
-def invoke_corrupt_derived(configure_reader, mutate_meta) -> dict:
+def invoke_corrupt_provenance(configure_reader, mutate_meta) -> dict:
     meta, metrics, state = make_run()
     mutate_meta(meta)
     reseal_meta(meta)
@@ -465,6 +553,71 @@ def invoke_corrupt_derived(configure_reader, mutate_meta) -> dict:
     configure_reader(table)
 
     return invoke()
+
+
+def invoke_corrupt_derived(configure_reader, mutate_meta) -> dict:
+    return invoke_corrupt_provenance(configure_reader, mutate_meta)
+
+
+@pytest.mark.parametrize("invalid_snapshot", ["bucket", "path"])
+def test_invalid_input_snapshot_returns_503(
+    configure_reader,
+    invalid_snapshot,
+):
+    def mutate(meta):
+        item = meta["input_lineage"][0]["snapshot"]["objects"][0]
+
+        if invalid_snapshot == "bucket":
+            item["bucket"] = "another-bucket"
+        else:
+            item["key"] = item["key"].replace(
+                "dt=2026-11-06",
+                "dt=2026-11-05",
+            )
+
+    response = invoke_corrupt_provenance(configure_reader, mutate)
+
+    assert response["statusCode"] == 503
+
+
+def test_legacy_snapshot_digest_mismatch_returns_503(configure_reader):
+    def mutate(meta):
+        snapshot = meta["input_lineage"][0]["snapshot"]
+        snapshot["objects"][0]["sha256"] = "2" * 64
+
+    response = invoke_corrupt_provenance(configure_reader, mutate)
+
+    assert response["statusCode"] == 503
+
+
+def test_observation_without_input_proof_returns_503(configure_reader):
+    def mutate(meta):
+        meta["observations"][0]["record_digest"] = "f" * 64
+
+    response = invoke_corrupt_provenance(configure_reader, mutate)
+
+    assert response["statusCode"] == 503
+
+
+def test_observation_with_mismatched_input_proof_returns_503(
+    configure_reader,
+):
+    def mutate(meta):
+        observation = meta["observations"][0]
+        observation["input_lineage"]["max_input_published_at"] = "2026-11-06T11:30:00Z"
+
+    response = invoke_corrupt_provenance(configure_reader, mutate)
+
+    assert response["statusCode"] == 503
+
+
+def test_observation_count_mismatch_returns_503(configure_reader):
+    def mutate(meta):
+        meta["observations"].pop()
+
+    response = invoke_corrupt_provenance(configure_reader, mutate)
+
+    assert response["statusCode"] == 503
 
 
 def test_missing_derived_horizon_returns_503(configure_reader):
