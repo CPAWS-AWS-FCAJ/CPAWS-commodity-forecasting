@@ -7,7 +7,7 @@
 CPAWS chạy trong **một môi trường `dev`** trên tài khoản AWS của nhóm, region `ap-southeast-1` ([ADR-0004](../adr/0004-region-and-bedrock-access.md), [ADR-0006](../adr/0006-aws-account-and-access.md)). Toàn bộ hạ tầng, trừ web Amplify và một số tài nguyên tạo tay (mục 2.2), được viết bằng **AWS CDK (Python)** trong `infra/`. Có hai mục tiêu vận hành:
 
 1. **Chạy tự động mỗi ngày, không cần người.** Cập nhật dữ liệu và phát hành dự báo theo lịch; lỗi thì gửi email.
-2. **Hoàn tác được trong vài phút, không cần build lại.** Mọi thay đổi có rủi ro (shadow, image, CORS, cờ web) đều có cách quay về bằng một lệnh deploy.
+2. **Hoàn tác được trong vài phút, không cần build lại image.** Mọi thay đổi có rủi ro (shadow, image, CORS, cờ web) đều có cách quay về bằng một lệnh deploy, hoặc một lần build và upload web.
 
 Phạm vi chương: các stack, luồng chạy hằng ngày, quy trình deploy, rollback, giám sát, web và CORS, CI, giới hạn. Sơ đồ hiện trạng ở PR [#94](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/94). Các lựa chọn kiến trúc ở [tư liệu kiến trúc](lua-chon-kien-truc-va-mo-hinh.md). Chatbot ở [chương chatbot](chatbot.md).
 
@@ -92,7 +92,7 @@ Lượt predict tự động đầu tiên chạy ngày 27/10/2026. Từ 04/11, i
 Ba điểm làm cho rollback an toàn:
 
 - **`MODEL_VERSION` luôn bằng mọi giá trị của `MODEL_VERSIONS`.** Image `ce77bcb` (bản #48) chỉ đọc `MODEL_VERSION`, còn image hiện tại đọc `MODEL_VERSIONS` theo tài sản. CDK chặn ngay lúc synth nếu hai biến lệch nhau. Nhờ vậy, khi quay về image cũ, Lambda vẫn chạy đúng champion. Cũng vì thế mà **đổi champion phải sửa `app.py` qua PR**: truyền riêng `-c predict_model_version` khác `baseline-q252` thì synth báo lỗi.
-- **Dữ liệu không bị xóa:** bucket lake có versioning, giữ phiên bản cũ 30 ngày. Bảng `forecasts` và User Pool là `RETAIN`. Predict không ghi đè bản đã phát hành.
+- **Dữ liệu không bị xóa:** bucket lake có versioning, giữ phiên bản cũ 30 ngày. Bảng `forecasts` và User Pool là `RETAIN`. Predict không ghi đè bản đã phát hành. Riêng repo ECR ở `dev` là `DESTROY`: xóa stack `CpawsData` thì mất luôn các image dùng để rollback.
 - **Image rollback phải còn trong ECR.** ECR chỉ giữ 5 image mới nhất. Repo predict hiện có 4 tag: `ffeee05`, `ce77bcb`, `c61abdd`, `e31c928`. Theo thứ tự push, sau 2 lần push nữa thì `ce77bcb` sẽ bị xóa. Trước khi push image mới, cần chọn lại tag rollback hoặc nâng giới hạn.
 
 ## 6. Giám sát và cảnh báo
@@ -112,6 +112,15 @@ Ngoài alarm, nhóm **kiểm tay sau mỗi lượt 19:15** (lệnh ở Phụ l�
 ## 7. Web trên Amplify Hosting và CORS
 
 **Web:** app `cpaws-dev-web`, nhánh `dev`, domain mặc định của Amplify. App được tạo tay ngày 04/11. Mỗi lần cập nhật, web được build từ `developer` (`npm run build`), nén `web/dist` thành zip rồi upload ở console. Có rewrite để mọi đường dẫn của SPA trả về `index.html`. Các biến `VITE_*` (region, User Pool ID, client ID, URL API, `VITE_SHOW_METAL_PRICES`, `VITE_ACCURACY_API`) được đọc **lúc build**, nên muốn đổi cờ thì build lại, không cần deploy API. Web không chứa bí mật: ID của User Pool và app client là giá trị công khai của SPA. Việc nối Amplify với GitHub để tự build để sau 08/11, vì nối GitHub sẽ tạo app và domain mới.
+
+Vì zip upload tay không gắn với commit, bản đang chạy được ghi lại ở đây:
+
+| Lần deploy | Commit `developer` | `VITE_SHOW_METAL_PRICES` | `VITE_ACCURACY_API` |
+|---|---|---|---|
+| 04/11 | `047189f` | `false` | `false` |
+| 07/11 (kế hoạch) | commit mới nhất sáng 07/11 | `true` nếu #91 (ADR-0005) đã merge trước tối 06/11, chưa merge thì `false` | `false` |
+
+Sau lần build 07/11, dòng kế hoạch được thay bằng commit và giá trị cờ thật.
 
 **CORS:** `CpawsApi` nhận **một** origin qua `-c allowed_origin`, mặc định `http://localhost:5173`. Giá trị này được dùng ở ba chỗ: preflight `OPTIONS` của API Gateway, header của Lambda `forecasts-api` và `chat-api` (biến `ALLOWED_ORIGIN`), và `GatewayResponse` 4xx/5xx (để trình duyệt vẫn đọc được mã lỗi 401, 429, 504).
 
@@ -144,7 +153,7 @@ Route `/accuracy` không deploy cùng lần deploy `CpawsApi` ngày 07/11. Phư�
 ## 10. Giới hạn
 
 - **Một môi trường, deploy tay.** Không có staging hay prod. Deploy chạy từ máy một người. Tham số `-c` không được lưu, nên dễ lỡ quên `allowed_origin` hoặc `alarm_email`.
-- **Alarm không phát hiện việc "không chạy".** Thiếu dữ liệu được coi là bình thường, nên nếu Scheduler không kích hoạt thì không có email báo. Hiện việc này chỉ được bắt bằng bước kiểm tay sau 19:15.
+- **Alarm không phát hiện việc "không chạy".** Thiếu dữ liệu được coi là bình thường, nên nếu Scheduler không kích hoạt thì không có email báo. Hiện việc này chỉ được bắt bằng bước kiểm tay sau 19:15. Hướng sửa sau 22/11: alarm trên `Invocations` của Lambda ingest, chu kỳ 1 ngày, thiếu dữ liệu coi là vi phạm, và chỉ báo khi **3 ngày liên tiếp** không có lần chạy, vì Chủ nhật và thứ Hai (giờ UTC) vốn không có lịch.
 - **CORS một origin**, nên localhost và Amplify không dùng được cùng lúc.
 - **Amplify deploy zip thủ công.** Không có lịch sử build gắn với commit, nên commit nào đang chạy phải ghi lại bằng tay.
 - **ECR giữ 5 image**, nên image rollback có thể bị xóa nếu không theo dõi (mục 5).
