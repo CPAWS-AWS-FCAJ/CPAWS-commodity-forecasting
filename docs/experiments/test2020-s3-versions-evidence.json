@@ -1,0 +1,341 @@
+{
+  "Versions": [
+    {
+      "Key": "clean/prices/dt=2026-10-15/prices.parquet",
+      "VersionId": "eI8NZZUwX5kEuOGHCIe83eLQLsCMq1Am",
+      "LastModified": "2026-10-15T20:03:32+00:00",
+      "Size": 200395,
+      "IsLatest": true
+    },
+    {
+      "Key": "clean/prices/dt=2026-10-15/quality.json",
+      "VersionId": "5GRvwLIlOx_J8FguElPlsqWfa4HB1K7o",
+      "LastModified": "2026-10-15T20:03:33+00:00",
+      "Size": 13791,
+      "IsLatest": true
+    },
+    {
+      "Key": "clean/prices/dt=2026-10-15/rejected.parquet",
+      "VersionId": "2PBTFgFtp4tjYbuXr8q13opGsPK7x3Pm",
+      "LastModified": "2026-10-15T20:03:32+00:00",
+      "Size": 5666,
+      "IsLatest": true
+    },
+    {
+      "Key": "clean/prices/dt=2026-10-18/prices.parquet",
+      "VersionId": "KghxOk1b.cq5ttxZ25SfjC3ijiY6SLZW",
+      "LastModified": "2026-10-18T13:36:53+00:00",
+      "Size": 200495,
+      "IsLatest": true
+    },
+    {
+      "Key": "clean/prices/dt=2026-10-18/quality.json",
+      "VersionId": "ea5XtnsAPF2Ahnji2oj8qPf6yWnqGiEw",
+      "LastModified": "2026-10-18T13:36:53+00:00",
+      "Size": 13824,
+      "IsLatest": true
+    },
+    {
+      "Key": "clean/prices/dt=2026-10-18/rejected.parquet",
+      "VersionId": "ggx.H9YI_W9YHU8XBq9z3dtMGatscHVP",
+      "LastModified": "2026-10-18T13:36:53+00:00",
+      "Size": 5693,
+      "IsLatest": true
+    },
+    {
+      "Key": "clean/prices/dt=2026-10-22/prices.parquet",
+      "VersionId": "XfGDjhW_r4CNIEJiySLF_s6gJ72ynwR9",
+      "LastModified": "2026-10-22T12:15:29+00:00",
+      "Size": 200652,
+      "IsLatest": true
+    },
+    {
+      "Key": "clean/prices/dt=2026-10-22/quality.json",
+      "VersionId": "7xqQQmX21Ju5rE2PwAFsf5uxUFdDPtPV",
+      "LastModified": "2026-10-22T12:15:29+00:00",
+      "Size": 13824,
+      "IsLatest": true
+    },
+    {
+      "Key": "clean/prices/dt=2026-10-22/rejected.parquet",
+      "VersionId": "4SItVJdkvoooBP0ZvRaUuT454ai6yI3A",
+      "LastModified": "2026-10-22T12:15:29+00:00",
+      "Size": 5693,
+      "IsLatest": true
+    },
+    {
+      "Key": "clean/prices/dt=2026-10-23/prices.parquet",
+      "VersionId": "dxJa58DxJzJ1GU8uteSSzsEvN4SCxsYU",
+      "LastModified": "2026-10-23T12:15:25+00:00",
+      "Size": 200702,
+      "IsLatest": true
+    },
+    {
+      "Key": "clean/prices/dt=2026-10-23/quality.json",
+      "VersionId": "KmYhhHn_1rxy.IeTit51hGeZXTRH_Cfv",
+      "LastModified": "2026-10-23T12:15:26+00:00",
+      "Size": 13822,
+      "IsLatest": true
+    },
+    {
+      "Key": "clean/prices/dt=2026-10-23/rejected.parquet",
+      "VersionId": "ssG.wXVvV19qi2ockUck1zmYptL81Oiv",
+      "LastModified": "2026-10-23T12:15:25+00:00",
+      "Size": 5693,
+      "IsLatest": true
+    },
+    {
+      "Key": "clean/prices/dt=2026-10-24/prices.parquet",
+      "VersionId": "e_NmdE4aX8cIYt.ejQPUzI6NVnrSx1IG",
+      "LastModified": "2026-10-24T12:15:23+00:00",
+      "Size": 200776,
+      "IsLatest": true
+    },
+    {
+      "Key": "clean/prices/dt=2026-10-24/quality.json",
+      "VersionId": "xbB_IXkSHOQ71JqjbmwfV3_mtUtRiNCt",
+      "LastModified": "2026-10-24T12:15:23+00:00",
+      "Size": 13824,
+      "IsLatest": true
+    },
+    {
+      "Key": "clean/prices/dt=2026-10-24/rejected.parquet",
+      "VersionId": "13_QAfyyVvVJdbGDaXX7WYCVPSFQTb04",
+      "LastModified": "2026-10-24T12:15:23+00:00",
+      "Size": 5693,
+      "IsLatest": true
+    },
+    {
+      "Key": "clean/prices/dt=2026-10-25/prices.parquet",
+      "VersionId": "NtUyRbvc5.VAcfjIxqs1H8qqzuWnfzHJ",
+      "LastModified": "2026-10-25T09:24:00+00:00",
+      "Size": 200784,
+      "IsLatest": true
+    },
+    {
+      "Key": "clean/prices/dt=2026-10-25/quality.json",
+      "VersionId": "8_7uya8uPDd9iQL1QsrjesRWxci87ZcS",
+      "LastModified": "2026-10-25T09:24:00+00:00",
+      "Size": 13824,
+      "IsLatest": true
+    },
+    {
+      "Key": "clean/prices/dt=2026-10-25/rejected.parquet",
+      "VersionId": "GGSl9SZdthpYAx19WUMbK.uh5qUQljoQ",
+      "LastModified": "2026-10-25T09:24:00+00:00",
+      "Size": 5693,
+      "IsLatest": true
+    },
+    {
+      "Key": "clean/prices/dt=2026-10-27/prices.parquet",
+      "VersionId": "_LH3BIwvXq_0G1ioVHKqSxfmtUBrKQ0V",
+      "LastModified": "2026-10-27T12:15:26+00:00",
+      "Size": 200855,
+      "IsLatest": true
+    },
+    {
+      "Key": "clean/prices/dt=2026-10-27/quality.json",
+      "VersionId": "MUuhy61eNIGV96tXglcbRQhSryU81ZYR",
+      "LastModified": "2026-10-27T12:15:26+00:00",
+      "Size": 13855,
+      "IsLatest": true
+    },
+    {
+      "Key": "clean/prices/dt=2026-10-27/rejected.parquet",
+      "VersionId": "8Tksq2.4HP68Kdm4iEIakEkA5Jqotm5F",
+      "LastModified": "2026-10-27T12:15:26+00:00",
+      "Size": 5693,
+      "IsLatest": true
+    },
+    {
+      "Key": "clean/prices/dt=2026-10-28/prices.parquet",
+      "VersionId": "pXwhhAnvWAy.x87JPiQG3IGvYUMwuYps",
+      "LastModified": "2026-10-28T12:15:59+00:00",
+      "Size": 200897,
+      "IsLatest": true
+    },
+    {
+      "Key": "clean/prices/dt=2026-10-28/prices.parquet",
+      "VersionId": "Bno4gcLzoV.L3Yao9Gz6BlBvuq5ESuBA",
+      "LastModified": "2026-10-28T03:39:09+00:00",
+      "Size": 200857,
+      "IsLatest": false
+    },
+    {
+      "Key": "clean/prices/dt=2026-10-28/prices.parquet",
+      "VersionId": "YIujsznpG_bpasn24azFC1i5aYC3EVzY",
+      "LastModified": "2026-10-28T03:38:15+00:00",
+      "Size": 200855,
+      "IsLatest": false
+    },
+    {
+      "Key": "clean/prices/dt=2026-10-28/prices.parquet",
+      "VersionId": "aPhA0RhJi87zWSiDQDq4lZWbAcCpJb2k",
+      "LastModified": "2026-10-28T03:36:31+00:00",
+      "Size": 200855,
+      "IsLatest": false
+    },
+    {
+      "Key": "clean/prices/dt=2026-10-28/prices.parquet",
+      "VersionId": "EtxRUI6Q0iQ_PLBaZAlwGy_MoIq5jVeX",
+      "LastModified": "2026-10-28T03:11:39+00:00",
+      "Size": 200855,
+      "IsLatest": false
+    },
+    {
+      "Key": "clean/prices/dt=2026-10-28/quality.json",
+      "VersionId": ".bBZuc._A3jPH4UThXcxf3NiSMNJN4cE",
+      "LastModified": "2026-10-28T12:15:59+00:00",
+      "Size": 13935,
+      "IsLatest": true
+    },
+    {
+      "Key": "clean/prices/dt=2026-10-28/quality.json",
+      "VersionId": "rtZmLH236.Vrl1A4VAgtyBh820xAkxT0",
+      "LastModified": "2026-10-28T03:39:10+00:00",
+      "Size": 13885,
+      "IsLatest": false
+    },
+    {
+      "Key": "clean/prices/dt=2026-10-28/quality.json",
+      "VersionId": "Xw3DhySL_h6pmxtLMZNDnP2.JwIUV4SX",
+      "LastModified": "2026-10-28T03:38:16+00:00",
+      "Size": 13833,
+      "IsLatest": false
+    },
+    {
+      "Key": "clean/prices/dt=2026-10-28/quality.json",
+      "VersionId": "O4hpeNhbuFaKkCJzE.7E5_JYNWuZEAJf",
+      "LastModified": "2026-10-28T03:36:31+00:00",
+      "Size": 13833,
+      "IsLatest": false
+    },
+    {
+      "Key": "clean/prices/dt=2026-10-28/quality.json",
+      "VersionId": "0Y1BPCj3GBQZS4y7zy9aPIqydI_YICBy",
+      "LastModified": "2026-10-28T03:11:39+00:00",
+      "Size": 13902,
+      "IsLatest": false
+    },
+    {
+      "Key": "clean/prices/dt=2026-10-28/rejected.parquet",
+      "VersionId": "TFSoWteP.qEJDei5O9nLFWrwls1360w3",
+      "LastModified": "2026-10-28T12:15:59+00:00",
+      "Size": 5693,
+      "IsLatest": true
+    },
+    {
+      "Key": "clean/prices/dt=2026-10-28/rejected.parquet",
+      "VersionId": "IMZoAL07OD.R5mU_dXcSJQv07gjCG4Rg",
+      "LastModified": "2026-10-28T03:39:09+00:00",
+      "Size": 5693,
+      "IsLatest": false
+    },
+    {
+      "Key": "clean/prices/dt=2026-10-28/rejected.parquet",
+      "VersionId": "BIk72vcuU6Fb_2TUYWWtW.5hvWL9DM7H",
+      "LastModified": "2026-10-28T03:38:15+00:00",
+      "Size": 5693,
+      "IsLatest": false
+    },
+    {
+      "Key": "clean/prices/dt=2026-10-28/rejected.parquet",
+      "VersionId": "WqH_s_OGhdF4bNrpbtZS_vv1s5v18FwK",
+      "LastModified": "2026-10-28T03:36:31+00:00",
+      "Size": 5693,
+      "IsLatest": false
+    },
+    {
+      "Key": "clean/prices/dt=2026-10-28/rejected.parquet",
+      "VersionId": "ruWHdeuHj..0Cc4kstvGjrEkChv8mjZT",
+      "LastModified": "2026-10-28T03:11:39+00:00",
+      "Size": 5693,
+      "IsLatest": false
+    },
+    {
+      "Key": "clean/prices/dt=2026-10-29/prices.parquet",
+      "VersionId": "fw4sUzQc0ckjc5RkSsVN2wZSgSBAtsdU",
+      "LastModified": "2026-10-29T12:15:26+00:00",
+      "Size": 200975,
+      "IsLatest": true
+    },
+    {
+      "Key": "clean/prices/dt=2026-10-29/quality.json",
+      "VersionId": "DDcXxbtBE0jDg9XrJL87DZs8O7tu7JIM",
+      "LastModified": "2026-10-29T12:15:26+00:00",
+      "Size": 13932,
+      "IsLatest": true
+    },
+    {
+      "Key": "clean/prices/dt=2026-10-29/rejected.parquet",
+      "VersionId": "Iz0dwuxr2VqUFnByvFxhrXXPJIDnOX_g",
+      "LastModified": "2026-10-29T12:15:26+00:00",
+      "Size": 5693,
+      "IsLatest": true
+    },
+    {
+      "Key": "clean/prices/dt=2026-10-30/prices.parquet",
+      "VersionId": "sCIzCNfv1BtjopYbrwRDqBRqSm7deecO",
+      "LastModified": "2026-10-30T12:15:25+00:00",
+      "Size": 201049,
+      "IsLatest": true
+    },
+    {
+      "Key": "clean/prices/dt=2026-10-30/quality.json",
+      "VersionId": "L9S1GZ3xvZ03StFMzZTgmQGWCKA4ftUP",
+      "LastModified": "2026-10-30T12:15:26+00:00",
+      "Size": 13935,
+      "IsLatest": true
+    },
+    {
+      "Key": "clean/prices/dt=2026-10-30/rejected.parquet",
+      "VersionId": "8NlM3nLtkXvjWMWEEHH.kb4fOhi950AS",
+      "LastModified": "2026-10-30T12:15:25+00:00",
+      "Size": 5693,
+      "IsLatest": true
+    },
+    {
+      "Key": "clean/prices/dt=2026-10-31/prices.parquet",
+      "VersionId": "XSqcFlfGvDZzMrQk43NorSBIYKmgnV4J",
+      "LastModified": "2026-10-31T12:15:43+00:00",
+      "Size": 201081,
+      "IsLatest": true
+    },
+    {
+      "Key": "clean/prices/dt=2026-10-31/quality.json",
+      "VersionId": "z2kWzgePRwjaMMtLbH_FB4bvKthytYdl",
+      "LastModified": "2026-10-31T12:15:43+00:00",
+      "Size": 13934,
+      "IsLatest": true
+    },
+    {
+      "Key": "clean/prices/dt=2026-10-31/rejected.parquet",
+      "VersionId": "YOzT5FhCZXmjBXH26a0zYdiwEe_A9TBU",
+      "LastModified": "2026-10-31T12:15:43+00:00",
+      "Size": 5693,
+      "IsLatest": true
+    },
+    {
+      "Key": "clean/prices/dt=2026-11-03/prices.parquet",
+      "VersionId": "jVnEoKpHDjx8N50PDmowe0nbdhffBe81",
+      "LastModified": "2026-11-03T12:15:28+00:00",
+      "Size": 201166,
+      "IsLatest": true
+    },
+    {
+      "Key": "clean/prices/dt=2026-11-03/quality.json",
+      "VersionId": "xuhSXjs38CUfZjWDwCIOQx8rx4tebC3J",
+      "LastModified": "2026-11-03T12:15:28+00:00",
+      "Size": 13935,
+      "IsLatest": true
+    },
+    {
+      "Key": "clean/prices/dt=2026-11-03/rejected.parquet",
+      "VersionId": "qVBVigKBmXKkicl9Izh1rsazudS9LtX_",
+      "LastModified": "2026-11-03T12:15:28+00:00",
+      "Size": 5693,
+      "IsLatest": true
+    }
+  ],
+  "DeleteMarkers": null
+}

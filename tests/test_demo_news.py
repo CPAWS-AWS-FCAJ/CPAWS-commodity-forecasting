@@ -26,6 +26,9 @@ HANDLER = ROOT / "infra" / "lambda" / "chat_api" / "handler.py"
 PUBLISHED_AT = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 DIRECTIONS = {"bullish", "bearish", "mixed", "uncertain"}
 SOURCES = {"Federal Reserve": "www.federalreserve.gov", "EIA": "www.eia.gov"}
+WPSR_1104 = (
+    "https://www.eia.gov/petroleum/supply/weekly/archive/2026/2026_11_04/wpsr_2026_11_04.php"
+)
 
 
 def _load(asset: str) -> dict:
@@ -114,7 +117,25 @@ def test_handler_reads_news_dir(monkeypatch):
     monkeypatch.setenv("NEWS_DIR", str(NEWS_DIR))
     repo = handler.news_repository()
     assert isinstance(repo, N.JsonFileNewsRepository)
-    res = N.get_news({"asset": "gold", "to_date": "2026-10-29"}, repo)
+    # câu tin vàng trong kịch bản demo nêu khoảng ngày từ 7/10: min_impact mặc định (2) lấy biên bản FOMC
+    res = N.get_news({"asset": "gold", "from_date": "2026-10-07", "to_date": "2026-10-29"}, repo)
+    assert res["min_impact"] == 2
+    assert [it["link"] for it in res["items"]] == [
+        "https://www.federalreserve.gov/monetarypolicy/fomcminutes20260916.htm"
+    ]
+    # FOMC 28/10 chỉ có hai phiếu muốn tăng nên là 1/bearish (labeling-v3): không lọt ngưỡng mặc định
+    assert N.get_news({"asset": "gold", "to_date": "2026-10-29"}, repo)["items"] == []
+    res = N.get_news({"asset": "gold", "to_date": "2026-10-29", "min_impact": 1}, repo)
     assert [it["link"] for it in res["items"]] == [
         "https://www.federalreserve.gov/newsevents/pressreleases/monetary20261028a.htm"
     ]
+
+
+@pytest.mark.parametrize("asset", N.ASSETS)
+def test_demo_day_default_range(asset):
+    # hôm demo 8/11 khoảng mặc định là 1/11–8/11: chỉ có WPSR 4/11, mức 1 cho dầu (tồn kho cùng giảm)
+    repo = N.JsonFileNewsRepository(NEWS_DIR)
+    assert N.get_news({"asset": asset, "to_date": "2026-11-08"}, repo)["items"] == []
+    res = N.get_news({"asset": asset, "to_date": "2026-11-08", "min_impact": 1}, repo)
+    expected = {"brent": [(WPSR_1104, "bullish")], "wti": [(WPSR_1104, "bullish")]}
+    assert [(it["link"], it["direction"]) for it in res["items"]] == expected.get(asset, [])
