@@ -1,6 +1,6 @@
 # Bộ tin demo cho tool `get_news`
 
-Phương án dự phòng cho demo chatbot ngày 8/11/2026, dùng khi bảng DynamoDB `NewsLabels` chưa có dữ liệu thật ([contract](contract.md), mục `POST /chat`, phần "Nguồn dữ liệu của tool `get_news`").
+Phương án dự phòng cho buổi chạy thử chatbot nội bộ 8/11/2026, dùng khi bảng DynamoDB `NewsLabels` chưa có dữ liệu thật ([contract](contract.md), mục `POST /chat`, phần "Nguồn dữ liệu của tool `get_news`").
 
 - **File:** `gold.json`, `silver.json`, `brent.json`, `wti.json` trong [`infra/lambda/chat_api/news/`](../../infra/lambda/chat_api/news/). Mỗi file có dạng `{"asset": "...", "items": [...]}`, mỗi tin đúng 7 trường của contract.
 - **Nguồn:** chỉ lấy thông cáo thật trên `federalreserve.gov` và `eia.gov`. Đã mở từng link và đối chiếu tiêu đề, ngày và nội dung.
@@ -38,13 +38,13 @@ Về giờ đăng:
 
 ## Lưu ý: khoảng ngày lúc demo
 
-Khi model không truyền ngày, `get_news` lấy từ `to_date − 7 ngày` đến hôm nay theo giờ Việt Nam, với `min_impact = 2`. Hôm demo 8/11/2026 khoảng này là **1/11–8/11**. Trong khoảng đó bộ tin chỉ có WPSR 4/11, ở mức 1, nên với `min_impact = 2` mặc định `get_news` vẫn trả rỗng cho cả 4 tài sản. Từ 28/10 trở đi không có tin nào đạt mức 2. Không đổi ngày đăng để tin lọt vào khoảng mặc định, vì như vậy là sai sự thật.
+Khi model không truyền ngày, `get_news` lấy từ `to_date − 7 ngày` đến hôm nay theo giờ Việt Nam, với `min_impact = 2`. Hôm chạy thử nội bộ 8/11/2026 khoảng này là **1/11–8/11**. Trong khoảng đó bộ tin chỉ có WPSR 4/11, ở mức 1, nên với `min_impact = 2` mặc định `get_news` vẫn trả rỗng cho cả 4 tài sản. Từ 28/10 trở đi không có tin nào đạt mức 2. Không đổi ngày đăng để tin lọt vào khoảng mặc định, vì như vậy là sai sự thật.
 
 Câu hỏi không nêu ngày sẽ nhận kết quả rỗng, và chatbot sẽ nói không tìm thấy tin đáng kể. Cách xử lý:
 
 1. **Đã làm mới bộ tin ngày 5/11** (hạn 6/11), theo mục bên dưới. Tiến deploy lại `CpawsApi` ngày 7/11, vì bộ tin nằm trong asset Lambda. Phạm vi tin giống nhãn tay trên production (ADR-0013): với Fed chỉ lấy FOMC statement và biên bản FOMC; với EIA lấy WPSR, STEO và bài dự báo. Kết quả tra ngày 5/11:
-   - EIA: thêm WPSR 4/11 (tuần kết thúc 30/10), 1/bullish cho dầu. STEO tháng 11 ra ngày 10/11, sau ngày demo.
-   - Fed: RSS không có FOMC statement hay biên bản mới. Biên bản kỳ họp 27–28/10 ra ngày 18/11, sau ngày demo. SLOOS (2/11) và bài phát biểu nằm ngoài phạm vi của ADR-0013 nên không thêm.
+   - EIA: thêm WPSR 4/11 (tuần kết thúc 30/10), 1/bullish cho dầu. STEO tháng 11 ra ngày 10/11, sau buổi chạy thử nội bộ 8/11.
+   - Fed: RSS không có FOMC statement hay biên bản mới. Biên bản kỳ họp 27–28/10 ra ngày 18/11, sau buổi chạy thử nội bộ 8/11. SLOOS (2/11) và bài phát biểu nằm ngoài phạm vi của ADR-0013 nên không thêm.
 2. **Câu hỏi demo nêu rõ khoảng ngày**, như câu 3 trong kịch bản demo (PR #77): "Vì sao vàng có thể biến động thời gian gần đây? Xem giúp mình các tin tức từ 7/10/2026 tới nay.". Khi đó model truyền `from_date` và lấy được biên bản FOMC đăng 7/10 (mức 2). Từ khi FOMC 28/10 hạ xuống mức 1 (ngày 2/11), vàng và bạc chỉ còn biên bản này đạt mức 2, nên câu hỏi "từ 28/10 tới nay" ở `min_impact = 2` không ra tin vàng, bạc nào. Sau khi Tiến deploy lại, hỏi đúng câu này trên AWS: `get_news` phải trả ít nhất 1 tin (Khải, 2/11).
 3. **WPSR thường chỉ đạt mức 1**, nên bị lọc ở `min_impact = 2` mặc định. Brent và WTI hiện không có tin nào đạt mức 2; nếu model truyền `min_impact = 1` thì khoảng mặc định ngày 8/11 ra WPSR 4/11. Giữ ngưỡng 2 (Tiến, Khải 2/11); kịch bản có một câu tin dầu để cho thấy chatbot nói "không có tin đáng kể". Không nâng điểm chỉ để tin hiện ra.
 4. Đề xuất code (chưa làm, cần sửa `src/chatbot/news.py` và contract): thêm biến môi trường số ngày mặc định, ví dụ `NEWS_DEFAULT_DAYS`, để nới khoảng ngày khi demo.
