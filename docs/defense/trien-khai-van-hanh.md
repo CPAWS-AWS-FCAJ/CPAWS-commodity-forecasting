@@ -58,7 +58,9 @@ Lượt predict tự động đầu tiên chạy ngày 27/10/2026. Từ 04/11, i
 |---|---:|---:|---:|---|
 | 04/11 | 3,29 s | — | 4/4 | OK |
 | 05/11 | 3,25 s (Init 1,33 s) | 260 / 1.024 MB | 4/4 | OK |
-| 06/11 | *(điền sau lượt 19:15)* | | | |
+| 06/11 | 3,27 s (Init 1,34 s) | 258 / 1.024 MB | 4/4 | OK |
+
+`Duration` lớn nhất của ba lượt là 3,29 s, tăng 0,39 s so với mốc 2,9 s, nên **đạt** tiêu chí. Shadow giữ nguyên, không cần rollback.
 
 ## 4. Quy trình deploy
 
