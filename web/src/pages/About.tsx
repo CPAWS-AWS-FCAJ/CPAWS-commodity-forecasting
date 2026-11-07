@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { config } from "../api/config";
 import { DISCLAIMER_TEXT } from "../components/Disclaimer";
+import { SOURCE_ATTRIBUTION } from "../lib/source";
 
 export default function About() {
   return (
@@ -23,7 +24,7 @@ export default function About() {
         </li>
         <li>
           {config.showMetalPrices
-            ? "Vàng và bạc dùng chuỗi đại diện GLD, SLV quy đổi về USD/oz; đây không phải giá giao ngay. Giá vàng đổi sang VND/lượng không phải giá vàng miếng trong nước."
+            ? "Vàng và bạc dùng chuỗi đại diện GLD, SLV quy đổi về USD/oz; đây không phải giá giao ngay. Giá vàng VND/lượng là giá thế giới quy đổi, không phải giá vàng miếng trong nước."
             : "Vàng và bạc là dự báo dựa trên chuỗi đại diện GLD, SLV; web chỉ hiển thị % thay đổi và xác suất tăng, không hiển thị giá."}
         </li>
         <li>Giá dầu là hợp đồng tương lai; kỳ dự báo có thể chứa ngày đáo hạn hợp đồng.</li>
@@ -45,6 +46,8 @@ export default function About() {
           .
         </li>
       </ul>
+      <h2 className="text-lg font-semibold">Nguồn dữ liệu</h2>
+      <p className="text-sm">{SOURCE_ATTRIBUTION}. Web không có tính năng tải hay xuất dữ liệu giá.</p>
       <p className="text-sm font-medium">{DISCLAIMER_TEXT}</p>
     </div>
   );
