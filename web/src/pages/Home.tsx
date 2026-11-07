@@ -1,5 +1,6 @@
 import { useForecasts } from "../api/hooks";
 import { AssetCard } from "../components/AssetCard";
+import { SourceNote } from "../components/SourceNote";
 import { ErrorBlock, LoadingBlock } from "../components/StateViews";
 import { isPriceHidden } from "../lib/assets";
 
@@ -29,6 +30,7 @@ export default function Home() {
         {data && data.items.length === 0 ? (
           <p className="text-sm text-muted">Chưa có dự báo nào.</p>
         ) : null}
+        {data && data.items.length > 0 ? <SourceNote className="mt-4" /> : null}
       </div>
     </div>
   );
