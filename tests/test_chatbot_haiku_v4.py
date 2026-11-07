@@ -123,12 +123,22 @@ def test_v4_prompt_itself_has_no_markdown_examples():
         "Viết các dòng số trước, nhận xét sau",  # HAIKU2-016
         "không vượt quá",  # HAIKU2-030
         "Không truyền horizon lớn hơn 7",  # Khải 4/11
+        "Chỉ nhắc tin có trong kết quả get_news của lượt này",  # tập dượt 7/11, Khải PR #98
+        "Link chép nguyên văn từ trường link của tin đó, từng ký tự",
+        "áp dụng cả cho phần tin",
+        "Không đoán lý do không có tin",
+        "kết quả thực tế vẫn có thể nằm ngoài khoảng này",  # ADR-0005 (#91 điểm 3)
         "# Câu hỏi không cần công cụ",
         "Mình không đưa ra lời khuyên đầu tư.",
     ],
 )
 def test_v4_prompt_contains_required_rules(rule):
     assert rule in V4_TEXT
+
+
+def test_v4_no_tail_probability_wording():
+    """Khải review PR #98: bỏ câu "còn khoảng 10% khả năng" ngoài q10/q90 (ADR-0005, #91)."""
+    assert "10% khả năng" not in V4_TEXT
 
 
 def test_v4_direction_labels_only_in_ban_rule():
