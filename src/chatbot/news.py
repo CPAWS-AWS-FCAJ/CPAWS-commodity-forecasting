@@ -24,7 +24,7 @@ from typing import Any, Protocol
 
 TOOL_NAME = "get_news"
 ASSETS: tuple[str, ...] = ("gold", "silver", "brent", "wti")
-DEFAULT_DAYS = 7  # khớp prompt chatbot-haiku-v2: mặc định 7 ngày
+DEFAULT_DAYS = 7  # 7 ngày đến hôm nay giờ VN (contract.md, mục get_news); prompt haiku-v4 khớp
 DEFAULT_MIN_IMPACT = 2
 MAX_ITEMS = 10  # giới hạn số tin trả cho model để giữ token đầu vào nhỏ
 ITEM_FIELDS = (
