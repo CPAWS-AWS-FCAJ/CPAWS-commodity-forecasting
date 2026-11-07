@@ -41,11 +41,11 @@ ADR-0004 chọn hai nhánh: câu đơn giản (chào hỏi, khái niệm, ngoài
 
 ### 3.2. Router: luật đã khóa và kết quả bộ giữ riêng
 
-Router được viết trên nhánh thử nghiệm `exp/chatbot-router`, chưa nối vào Lambda. Gồm 9 luật (1, 1b, 2–8) xét theo thứ tự (dự đoán trong ngày, ngoài phạm vi, việc không liên quan, tư vấn đầu tư, tin tức, khái niệm, dự báo, còn lại → `complex`), chi tiết ở [Phụ lục B](#phụ-lục-b--router-theo-luật). Thiết kế đánh giá chốt trước khi đo, theo đề xuất router `docs/experiments/chatbot-router-proposal.md` trên nhánh đó:
+Router được viết trên nhánh thử nghiệm `exp/chatbot-router` (code đã có trên repo để chạy lại), chưa nối vào Lambda. Gồm 9 luật (1, 1b, 2–8) xét theo thứ tự (dự đoán trong ngày, ngoài phạm vi, việc không liên quan, tư vấn đầu tư, tin tức, khái niệm, dự báo, còn lại → `complex`), chi tiết ở [Phụ lục B](#phụ-lục-b--router-theo-luật). Thiết kế đánh giá chốt trước khi đo, theo [đề xuất router](../experiments/chatbot-router-proposal.md):
 
 - **Bộ phát triển** 83 câu (40 simple, 43 complex), do người viết luật soạn: 83/83 đúng, 0 câu cần Haiku bị đưa sang Nova. Vì luật và bộ câu viết cùng lúc, con số này không phải ước lượng độ chính xác.
 - **Bộ benchmark chatbot** 120 câu, không dùng để sửa luật: v1 59/60, v2 54/60 với 2 câu cần Haiku bị đưa sang Nova (HAIKU2-029, 030). Sau khi sửa luật tư vấn lồng phân tích, v2 thành 55/60, 0 câu sang Nova; hai câu này từ đó không còn là phép đo độc lập.
-- **Bộ giữ riêng (held-out)** 30 câu do Khải soạn, không phải người viết luật, giữ ngoài repo tới khi luật khóa. Ngưỡng: độ chính xác ≥ 90% và tối đa 1 câu cần Haiku bị đưa sang Nova. Chạy đúng một lần, không sửa luật theo kết quả.
+- **Bộ giữ riêng (held-out)** 30 câu do Khải phụ trách (Claude soạn theo yêu cầu của Khải, Gemini duyệt, Khải chốt), người viết luật không thấy trước khi luật khóa, giữ ngoài repo tới lúc đó. Ngưỡng: độ chính xác ≥ 90% và tối đa 1 câu cần Haiku bị đưa sang Nova. Chạy đúng một lần, không sửa luật theo kết quả.
 
 Luật khóa ngày 04/11/2026 ở commit `984d3fe`. Cùng ngày Khải chạy bộ giữ riêng một lần trên commit này:
 
@@ -55,9 +55,9 @@ Luật khóa ngày 04/11/2026 ở commit `984d3fe`. Cùng ngày Khải chạy b�
 | Câu cần Haiku bị đưa sang Nova | 0 | ≤ 1 | ✅ |
 | Câu đơn giản bị đưa sang Haiku | 4 (RH-003, 004, 007, 012) | — | |
 
-**Router không đạt.** Cả 4 câu sai đều là câu đơn giản bị đưa sang Haiku, tức chỉ tốn thêm chi phí, không có câu nào bị mất số liệu. Quyết định: **không đưa router vào `/chat`, mọi câu đi Haiku**; không sửa luật rồi chấm lại trên bộ đã xem. Bộ câu giữ riêng và output của lần chạy sẽ được commit vào repo cùng tài liệu đề xuất router; tại ngày viết chưa có trên repo.
+**Router không đạt.** Cả 4 câu sai đều là câu đơn giản bị đưa sang Haiku, tức chỉ tốn thêm chi phí, không có câu nào bị mất số liệu. Quyết định: **không đưa router vào `/chat`, mọi câu đi Haiku**; không sửa luật rồi chấm lại trên bộ đã xem. Bộ câu giữ riêng ([`tests/router/heldout_v1.jsonl`](../../tests/router/heldout_v1.jsonl)), output nguyên văn của lần chạy ([`eval_output.txt`](../experiments/results/router-heldout-2026-11-04/eval_output.txt)) và phân tích 4 câu sai ở [đề xuất router](../experiments/chatbot-router-proposal.md), mục 6.1.
 
-Đây là một **kết quả âm có kiểm soát**: luật khóa trước, ngưỡng chốt trước, người soạn bộ kiểm khác người viết luật, chạy một lần, và quyết định thiết kế đi theo kết quả. Kết quả bộ giữ riêng cũng cho thấy độ chính xác 100% trên bộ phát triển là quá lạc quan.
+Đây là một **kết quả âm có kiểm soát**: luật khóa trước, ngưỡng chốt trước, người viết luật không thấy bộ kiểm trước khi khóa, chạy một lần, và quyết định thiết kế đi theo kết quả. Kết quả bộ giữ riêng cũng cho thấy độ chính xác 100% trên bộ phát triển là quá lạc quan.
 
 ### 3.3. Hệ quả của việc mọi câu đi Haiku
 
@@ -252,7 +252,7 @@ Lỗi 5xx đã tính lượt thì không hoàn lại, để retry liên tục kh
 
 # Phụ lục B — Router theo luật
 
-Nguồn: `docs/experiments/chatbot-router-proposal.md`, `src/chatbot/router.py`, `configs/chatbot_router.py` trên nhánh `exp/chatbot-router`, commit `984d3fe` (luật khóa 04/11/2026).
+Nguồn: [đề xuất router](../experiments/chatbot-router-proposal.md), [`src/chatbot/router.py`](../../src/chatbot/router.py), [`configs/chatbot_router.py`](../../configs/chatbot_router.py), luật khóa ở commit `984d3fe` (04/11/2026).
 
 | # | Luật (luật đầu tiên khớp sẽ quyết định) | Nhánh |
 |---|---|---|

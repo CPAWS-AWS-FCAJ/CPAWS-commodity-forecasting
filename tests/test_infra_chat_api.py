@@ -8,6 +8,7 @@ python -m pytest -q tests/test_infra_chat_api.py (từ gốc repo).
 
 import importlib.util
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -128,16 +129,33 @@ def test_chat_asset_has_exactly_the_documented_files(tmp_path):
         assert (tmp_path / dest).read_bytes() == (ROOT / src).read_bytes(), dest
 
 
+# Module trong src/chatbot cố ý không đóng gói vào Lambda. router.py: không đạt bộ giữ riêng nên
+# chưa nối vào /chat (docs/experiments/chatbot-router-proposal.md mục 6.1); khi nối thì bỏ khỏi đây
+NOT_IN_LAMBDA = {"router.py"}
+
+
 def test_chat_asset_covers_every_module_prompt_and_news_file():
     sources = set(chat_asset.CHAT_ASSET_FILES.values())
     # Phước thêm module mới vào src/chatbot mà quên asset → Lambda lỗi import lúc chạy
     for module in (ROOT / "src" / "chatbot").glob("*.py"):
+        if module.name in NOT_IN_LAMBDA:
+            continue
         assert module.relative_to(ROOT).as_posix() in sources, module.name
     handler = _load_handler()
     for prompt in handler.PROMPT_FILES.values():
         assert chat_asset.CHAT_ASSET_FILES[f"prompts/{prompt}"] == f"docs/prompts/{prompt}"
     for news in (ROOT / "infra" / "lambda" / "chat_api" / "news").glob("*.json"):
         assert chat_asset.CHAT_ASSET_FILES[f"news/{news.name}"] == news.relative_to(ROOT).as_posix()
+
+
+def test_modules_left_out_of_lambda_are_not_imported_by_chat():
+    """Module không đóng gói thì chat.py và handler không được import, nếu không Lambda lỗi."""
+    for path in (ROOT / "src" / "chatbot" / "chat.py", ROOT / "infra/lambda/chat_api/handler.py"):
+        text = path.read_text(encoding="utf-8")
+        for name in NOT_IN_LAMBDA:
+            mod = name.removesuffix(".py")
+            assert f"chatbot.{mod}" not in text, (path.name, name)
+            assert not re.search(rf"from\s+(src\.)?chatbot\s+import\s+[^\n]*\b{mod}\b", text)
 
 
 def test_chat_asset_build_fails_loudly_on_missing_source(tmp_path, monkeypatch):
