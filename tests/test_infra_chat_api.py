@@ -141,6 +141,11 @@ def test_chat_asset_covers_every_module_prompt_and_news_file():
         if module.name in NOT_IN_LAMBDA:
             continue
         assert module.relative_to(ROOT).as_posix() in sources, module.name
+    handler = _load_handler()
+    for prompt in handler.PROMPT_FILES.values():
+        assert chat_asset.CHAT_ASSET_FILES[f"prompts/{prompt}"] == f"docs/prompts/{prompt}"
+    for news in (ROOT / "infra" / "lambda" / "chat_api" / "news").glob("*.json"):
+        assert chat_asset.CHAT_ASSET_FILES[f"news/{news.name}"] == news.relative_to(ROOT).as_posix()
 
 
 def test_modules_left_out_of_lambda_are_not_imported_by_chat():
@@ -151,11 +156,6 @@ def test_modules_left_out_of_lambda_are_not_imported_by_chat():
             mod = name.removesuffix(".py")
             assert f"chatbot.{mod}" not in text, (path.name, name)
             assert not re.search(rf"from\s+(src\.)?chatbot\s+import\s+[^\n]*\b{mod}\b", text)
-    handler = _load_handler()
-    for prompt in handler.PROMPT_FILES.values():
-        assert chat_asset.CHAT_ASSET_FILES[f"prompts/{prompt}"] == f"docs/prompts/{prompt}"
-    for news in (ROOT / "infra" / "lambda" / "chat_api" / "news").glob("*.json"):
-        assert chat_asset.CHAT_ASSET_FILES[f"news/{news.name}"] == news.relative_to(ROOT).as_posix()
 
 
 def test_chat_asset_build_fails_loudly_on_missing_source(tmp_path, monkeypatch):
