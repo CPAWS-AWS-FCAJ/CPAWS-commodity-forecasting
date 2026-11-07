@@ -150,7 +150,7 @@ Các quy tắc đi kèm:
 ## Hệ quả
 
 ### Điều khoản và hiển thị: **chọn (b) ngày 28/10/2026; đổi sang (a) kèm quy đổi ra số tiền ngày 04/11/2026**
-- **Yahoo Finance có điều khoản tương tự Tiingo**: dữ liệu chỉ dành cho mục đích cá nhân. yfinance là thư viện không chính thức, có thể bị chặn hoặc đổi định dạng bất cứ lúc nào.
+- **Yahoo Finance và yfinance:** `yfinance` là thư viện không chính thức, không liên kết với Yahoo; README của thư viện nêu dữ liệu Yahoo Finance chỉ dành cho mục đích cá nhân. Điều khoản Yahoo áp dụng cho dịch vụ và khu vực tương ứng có các hạn chế riêng về truy cập, thu thập tự động và phân phối lại dữ liệu. Không xem mục đích học thuật hoặc phi thương mại là mặc nhiên được Yahoo cho phép. yfinance có thể bị chặn hoặc đổi định dạng bất cứ lúc nào.
 - Dùng yfinance để huấn luyện và đánh giá nội bộ đã có rủi ro điều khoản (thu thập tự động và lưu trữ dữ liệu), như mọi dự án học thuật dùng nguồn này. Hiển thị giá cho người khác làm rủi ro tăng thêm vì dữ liệu ra khỏi phạm vi nội bộ. Cách nhóm xử lý rủi ro này ghi ở dòng "Rủi ro điều khoản Yahoo" bên dưới.
 - Hai lựa chọn hiển thị đã cân nhắc:
   - **(a)** Giảng viên chấp nhận dùng dữ liệu Yahoo cho buổi demo đồ án. Web hiển thị giá và biểu đồ vàng, bạc, dầu như thiết kế, chỉ mở sau đăng nhập Cognito, có ghi nguồn và không có tính năng tải dữ liệu.
