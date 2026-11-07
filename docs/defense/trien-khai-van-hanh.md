@@ -118,16 +118,15 @@ Vì zip upload tay không gắn với commit, bản đang chạy được ghi l�
 | Lần deploy | Commit `developer` | `VITE_SHOW_METAL_PRICES` | `VITE_ACCURACY_API` |
 |---|---|---|---|
 | 04/11 | `047189f` | `false` | `false` |
-| 07/11 (kế hoạch) | commit mới nhất sáng 07/11 | `true` nếu #91 (ADR-0005) đã merge trước tối 06/11, chưa merge thì `false` | `false` |
-
-Sau lần build 07/11, dòng kế hoạch được thay bằng commit và giá trị cờ thật.
+| 07/11 | `09dd1d4` | `false` (#91 chưa merge) | `false` |
+| 07/11 (lần 2) | `c94849a` | `true` | `false` |
 
 **CORS:** `CpawsApi` nhận **một** origin qua `-c allowed_origin`, mặc định `http://localhost:5173`. Giá trị này được dùng ở ba chỗ: preflight `OPTIONS` của API Gateway, header của Lambda `forecasts-api` và `chat-api` (biến `ALLOWED_ORIGIN`), và `GatewayResponse` 4xx/5xx (để trình duyệt vẫn đọc được mã lỗi 401, 429, 504).
 
 | Thời điểm | Origin | Ghi chú |
 |---|---|---|
-| Đến 06/11 | `http://localhost:5173` | Chạy web trên máy |
-| Kế hoạch 07/11 | Domain Amplify nhánh `dev` | Tập dượt 07/11 và chạy thử chatbot nội bộ 08/11 trên Amplify. Lần deploy `CpawsApi` này cũng đưa bộ tin demo mới (#92) lên Lambda chat |
+| Đến 07/11 | `http://localhost:5173` | Chạy web trên máy |
+| Từ 07/11 | Domain Amplify nhánh `dev` | Deploy `CpawsApi` từ `09dd1d4`; lần deploy này cũng đưa bộ tin demo mới (#92) lên Lambda chat. Kiểm tra trên Amplify: preflight trả đúng origin, trang dự báo không lỗi CORS, `POST /chat` trả 200 và `get_news` trả tin |
 | Dự phòng | `http://localhost:5173` | Nếu tập dượt trên Amplify còn lỗi lúc 19:00 ngày 07/11, deploy lại origin localhost (khoảng 3 phút) và chạy thử bằng localhost |
 
 Vì chỉ có một origin, tại mỗi thời điểm chỉ Amplify **hoặc** localhost gọi được API. Hỗ trợ nhiều origin để sau 08/11.
