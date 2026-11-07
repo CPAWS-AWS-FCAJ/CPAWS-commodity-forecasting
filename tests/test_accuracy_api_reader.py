@@ -7,9 +7,15 @@ from pathlib import Path
 
 import pytest
 
-from src.eval.rolling_accuracy import canonical as writer_canonical
-from src.eval.rolling_accuracy import digest as writer_digest
-from src.eval.rolling_accuracy import implementation_identity
+from src.eval.rolling_accuracy import (
+    canonical as writer_canonical,
+    digest as writer_digest,
+    implementation_identity,
+    response_payload,
+)
+from src.eval.rolling_store import AccuracyStore, run_pk
+from tests.rolling_support import Table
+from tests.test_rolling_accuracy import result_case
 
 API_DIR = Path(__file__).resolve().parents[1] / "infra" / "lambda" / "accuracy_api"
 
@@ -127,6 +133,12 @@ def make_identity(
     config_hash = "a" * 64
     snapshot = make_snapshot()
 
+    # Synthetic evidence config for the Reader test fixture.
+    # Use the same digest function as the Writer.
+    evidence_config = {
+        "fixture": "accuracy-reader-test",
+    }
+
     return {
         "asset": ASSET,
         "model_version": model,
@@ -134,6 +146,7 @@ def make_identity(
         "job_date": JOB_DATE,
         "revision": REVISION,
         "config_hash": config_hash,
+        "evidence_config_hash": writer_digest(evidence_config),
         "snapshot": copy.deepcopy(snapshot),
         "target_cutoff_date": WINDOW["target_cutoff_date"],
         "eligible_record_fingerprint": "b" * 64,
@@ -590,30 +603,32 @@ def test_legacy_snapshot_digest_mismatch_returns_503(configure_reader):
     assert response["statusCode"] == 503
 
 
-def test_observation_without_input_proof_returns_503(configure_reader):
-    def mutate(meta):
-        meta["observations"][0]["record_digest"] = "f" * 64
-
-    response = invoke_corrupt_provenance(configure_reader, mutate)
-
-    assert response["statusCode"] == 503
-
-
-def test_observation_with_mismatched_input_proof_returns_503(
+def test_input_proof_without_valid_record_digest_returns_503(
     configure_reader,
 ):
     def mutate(meta):
-        observation = meta["observations"][0]
-        observation["input_lineage"]["max_input_published_at"] = "2026-11-06T11:30:00Z"
+        meta["input_lineage"][0]["record_digest"] = "invalid"
 
     response = invoke_corrupt_provenance(configure_reader, mutate)
 
     assert response["statusCode"] == 503
 
 
-def test_observation_count_mismatch_returns_503(configure_reader):
+def test_input_proof_with_invalid_published_at_returns_503(
+    configure_reader,
+):
     def mutate(meta):
-        meta["observations"].pop()
+        meta["input_lineage"][0]["max_input_published_at"] = "not-a-timestamp"
+
+    response = invoke_corrupt_provenance(configure_reader, mutate)
+
+    assert response["statusCode"] == 503
+
+
+def test_duplicate_input_record_digest_returns_503(configure_reader):
+    def mutate(meta):
+        duplicate = copy.deepcopy(meta["input_lineage"][0])
+        meta["input_lineage"].append(duplicate)
 
     response = invoke_corrupt_provenance(configure_reader, mutate)
 
@@ -690,3 +705,34 @@ def test_derived_mutation_without_resealing_meta_returns_503(configure_reader):
     response = invoke()
 
     assert response["statusCode"] == 503
+
+def test_writer_publish_round_trips_through_reader(configure_reader):
+    """Persist with the real Writer, then read its META/METRIC rows through Reader."""
+
+    result, cfg, _sources, evidence, _records = result_case(
+        asset=ASSET,
+        job_date=JOB_DATE,
+    )
+
+    # Match rolling_job.run_asset() identity finalization exactly.
+    result["identity"]["evidence_config_hash"] = writer_digest(evidence)
+    result["run_id"] = (
+        cfg.job_date + "-" + writer_digest(result["identity"])[:20]
+    )
+
+    table = Table()
+
+    published = AccuracyStore(table).publish(result)
+
+    assert published == "promoted"
+
+    persisted_meta = table.items[(run_pk(result), "META")]
+    assert "observations" not in persisted_meta
+
+    configure_reader(table)
+
+    response = invoke()
+    payload = body(response)
+
+    assert response["statusCode"] == 200
+    assert payload == response_payload(result, ASSET, MODEL)

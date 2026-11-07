@@ -319,13 +319,18 @@ def _verify_provenance(meta: dict) -> None:
         "target_cutoff_date": meta["window"]["target_cutoff_date"],
     }
 
+
     for key, expected in expected_identity.items():
         if identity.get(key) != expected:
             raise AccuracyUnavailable("identity_mismatch")
 
-    revision = identity.get("revision")
-    if isinstance(revision, bool) or not isinstance(revision, int) or revision < 0:
-        raise AccuracyUnavailable("identity_revision_invalid")
+    try:
+        revision = _count(identity.get("revision"))
+    except AccuracyUnavailable as exc:
+        raise AccuracyUnavailable("identity_revision_invalid") from exc
+
+    if not _is_sha256(identity.get("evidence_config_hash")):
+        raise AccuracyUnavailable("evidence_config_hash_invalid")
 
     job_date = identity.get("job_date")
     if not _is_date(job_date):
@@ -418,25 +423,6 @@ def _verify_provenance(meta: dict) -> None:
             raise AccuracyUnavailable("duplicate_input_record_digest")
 
         proofs_by_digest[record_digest] = proof
-
-    observations = meta.get("observations")
-    if not isinstance(observations, list):
-        raise AccuracyUnavailable("observations_invalid")
-
-    for observation in observations:
-        if not isinstance(observation, dict):
-            raise AccuracyUnavailable("observation_invalid")
-
-        record_digest = observation.get("record_digest")
-        if not _is_sha256(record_digest):
-            raise AccuracyUnavailable("observation_record_digest_invalid")
-
-        proof = proofs_by_digest.get(record_digest)
-        if proof is None:
-            raise AccuracyUnavailable("observation_proof_missing")
-
-        if _canonical(observation.get("input_lineage")) != _canonical(proof):
-            raise AccuracyUnavailable("observation_proof_mismatch")
 
 
 def _verify_meta_identity(
@@ -829,24 +815,21 @@ def _read_cycle(table, asset: str):
         raise AccuracyUnavailable("published_count_exceeds_expected")
 
     eligible_count = _count(overall["coverage_80"]["n_obs"])
-    observations = meta.get("observations")
+    input_lineage = meta.get("input_lineage")
 
-    if not isinstance(observations, list):
-        raise AccuracyUnavailable("observations_invalid")
-
-    if len(observations) != eligible_count:
-        raise AccuracyUnavailable("observation_count_mismatch")
+    if not isinstance(input_lineage, list):
+        raise AccuracyUnavailable("input_lineage_invalid")
 
     if issuance_status == "verified_eligible_rows":
         if eligible_count == 0:
-            raise AccuracyUnavailable("issuance_evidence_without_observations")
+            raise AccuracyUnavailable("issuance_evidence_without_eligible_rows")
 
-        if not meta["input_lineage"]:
+        if not input_lineage:
             raise AccuracyUnavailable("verified_issuance_without_input_lineage")
 
     elif issuance_status == "no_eligible_rows":
         if eligible_count != 0:
-            raise AccuracyUnavailable("eligible_observations_without_issuance_evidence")
+            raise AccuracyUnavailable("eligible_rows_without_issuance_evidence")
 
     # Detect a concurrent promotion after the RUN partition has been read.
     after = _read_state(table, asset)
@@ -942,10 +925,11 @@ def handler(event, context):
             ArithmeticError,
         ) as exc:
             logger.warning(
-                "Accuracy read attempt %s failed for asset=%s reason=%s",
+                "Accuracy read attempt %s failed for asset=%s error=%s detail=%s",
                 attempt + 1,
                 asset,
                 type(exc).__name__,
+                str(exc),
             )
 
             if attempt == 1:
