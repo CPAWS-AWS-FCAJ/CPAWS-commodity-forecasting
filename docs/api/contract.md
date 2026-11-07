@@ -546,7 +546,7 @@ Theo ADR-0003, MVP không cần Knowledge Base. Lambda chat đọc tin từ bả
 
 *Tool trả cho model*
 
-- Mặc định lấy 7 ngày gần nhất tính đến hôm nay (giờ Việt Nam), `min_impact = 2`, khớp prompt `chatbot-haiku-v2`.
+- Mặc định lấy 7 ngày gần nhất tính đến hôm nay (giờ Việt Nam), `min_impact = 2` (`DEFAULT_DAYS`, `DEFAULT_MIN_IMPACT` trong `src/chatbot/news.py`). Prompt `chatbot-haiku-v4` ghi đúng mặc định này: người dùng không nêu ngày thì model không truyền `from_date`, `to_date` (Khải chốt, issue #84 mục 6). Prompt `chatbot-haiku-v2` đang chạy ghi "7 ngày đến base_date", lệch với mặc định này; giữ nguyên vì v2 đã khóa SHA-256.
 - Lọc theo ngày UTC của `published_at` (cùng cách cho cả bảng và file JSON).
 - Bỏ tin có `impact_score` < `min_impact` hoặc `link` không hợp lệ. Sắp tin theo `impact_score` giảm dần, cùng mức thì tin mới trước, rồi lấy tối đa 10 tin.
 - Lambda chat cần quyền `dynamodb:Query` trên bảng `NewsLabels`.
