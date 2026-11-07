@@ -1,4 +1,4 @@
-"""CDK stack for the CPAWS serving DynamoDB tables (Forecasts, NewsLabels, ChatUsage)."""
+"""CDK stack for the CPAWS serving DynamoDB tables."""
 
 from typing import Any
 
@@ -12,12 +12,15 @@ from aws_cdk import (
 )
 from constructs import Construct
 
-from .shared import chat_usage_table_name, news_labels_table_name
+from .shared import (
+    accuracy_table_name,
+    chat_usage_table_name,
+    news_labels_table_name,
+)
 
 
 class CpawsServingStack(Stack):
-    """Create the Forecasts table (prediction pipeline), the NewsLabels table (chatbot news) and
-    the ChatUsage table (chatbot daily quota)."""
+    """Create the Forecasts, NewsLabels, ChatUsage and Accuracy tables."""
 
     def __init__(
         self,
@@ -111,4 +114,34 @@ class CpawsServingStack(Stack):
             self,
             "ChatUsageTableName",
             value=self.chat_usage_table.table_name,
+        )
+
+        # Rolling Accuracy: STATE và RUN/META/METRIC dùng chung PK/SK.
+        # Không GSI, không TTL; giữ dữ liệu khi stack bị xóa.
+        self.accuracy_table = dynamodb.Table(
+            self,
+            "AccuracyTable",
+            table_name=accuracy_table_name(env_name),
+            partition_key=dynamodb.Attribute(
+                name="PK",
+                type=dynamodb.AttributeType.STRING,
+            ),
+            sort_key=dynamodb.Attribute(
+                name="SK",
+                type=dynamodb.AttributeType.STRING,
+            ),
+            billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
+            removal_policy=RemovalPolicy.RETAIN,
+        )
+
+        CfnOutput(
+            self,
+            "AccuracyTableName",
+            value=self.accuracy_table.table_name,
+        )
+
+        CfnOutput(
+            self,
+            "AccuracyTableArn",
+            value=self.accuracy_table.table_arn,
         )
