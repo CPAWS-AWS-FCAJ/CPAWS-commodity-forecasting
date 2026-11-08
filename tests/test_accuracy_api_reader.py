@@ -3,9 +3,12 @@ import importlib
 import json
 import os
 import sys
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
+from boto3.dynamodb.types import TypeDeserializer, TypeSerializer
+from botocore.exceptions import ClientError
 
 from src.eval.rolling_accuracy import (
     canonical as writer_canonical,
@@ -329,7 +332,7 @@ class FakeTable:
         assert ConsistentRead is True
         self.query_calls += 1
 
-        offset = (ExclusiveStartKey or {}).get("offset", 0)
+        offset = int((ExclusiveStartKey or {}).get("offset", 0))
         page = self.items[offset : offset + self.page_size]
 
         result = {"Items": copy.deepcopy(page)}
@@ -538,8 +541,6 @@ def test_invalid_asset_returns_400(configure_reader):
 
 
 def test_reader_hash_matches_rolling_writer():
-    from decimal import Decimal
-
     payload = {
         "asset": "gold",
         "value": 1.0,
@@ -739,3 +740,82 @@ def test_writer_publish_round_trips_through_reader(configure_reader):
 
     assert response["statusCode"] == 200
     assert payload == response_payload(result, ASSET, MODEL)
+
+
+def _dynamodb_round_trip(value):
+    """Serialize and deserialize a DynamoDB response, preserving Number as Decimal."""
+
+    def normalize(item):
+        if isinstance(item, float):
+            return Decimal(str(item))
+        if isinstance(item, dict):
+            return {key: normalize(val) for key, val in item.items()}
+        if isinstance(item, list):
+            return [normalize(val) for val in item]
+        return item
+
+    serializer = TypeSerializer()
+    deserializer = TypeDeserializer()
+    return deserializer.deserialize(serializer.serialize(normalize(value)))
+
+
+class DynamoDBRoundTripTable(FakeTable):
+    """Fake DynamoDB table that round-trips every returned value through boto3."""
+
+    def get_item(self, **kwargs):
+        return _dynamodb_round_trip(super().get_item(**kwargs))
+
+    def query(self, **kwargs):
+        return _dynamodb_round_trip(super().query(**kwargs))
+
+
+def test_dynamodb_decimal_round_trip_returns_ready(configure_reader):
+    meta, metrics, state = make_run()
+    table = DynamoDBRoundTripTable(state=state, items=[meta, *metrics])
+    configure_reader(table)
+
+    response = invoke()
+    payload = body(response)
+
+    assert response["statusCode"] == 200
+    assert payload["data_status"] == "ready"
+    assert payload["model_version"] == MODEL
+    assert payload["overall"]["coverage_80"]["n_obs"] == 24
+    assert reader._is_count(Decimal(24)) is True
+    assert reader._is_count(True) is False
+
+
+def test_not_ready_response_matches_fixture(configure_reader):
+    fixture_path = Path(__file__).parent / "fixtures" / "accuracy" / "not_ready.json"
+    expected = json.loads(fixture_path.read_text(encoding="utf-8"))
+
+    configure_reader(FakeTable())
+
+    response = invoke()
+
+    assert response["statusCode"] == 200
+    assert body(response) == expected
+
+
+class ClientErrorTable(FakeTable):
+    def query(self, **kwargs):
+        raise ClientError(
+            {
+                "Error": {
+                    "Code": "InternalServerError",
+                    "Message": "Simulated DynamoDB failure",
+                }
+            },
+            "Query",
+        )
+
+
+def test_dynamodb_client_error_returns_503(configure_reader):
+    meta, metrics, state = make_run()
+    table = ClientErrorTable(state=state, items=[meta, *metrics])
+    configure_reader(table)
+
+    response = invoke()
+
+    assert response["statusCode"] == 503
+    assert body(response) == {"error": "accuracy_unavailable"}
