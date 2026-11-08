@@ -3,7 +3,11 @@
 Issue #84 mục 1, 4 và 6:
 - đếm câu trả lời có Markdown (contract: `answer` là văn bản thuần, gạch đầu dòng "- " được phép);
 - liệt kê lần gọi get_news có from_date/to_date, đánh dấu câu hỏi không nêu ngày mà model vẫn
-  truyền ngày (mặc định đúng là để trống, tool lấy 7 ngày đến hôm nay giờ Việt Nam).
+  truyền ngày (mặc định đúng là để trống, tool lấy 7 ngày đến hôm nay giờ Việt Nam);
+- link lạ: URL trong câu trả lời không trùng link của tin get_news trả trong lượt đó (lỗi tập
+  dượt 7/11, Khải review PR #98);
+- câu có get_forecast mà thiếu câu "mốc thống kê" / "252 phiên";
+- nhãn hướng bị cấm ("nghiêng", "tăng nhẹ", "giảm nhẹ", "kịch bản tích cực/tiêu cực").
 
 Đây là số đo ghi nhận, không phải điều kiện đạt. Script không nằm trong TOOL_CODE_PATHS
 (configs/chatbot_benchmark.py), nên không đổi khóa SHA-256 của bộ câu hỏi nào.
@@ -41,7 +45,14 @@ DATE_PATTERNS = re.compile(
     re.IGNORECASE,
 )
 NEWS_TOOL = "get_news"
+FORECAST_TOOL = "get_forecast"
 DATE_KEYS = ("from_date", "to_date")
+URL_PATTERN = re.compile(r"https?://[^\s<>()\[\]\"']+")
+URL_TRAILING = ".,;:!?"
+BASELINE_PHRASES = ("mốc thống kê", "252 phiên")
+DIRECTION_LABELS = re.compile(
+    r"nghiêng|tăng nhẹ|giảm nhẹ|kịch bản (tích cực|tiêu cực)", re.IGNORECASE
+)
 
 
 def markdown_kinds(answer: str) -> list[str]:
@@ -74,6 +85,47 @@ def news_date_calls(record: dict) -> list[dict]:
     return out
 
 
+def _norm_url(url: str) -> str:
+    return url.rstrip(URL_TRAILING).rstrip("/")
+
+
+def answer_urls(answer: str) -> list[str]:
+    return [_norm_url(u) for u in URL_PATTERN.findall(answer or "")]
+
+
+def news_links(record: dict) -> set[str]:
+    """Link của mọi tin get_news trả cho model trong lượt này."""
+    out = set()
+    for call in record.get("tool_calls") or []:
+        if call.get("name") == NEWS_TOOL and isinstance(call.get("result"), dict):
+            for it in call["result"].get("items") or []:
+                if isinstance(it, dict) and isinstance(it.get("link"), str):
+                    out.add(_norm_url(it["link"]))
+    return out
+
+
+def foreign_links(record: dict) -> list[str]:
+    """URL trong câu trả lời không phải link của tin get_news trả trong lượt đó."""
+    known = news_links(record)
+    return [u for u in answer_urls(record.get("answer", "")) if u not in known]
+
+
+def called_forecast(record: dict) -> bool:
+    return any(
+        c.get("name") == FORECAST_TOOL and c.get("ok", True) for c in record.get("tool_calls") or []
+    )
+
+
+def baseline_missing(record: dict) -> bool:
+    """Câu có get_forecast thành công mà câu trả lời không nhắc mốc thống kê 252 phiên."""
+    answer = (record.get("answer") or "").lower()
+    return called_forecast(record) and not any(p in answer for p in BASELINE_PHRASES)
+
+
+def direction_labels(answer: str) -> list[str]:
+    return [m.group(0) for m in DIRECTION_LABELS.finditer(answer or "")]
+
+
 def load_records(path: Path) -> list[dict]:
     with path.open(encoding="utf-8") as f:
         return [json.loads(line) for line in f if line.strip()]
@@ -84,7 +136,14 @@ def report(records: list[dict]) -> dict:
     per_kind = {kind: [] for kind in MARKDOWN_PATTERNS}
     with_markdown = []
     calls = []
+    foreign, no_baseline, labels = {}, [], {}
     for r in answered:
+        if links := foreign_links(r):
+            foreign[r.get("id")] = links
+        if baseline_missing(r):
+            no_baseline.append(r.get("id"))
+        if found := direction_labels(r.get("answer", "")):
+            labels[r.get("id")] = found
         kinds = markdown_kinds(r.get("answer", ""))
         for kind in kinds:
             per_kind[kind].append(r.get("id"))
@@ -101,6 +160,10 @@ def report(records: list[dict]) -> dict:
         "news_calls_with_dates": sum(1 for c in calls if any(k in c["input"] for k in DATE_KEYS)),
         "news_date_without_mention": [c["id"] for c in calls if c["date_without_mention"]],
         "news_call_inputs": calls,
+        "foreign_links": foreign,
+        "forecast_answers": sum(1 for r in answered if called_forecast(r)),
+        "baseline_missing": no_baseline,
+        "direction_labels": labels,
     }
 
 
@@ -117,6 +180,16 @@ def _print_text(path: Path, rep: dict) -> None:
     )
     for c in rep["news_call_inputs"]:
         print(f"  {c['id']}: {json.dumps(c['input'], ensure_ascii=False)}")
+    print(f"link lạ (không có trong kết quả get_news): {len(rep['foreign_links'])} câu")
+    for qid, links in rep["foreign_links"].items():
+        print(f"  {qid}: {', '.join(links)}")
+    print(
+        f"thiếu câu mốc thống kê 252 phiên: {len(rep['baseline_missing'])}/"
+        f"{rep['forecast_answers']} câu có get_forecast ({', '.join(rep['baseline_missing'])})"
+    )
+    print(f"nhãn hướng bị cấm: {len(rep['direction_labels'])} câu")
+    for qid, found in rep["direction_labels"].items():
+        print(f"  {qid}: {', '.join(found)}")
 
 
 def main(argv: list[str] | None = None) -> int:

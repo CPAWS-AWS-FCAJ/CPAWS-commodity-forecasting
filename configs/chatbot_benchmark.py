@@ -79,6 +79,22 @@ QUESTION_SETS = {
         "holdout": False,
         "locked_sha256": None,
     },
+    # v4-horizon-dev: 2 câu dev cho mục "Kỳ hạn" của chatbot-haiku-v4 (Khải, issue #84 ngày 4/11:
+    # "Thêm 1–2 câu dev cho trường hợp này"). Câu lấy nguyên văn từ bộ router held-out
+    # (tests/router/heldout_v1.jsonl: RH-027 trên 7 phiên, RH-010 dưới 1 phiên), không do người
+    # viết prompt soạn. Chỉ chạy dev, không bao giờ khóa, như hai bộ trên.
+    "v4-horizon-dev": {
+        "questions": {
+            "simple": "tests/chatbot/v2/nova_simple_questions.jsonl",
+            "complex": "tests/chatbot/haiku-v4-dev/haiku_horizon_questions.jsonl",
+        },
+        "fixtures_dir": "tests/chatbot/v2/fixtures",
+        "prompt_set": "v4",
+        "news_default_to": "2026-10-21",
+        "require_lock": True,
+        "holdout": False,
+        "locked_sha256": None,
+    },
 }
 DEFAULT_QUESTION_SET = "v1"
 
