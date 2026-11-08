@@ -120,6 +120,7 @@ Vì zip upload tay không gắn với commit, bản đang chạy được ghi l�
 | 04/11 | `047189f` | `false` | `false` |
 | 07/11 | `09dd1d4` | `false` (#91 chưa merge) | `false` |
 | 07/11 (lần 2) | `c94849a` | `true` | `false` |
+| 08/11 | `2e7d3fa` | `true` | `false` |
 
 **CORS:** `CpawsApi` nhận **một** origin qua `-c allowed_origin`, mặc định `http://localhost:5173`. Giá trị này được dùng ở ba chỗ: preflight `OPTIONS` của API Gateway, header của Lambda `forecasts-api` và `chat-api` (biến `ALLOWED_ORIGIN`), và `GatewayResponse` 4xx/5xx (để trình duyệt vẫn đọc được mã lỗi 401, 429, 504).
 
