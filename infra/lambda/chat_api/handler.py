@@ -3,7 +3,7 @@
 Đóng gói asset Lambda (infra/stacks/chat_asset.py; tests/test_infra_chat_api.py kiểm đủ file):
     handler.py
     forecast_format.py           ← infra/lambda/forecast_api/forecast_format.py
-    chatbot/__init__.py, tools.py, news.py, chat.py, quota.py   ← src/chatbot/
+    chatbot/__init__.py, tools.py, news.py, chat.py, citations.py, quota.py   ← src/chatbot/
     prompts/chatbot-nova-v2.md, chatbot-haiku-v2.md   ← docs/prompts/ (bản đã khóa SHA-256)
     news/gold.json, silver.json, brent.json, wti.json ← infra/lambda/chat_api/news/ (demo, NEWS_DIR;
         cách làm mới và bật: docs/api/demo-news.md)
@@ -229,6 +229,21 @@ def handle(event: dict, deps: chat_core.ChatDeps, context=None) -> dict:
             stop_reason=result.stop_reason,
             blocked=result.blocked,
         )
+        if result.stray_links:
+            # Model chép sai link hoặc tự viết link (buổi tập 7/11: "pressrelease" thay cho
+            # "pressreleases"). Chỉ ghi log, answer và citations giữ nguyên theo contract.
+            logger.warning(
+                json.dumps(
+                    {
+                        "event": "citation_link_mismatch",
+                        "request_id": request_id,
+                        "prompt_version": chat_core.PROMPT_VERSIONS[result.branch],
+                        "n_stray_links": len(result.stray_links),
+                        "stray_links": result.stray_links,
+                    },
+                    ensure_ascii=False,
+                )
+            )
         if os.environ.get("LOG_QUESTIONS") == "1":
             log["question"] = req.question
         status, body = 200, chat_core.response_body(request_id, result, quota)

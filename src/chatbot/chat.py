@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Protocol
 
+from . import citations as CI
 from . import news as N
 from . import tools as T
 
@@ -285,6 +286,9 @@ class ChatResult:
     output_tokens: int
     stop_reason: str | None
     tool_errors: list[str] = field(default_factory=list)  # "<tool>:<mã lỗi>", để ghi log
+    # URL trong answer không phải link của tin get_news trong lượt này, để ghi log
+    # citation_link_mismatch; answer giữ nguyên
+    stray_links: list[str] = field(default_factory=list)
 
 
 def answer(
@@ -379,7 +383,7 @@ def answer(
         answer=text,
         branch=branch,
         forecasts_used=_forecasts_used(forecasts),
-        citations=_citations(text, news_items),
+        citations=CI.cited_items(text, news_items),
         truncated=stop == "max_tokens",
         blocked=False,
         tool_calls=tool_names,
@@ -387,6 +391,7 @@ def answer(
         output_tokens=tokens_out,
         stop_reason=stop,
         tool_errors=tool_errors,
+        stray_links=CI.stray_links(text, news_items),
     )
 
 
@@ -398,18 +403,6 @@ def _forecasts_used(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
             k: r[k] for k in ("asset", "base_date", "model_version", "is_sample", "stale")
         }
     return list(by_asset.values())
-
-
-def _citations(answer_text: str, items: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Chỉ tin do get_news trả về trong lượt này và có link xuất hiện trong câu trả lời; không bao
-    giờ lấy link từ chữ model tự viết."""
-    seen, out = set(), []
-    for it in items:
-        link = it.get("link")
-        if link and link in answer_text and link not in seen:
-            seen.add(link)
-            out.append({k: it.get(k) for k in ("title", "source", "published_at", "link")})
-    return out
 
 
 def response_body(request_id: str, result: ChatResult, quota: Quota | None) -> dict[str, Any]:
