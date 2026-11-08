@@ -51,9 +51,45 @@ def test_prompt_set_v4_changes_only_haiku():
     assert v4["tool_format"] == "v2"
 
 
-def test_no_question_set_uses_v4_by_default():
-    """v4 chỉ chạy dev bằng --prompts v4 cho tới khi có bộ câu mới được khóa."""
-    assert all(cfg["prompt_set"] != "v4" for cfg in C.QUESTION_SETS.values())
+def test_only_dev_sets_use_v4_by_default():
+    """v4 chỉ chạy dev cho tới khi có bộ câu mới được khóa: bộ nào mặc định dùng v4 phải là bộ
+    dev không bao giờ khóa (official dừng trước khi gọi Bedrock)."""
+    v4_sets = {name for name, cfg in C.QUESTION_SETS.items() if cfg["prompt_set"] == "v4"}
+    assert v4_sets == {"v4-horizon-dev"}
+    for name in v4_sets:
+        cfg = C.QUESTION_SETS[name]
+        assert cfg["require_lock"] and cfg["locked_sha256"] is None and not cfg["holdout"]
+        with pytest.raises(RuntimeError, match="chưa khóa"):
+            CB.verify_lock(name)
+        CB.check_dev_allowed(name)
+
+
+def test_horizon_dev_questions_come_from_router_heldout():
+    """Khải 4/11: 1–2 câu dev cho kỳ hạn ngoài 1–7. Câu lấy nguyên văn RH-027, RH-010, không do
+    người viết prompt soạn."""
+    questions = CB.load_questions(CB.questions_path("v4-horizon-dev", "complex"))
+    heldout = {
+        q["id"]: q["question"] for q in CB.load_questions(ROOT / "tests/router/heldout_v1.jsonl")
+    }
+    assert [q["source_id"] for q in questions] == ["RH-027", "RH-010"]
+    for q in questions:
+        assert q["question"] == heldout[q["source_id"]]
+        assert CB.validate_question(q, "complex", "v4-horizon-dev") == []
+    above, below = questions
+    assert above["expected_tools"] == ["get_forecast"] and "7 phiên" in above["must_include"]
+    assert below["category"] in C.POLICY_CATEGORIES and not below["expects_tool"]
+
+
+@pytest.mark.parametrize("qset", ["v2-seen", "a-types-haiku", "v4-horizon-dev"])
+def test_v4_dry_run_on_dev_sets(tmp_path, qset):
+    questions = CB.load_questions(CB.questions_path(qset, "complex"))
+    summary = CB.run(
+        CB.FakeStreamClient(questions), "complex", tmp_path, dry_run=True, qset=qset,
+        run_type="dev", prompt_set="v4",
+    )  # fmt: skip
+    assert summary["prompt_version"] == "chatbot-haiku-v4"
+    rep = AF.report(AF.load_records(tmp_path / "raw.jsonl"))
+    assert rep["n_answers"] == len(questions)
 
 
 def test_lambda_still_on_v2():
@@ -218,9 +254,46 @@ def test_report_counts_markdown_and_flags_to_date(tmp_path):
     assert AF.main([str(tmp_path / "missing.jsonl")]) == 2
 
 
+def _news_call(link):
+    item = {"title": "t", "link": link, "source": "Fed", "published_at": "2026-10-28T18:00:00Z"}
+    return {"name": "get_news", "input": {"asset": "gold"}, "ok": True, "result": {"items": [item]}}
+
+
+def _forecast_call():
+    return {"name": "get_forecast", "input": {"asset": "gold"}, "ok": True, "result": {}}
+
+
+def test_foreign_links_flags_miscopied_url():
+    """Tập dượt 7/11 (194d6cc6…): link chép thiếu chữ "s" không có trong kết quả get_news."""
+    good = "https://www.federalreserve.gov/newsevents/pressreleases/monetary20261028a.htm"
+    bad = good.replace("pressreleases", "pressrelease")
+    ok = _rec("A", "Vì sao vàng giảm?", f"(Nguồn: Fed, 2026-10-28, {good}).", [_news_call(good)])
+    wrong = _rec("B", "Vì sao vàng giảm?", f"(Nguồn: Fed, 2026-10-28, {bad})", [_news_call(good)])
+    no_news = _rec("C", "Vàng tuần tới?", f"xem {good}", [_forecast_call()])
+    assert AF.foreign_links(ok) == []
+    assert AF.foreign_links(wrong) == [bad]
+    assert AF.foreign_links(no_news) == [good]
+    assert AF.report([ok, wrong, no_news])["foreign_links"] == {"B": [bad], "C": [good]}
+
+
+def test_baseline_missing_and_direction_labels():
+    with_line = _rec(
+        "A", "q", "Đây là mốc thống kê dựa trên 252 phiên gần nhất.", [_forecast_call()]
+    )
+    without = _rec("B", "q", "Trung vị -1%, xu hướng giảm nhẹ.", [_forecast_call()])
+    no_tool = _rec("C", "q", "Xin chào.", [])
+    assert [AF.baseline_missing(r) for r in (with_line, without, no_tool)] == [False, True, False]
+    assert AF.direction_labels(without["answer"]) == ["giảm nhẹ"]
+    rep = AF.report([with_line, without, no_tool])
+    assert (rep["forecast_answers"], rep["baseline_missing"]) == (2, ["B"])
+    assert rep["direction_labels"] == {"B": ["giảm nhẹ"]}
+
+
 def test_report_on_v2_official_run():
     """Số trong ghi chú thiết kế v4: `**` ở 28/30 câu, Haiku không tự truyền ngày cho get_news."""
     path = ROOT / "docs/experiments/results/chatbot-benchmark-2026-10-30-v2/complex/raw.jsonl"
     rep = AF.report(AF.load_records(path))
     assert (rep["markdown_answers"], rep["n_answers"]) == (28, 30)
     assert (rep["news_calls"], rep["news_calls_with_dates"]) == (7, 0)
+    assert rep["foreign_links"] == {}
+    assert (len(rep["baseline_missing"]), rep["forecast_answers"]) == (17, 25)
