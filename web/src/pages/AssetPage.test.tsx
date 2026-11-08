@@ -1,9 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
+import About from "./About";
 import AssetPage from "./AssetPage";
 import Home from "./Home";
 import { SettingsProvider } from "../lib/settings";
+import { SOURCE_ATTRIBUTION } from "../lib/source";
 
 const flags = vi.hoisted(() => ({ show: true }));
 vi.mock("../api/config", () => ({
@@ -23,9 +25,9 @@ vi.mock("../api/config", () => ({
   },
 }));
 
-function mount(path: string, mode: "basic" | "advanced") {
+function mount(path: string, mode: "basic" | "advanced", currency: "USD" | "VND" = "USD") {
   window.localStorage.setItem("cpaws.mode", mode);
-  window.localStorage.setItem("cpaws.currency", "USD");
+  window.localStorage.setItem("cpaws.currency", currency);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={client}>
@@ -34,6 +36,7 @@ function mount(path: string, mode: "basic" | "advanced") {
           <Routes>
             <Route index element={<Home />} />
             <Route path="asset/:id" element={<AssetPage />} />
+            <Route path="about" element={<About />} />
           </Routes>
         </MemoryRouter>
       </SettingsProvider>
@@ -109,5 +112,52 @@ describe("trang sản phẩm và trang chủ với cờ VITE_SHOW_METAL_PRICES",
     mount("/", "basic");
     expect((await screen.findAllByText(/Thay đổi 80% sau 7 phiên/)).length).toBe(2);
     expect(screen.getAllByText(/Khoảng giá 80% sau 7 phiên/).length).toBe(2);
+  });
+});
+
+describe("dòng nguồn dữ liệu và nhãn vàng VND/lượng (ADR-0005)", () => {
+  const GOLD_VND = /giá thế giới quy đổi, không phải giá vàng miếng trong nước/;
+
+  it("trang chủ có dòng nguồn", async () => {
+    flags.show = true;
+    mount("/", "basic");
+    expect(await screen.findByText(SOURCE_ATTRIBUTION)).toBeInTheDocument();
+  });
+
+  it.each(["gold", "silver", "brent", "wti"])("trang %s có dòng nguồn", async (asset) => {
+    flags.show = true;
+    mount(`/asset/${asset}`, "basic");
+    expect(await screen.findByText(SOURCE_ATTRIBUTION)).toBeInTheDocument();
+  });
+
+  it("trang Giới thiệu có dòng nguồn và câu giá thế giới quy đổi", () => {
+    flags.show = true;
+    mount("/about", "basic");
+    expect(screen.getByText(/Nguồn: Yahoo Finance, U\.S\. EIA/)).toBeInTheDocument();
+    expect(screen.getByText(GOLD_VND)).toBeInTheDocument();
+  });
+
+  it("vàng theo VND: tóm tắt và phần lưu ý đều có nhãn giá thế giới quy đổi", async () => {
+    flags.show = true;
+    mount("/asset/gold", "advanced", "VND");
+    expect((await screen.findAllByText(GOLD_VND)).length).toBe(2);
+  });
+
+  it("vàng theo USD và dầu theo VND: không có nhãn vàng miếng", async () => {
+    flags.show = true;
+    mount("/asset/gold", "basic", "USD");
+    await screen.findByText(SOURCE_ATTRIBUTION);
+    expect(screen.queryAllByText(GOLD_VND)).toHaveLength(0);
+    cleanup();
+    mount("/asset/brent", "basic", "VND");
+    await screen.findByText(SOURCE_ATTRIBUTION);
+    expect(screen.queryAllByText(GOLD_VND)).toHaveLength(0);
+  });
+
+  it("vàng, cờ tắt: vẫn có dòng nguồn, không có nhãn VND", async () => {
+    flags.show = false;
+    mount("/asset/gold", "basic", "VND");
+    expect(await screen.findByText(SOURCE_ATTRIBUTION)).toBeInTheDocument();
+    expect(screen.queryAllByText(GOLD_VND)).toHaveLength(0);
   });
 });
