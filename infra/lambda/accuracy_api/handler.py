@@ -319,7 +319,6 @@ def _verify_provenance(meta: dict) -> None:
         "target_cutoff_date": meta["window"]["target_cutoff_date"],
     }
 
-
     for key, expected in expected_identity.items():
         if identity.get(key) != expected:
             raise AccuracyUnavailable("identity_mismatch")

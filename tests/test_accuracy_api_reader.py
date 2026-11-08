@@ -710,6 +710,7 @@ def test_derived_mutation_without_resealing_meta_returns_503(configure_reader):
 
     assert response["statusCode"] == 503
 
+
 def test_writer_publish_round_trips_through_reader(configure_reader):
     """Persist with the real Writer, then read its META/METRIC rows through Reader."""
 
@@ -720,9 +721,7 @@ def test_writer_publish_round_trips_through_reader(configure_reader):
 
     # Match rolling_job.run_asset() identity finalization exactly.
     result["identity"]["evidence_config_hash"] = writer_digest(evidence)
-    result["run_id"] = (
-        cfg.job_date + "-" + writer_digest(result["identity"])[:20]
-    )
+    result["run_id"] = cfg.job_date + "-" + writer_digest(result["identity"])[:20]
 
     table = Table()
 
