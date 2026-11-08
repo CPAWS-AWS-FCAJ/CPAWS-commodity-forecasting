@@ -27,6 +27,7 @@ import {
   todayInVietnam,
 } from "../lib/forecast";
 import { useSettings } from "../lib/settings";
+import { GOLD_VND_NOTE, SOURCE_ATTRIBUTION } from "../lib/source";
 import { convertPrice, displayUnit } from "../lib/units";
 import NotFound from "./NotFound";
 
@@ -130,7 +131,7 @@ function AssetContent({ asset }: { asset: AssetId }) {
 
             <ReliabilityBlock asset={asset} showHorizons={mode === "advanced"} />
 
-            <Notes asset={asset} detail={detail} />
+            <Notes asset={asset} detail={detail} currency={currency} hidePrice={hidePrice} />
           </div>
           <div className="lg:sticky lg:top-4 lg:self-start">
             <ChatPanel key={asset} asset={asset} assetName={meta.name} />
@@ -247,11 +248,23 @@ function modelFooter(version: string): string {
   return name ? `${name} (${version})` : `mô hình ${version}`;
 }
 
-function Notes({ asset, detail }: { asset: AssetId; detail: NonNullable<ReturnType<typeof useForecast>["data"]> }) {
+function Notes({
+  asset,
+  detail,
+  currency,
+  hidePrice,
+}: {
+  asset: AssetId;
+  detail: NonNullable<ReturnType<typeof useForecast>["data"]>;
+  currency: "USD" | "VND";
+  hidePrice: boolean;
+}) {
   const meta = ASSETS[asset];
   return (
     <section aria-label="Lưu ý" className="space-y-1 text-xs text-muted">
       {meta.note ? <p>{meta.note}</p> : null}
+      {/* Thẻ, bảng và biểu đồ cũng hiện VND/lượng nên nhãn đặt ở phần lưu ý của cả trang */}
+      {asset === "gold" && currency === "VND" && !hidePrice ? <p>{GOLD_VND_NOTE}</p> : null}
       {isPriceHidden(asset) ? <p>Giá vàng và bạc đang được ẩn; trang này chỉ hiển thị % thay đổi và xác suất tăng.</p> : null}
       {detail.roll_in_horizon ? (
         <p>Kỳ dự báo chứa ngày đáo hạn hợp đồng tương lai, giá có thể nhảy khi chuyển hợp đồng.</p>
@@ -263,6 +276,7 @@ function Notes({ asset, detail }: { asset: AssetId; detail: NonNullable<ReturnTy
           (khoảng 1 năm), chưa dùng mô hình học máy.
         </p>
       ) : null}
+      <p>{SOURCE_ATTRIBUTION}</p>
       <p>{detail.disclaimer}</p>
     </section>
   );

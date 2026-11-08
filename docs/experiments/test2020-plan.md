@@ -2,7 +2,7 @@
 
 - Ngày: 31/10/2026; sửa 2/11/2026 theo review của Long ở #75
 - Người viết: Khải (bản nháp do Claude soạn); người duyệt: Long
-- Trạng thái: **Bản nháp.** Long approve, merge, rồi mới viết hoặc chạy code. Sau khi chốt, không đổi mô hình, dữ liệu, chỉ số hay cách dùng kết quả; thay đổi (nếu có) ghi thành mục mới có ngày, kèm lý do, trước khi chạy.
+- Trạng thái: **Đã chốt (#75, merge 03/11/2026 09:59Z).** Mục 8.1 điền theo quy tắc mục 2; chưa chạy test2020.
 - Căn cứ: ADR-0008 (chia dữ liệu, chỉ số), ADR-0010 (S1a), ADR-0011 (champion/challenger), ADR-0012 (dừng dò mô hình), họp 30/10 điểm 19 và 21.
 
 ## 0. Mục đích
@@ -91,14 +91,63 @@ Kết luận chính chỉ dựa trên mục 3.1 (block 20, mẫu `all`); các m�
 - Code runner: trước 15/11.
 - Chạy: tuần 16–22/11, trước đóng băng.
 
-## 8. Ghi trước khi chạy (cách xác định đã chốt ở mục 2 và 6; giá trị điền lúc claim)
+## 8. Ghi trước khi chạy (quy tắc tại mục 2 và 6; snapshot đã khóa, execution metadata khóa trước lần chạy)
 
-- DT của bản clean: …
-- SHA-256 bản clean: …
-- Commit chạy: …
-- `config_hash`: …
+### 8.1. Snapshot clean đã khóa
+
+- Mốc khóa snapshot: `2026-11-03T09:59:00Z`, thời điểm merge PR #75. Đây là mốc chọn snapshot, **khác** target cutoff `2026-10-23` của evaluation.
+- DT đã chọn: **`2026-10-31`**.
+- S3 prefix: `s3://cpaws-dev-lake/clean/prices/dt=2026-10-31/`.
+- S3 Versioning: **Enabled**.
+- Cả ba object dưới đây có `LastModified=2026-10-31T12:15:43Z`; không có delete marker trong output kiểm tra toàn prefix bên dưới.
+
+| File | SHA-256 của raw bytes | VersionId | Size (bytes) |
+|---|---|---|---:|
+| `prices.parquet` | `49dfc745881a38a07bd40b5f722bb2d3f123a7ea0aa1d197fd12ea1ccc954473` | `XSqcFlfGvDZzMrQk43NorSBIYKmgnV4J` | 201081 |
+| `rejected.parquet` | `630dbe9889e5d1d0d215c01f8c3a34e951f1a6d3f12bd5ba7fe261484e388f2e` | `YOzT5FhCZXmjBXH26a0zYdiwEe_A9TBU` | 5693 |
+| `quality.json` | `cca4fd293c81028af8948420769638ba5b4c93379be74db7f91d5d6067584f30` | `z2kWzgePRwjaMMtLbH_FB4bvKthytYdl` | 13934 |
+
+S3 URI của các object đã khóa:
+
+- `s3://cpaws-dev-lake/clean/prices/dt=2026-10-31/prices.parquet`
+- `s3://cpaws-dev-lake/clean/prices/dt=2026-10-31/rejected.parquet`
+- `s3://cpaws-dev-lake/clean/prices/dt=2026-10-31/quality.json`
+
+**Bằng chứng S3 Versioning.** Long hoàn thành truy vấn toàn prefix `clean/prices/` của bucket `cpaws-dev-lake` bằng profile `cpaws-dev` lúc **`2026-11-04T07:45:54Z`**. Lệnh đã thực hiện:
+
+```powershell
+aws s3api list-object-versions `
+  --bucket cpaws-dev-lake `
+  --prefix clean/prices/ `
+  --profile cpaws-dev `
+  --query '{Versions:Versions[].{Key:Key,VersionId:VersionId,LastModified:LastModified,Size:Size,IsLatest:IsLatest},DeleteMarkers:DeleteMarkers[].{Key:Key,VersionId:VersionId,LastModified:LastModified,IsLatest:IsLatest}}' `
+  --output json `
+  --no-cli-pager
+```
+
+Bằng chứng đầy đủ: [S3 object version history](test2020-s3-versions-evidence.json), gồm **48 object versions thuộc 12 snapshot** và không có delete marker trong kết quả truy vấn (`DeleteMarkers=null`). Các versions lịch sử của DT 2026-10-28 được giữ nguyên trong file bằng chứng.
+
+Đối chiếu timestamps và lịch sử versions trong output:
+
+- Không có object version nào dưới `clean/prices/` có `LastModified` trong khoảng **(`2026-10-31T12:15:43Z`, `2026-11-03T09:59:00Z`]**; không có phiên bản ghi đè của ba key DT 31/10 trong khoảng này.
+- Ba VersionId của DT `2026-10-31` trong bảng trên là các phiên bản còn hiệu lực tại cutoff; snapshot đủ cả ba file. `IsLatest` phản ánh thời điểm truy vấn, không được dùng thay lịch sử timestamps để xác định phiên bản tại cutoff.
+- Ba object versions của DT `2026-11-03` đều có `LastModified=2026-11-03T12:15:28Z`, sau cutoff, nên snapshot này bị loại.
+
+Theo output toàn prefix, snapshot đầy đủ mới nhất tồn tại tại cutoff là **`dt=2026-10-31`**. Ba file đã được tải theo VersionId và đối chiếu raw-byte SHA-256/kích thước với `snapshot-sha256.json`; các giá trị khóa trong bảng được giữ nguyên.
+
+**Metadata clean và lineage.** `quality.json` ghi `run.run_at_utc=2026-10-31T12:15:20+00:00` (tương đương `2026-10-31T12:15:20Z`) và `status=ok`. `run.fetch_log` ghi bốn chuỗi target từ yfinance: gold→GLD, silver→SLV, wti→CL=F, brent→BZ=F. Log cũng ghi dữ liệu tham chiếu EIA (RWTC, RBRTE) và nguồn phụ trợ yfinance (VND=X, GC=F, SI=F), NBP (nbp_gold); các nguồn này không thay chuỗi target đã chốt.
+
+**Deployment lineage đã xác minh.** Lambda `cpaws-dev-ingest` tạo snapshot `dt=2026-10-31` từ `data_commit=5cfde32758827ad76839052e4476975f6058b4d0`, image tag `5cfde32` (`DEFAULT_INGEST_IMAGE_TAG`), ECR digest `sha256:e47a9695b077ed069fe367be0cd01c0b18efb718ea6e774da5df47c81bc54ce9` (pushed `2026-10-28T05:34:31Z`). CloudTrail ghi `UpdateFunctionCode` lúc `2026-10-28T05:53:07Z`, EventID `33fa5644-16b6-4cd3-b586-93897a469d2e`; CloudFormation stack `CpawsData`, resource `IngestFunction4B2F2EB2` đạt `UPDATE_COMPLETE` lúc `2026-10-28T05:53:22Z`. Đối chiếu CloudTrail `CreateFunction`/`UpdateFunctionCode` từ 27/10 đến 04/11 không phát hiện cập nhật code mới trước lượt ingest 31/10. CloudWatch log group `/aws/lambda/cpaws-dev-ingest`, RequestId `3b6ae5db-c441-4a2f-8abf-b339dfa08659`, ghi START `2026-10-31T12:15:19.436Z` và `INGEST_DONE` lúc `2026-10-31T12:15:42.799Z`, status `ok`, written `16`; ba object snapshot có `LastModified=2026-10-31T12:15:43Z`, ngay sau thời điểm hoàn tất ingest. Tiến xác minh các bằng chứng ECR, CloudTrail, CloudFormation, Lambda và CloudWatch Logs ngày 04/11/2026 khoảng 08:00 UTC bằng profile `cpaws-dev`.
+
+### 8.2. Thông tin sẽ khóa trước lần chạy chính thức
+
+- Runner commit sạch: chưa khóa; chỉ điền sau khi runner và protocol cuối cùng được review/merge.
+- `config_hash`: chưa tính/chưa khóa; chỉ tính sau khi PR cập nhật tài liệu này đã merge và runner được freeze. Không tính hash chính thức trong lần sửa tài liệu này.
+- Seed: ghi giá trị đã được review trong locked runner config và execution metadata trước claim; không tự chọn, đổi hoặc suy giá trị từ snapshot.
+- Execution metadata theo mục 6: `data_commit` và deployment lineage đã được xác minh tại §8.1. Vẫn phải kiểm tra metadata hoàn chỉnh trước claim: lineage, snapshot DT/ba SHA-256, mốc cắt, block, B, seed, runner commit, `config_hash`, người chạy và thời điểm; lưu môi trường theo quy tắc đã chốt. Runner commit và `config_hash` vẫn chưa khóa; không tạo claim hoặc bắt đầu evaluation khi các điều kiện còn thiếu.
 
 ## 9. Sửa đổi
 
+- 04/11/2026 (hoàn thiện metadata và xác nhận chính sách hiện hành): khóa snapshot `dt=2026-10-31` theo mốc merge #75 `2026-11-03T09:59:00Z` và bằng chứng tại mục 8. Nhóm chấp nhận dùng DM calendar-gap policy đang được triển khai trong `walk_forward.py` cho test2020: với h > 1, DM bị chặn nếu chuỗi ngày đánh giá có internal session gaps; nhóm bị chặn phải được ghi nhận undefined/không đủ điều kiện, không phát sinh p-value giả. Chính sách amplitude-modulated đã được đặc tả trong Accuracy Schema nhưng chưa phải implementation đang sử dụng. Giữ nguyên chuỗi `DM_GAP_POLICY=block_internal_session_gaps_for_h_gt_1_pending_Khai_review`, không đổi tên chỉ để cập nhật trạng thái; không sửa `walk_forward.py`, `metrics.py` hoặc thuật toán DM. Quyết định này xác nhận phương pháp hiện hành cho lần chạy, không tạo phương pháp kiểm định mới. Tham chiếu: [Walk-forward implementation](../../src/eval/walk_forward.py), [Accuracy Schema](../api/accuracy-schema.md).
 - 3/11/2026 (review Long lần 2, #75): p-value đổi sang bootstrap căn giữa theo H0; Holm áp trên p-value này; CI percentile chỉ để mô tả.
 - 2/11/2026 (review Long, #75): chốt định nghĩa chỉ số chính (trung bình 7 skill theo h, mặt nạ chung, xử lý undefined); bootstrap dùng chung kế hoạch rút mẫu, 4 giả thuyết một phía, p-value và Holm; bất biến S1a; khóa DT/SHA-256/lineage trong `claim.json`, giới hạn PIT; WTI 20/4/2020; quy trình khi chạy lỗi; B từ 1000 lên 2000; tách rõ chỉ số phụ và báo cáo bổ sung.

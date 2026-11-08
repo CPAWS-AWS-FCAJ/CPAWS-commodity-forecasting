@@ -1,5 +1,6 @@
 import type { AssetId, Currency } from "../api/types";
 import { formatNumber, formatPrice } from "../lib/format";
+import { GOLD_VND_NOTE } from "../lib/source";
 import { convertPrice, displayUnit } from "../lib/units";
 
 interface Props {
@@ -33,9 +34,7 @@ export function PriceRange({ asset, currency, usdVnd, low, mid, high, horizonDay
       {currency === "VND" ? (
         <p className="mt-1 text-xs text-muted">
           Tỷ giá USD/VND {formatNumber(usdVnd)}.
-          {asset === "gold"
-            ? " Giá vàng quy đổi không phải giá vàng miếng trong nước (chưa gồm thuế, phí, chênh lệch thị trường)."
-            : ""}
+          {asset === "gold" ? ` ${GOLD_VND_NOTE}` : ""}
         </p>
       ) : null}
     </div>

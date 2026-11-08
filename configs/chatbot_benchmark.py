@@ -124,6 +124,16 @@ PROMPT_SETS = {
         "prompt_versions": {"simple": "chatbot-nova-v2", "complex": "chatbot-haiku-v3"},
         "tool_format": "v2",
     },
+    # v4: prompt Haiku sau buổi chạy thử 8/11 (issue #84), nền v3; Nova và tool giữ v2. Chỉ chạy
+    # dev bằng --prompts v4 cho tới khi có bộ câu mới được khóa SHA-256.
+    "v4": {
+        "prompts": {
+            "simple": "docs/prompts/chatbot-nova-v2.md",
+            "complex": "docs/prompts/chatbot-haiku-v4.md",
+        },
+        "prompt_versions": {"simple": "chatbot-nova-v2", "complex": "chatbot-haiku-v4"},
+        "tool_format": "v2",
+    },
 }
 # Code được khóa cùng bộ câu hỏi (Khải 25/10: khóa cả code tool chatbot)
 TOOL_CODE_PATHS = (

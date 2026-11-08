@@ -17,11 +17,28 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+            infra/requirements.txt
+
+      # aws-cdk-lib chạy qua jsii nên cần Node.js; dùng cùng bản với job web
+      - name: Set up Node (for aws-cdk-lib)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt
+          pip install -r infra/requirements.txt
+
+      # tests/test_infra_*.py tự bỏ qua khi thiếu aws_cdk; kiểm import để CI không xanh giả
+      - name: Check CDK libraries for infra tests
+        run: >-
+          python -c "import aws_cdk, constructs; from importlib.metadata import version;
+          print('aws-cdk-lib', version('aws-cdk-lib'))"
 
       - name: Run Ruff lint
         run: python -m ruff check .
