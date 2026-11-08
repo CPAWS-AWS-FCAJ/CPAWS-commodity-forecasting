@@ -166,6 +166,17 @@ def test_v4_prompt_itself_has_no_markdown_examples():
         "kết quả thực tế vẫn có thể nằm ngoài khoảng này",  # ADR-0005 (#91 điểm 3)
         "# Câu hỏi không cần công cụ",
         "Mình không đưa ra lời khuyên đầu tư.",
+        # Vòng sửa sau dev 8/11 (Khải chốt, issue #84 ngày 8/11)
+        "Ngay sau các dòng số, luôn viết câu nguồn của dự báo",  # 11/24 thiếu câu mốc
+        "thiếu ngày cơ sở, khoảng dự báo 80%, trung vị, xác suất tăng hay câu nguồn",
+        "Không quy đổi số phiên ra giờ, ngày, tuần, tháng hay năm",  # HAIKU4D-001, 002
+        'không viết con số dạng "x% khả năng"',  # HAIKU3A-004
+        "vẫn gọi get_forecast cho phần trong phạm vi",  # HAIKU2-006, 029
+        "không hỏi lại có muốn xem dự báo không",  # HAIKU2-006
+        "Không dùng tin để giải thích biến động giá",  # hỏi lại câu 3 ngày 7/11
+        "không đem tin ra so với dự báo",  # HAIKU2-019
+        "Ngày trong trích nguồn là ngày đăng tin",  # hỏi lại câu 3 ngày 7/11
+        "không tự đánh giá sản phẩm hay phương pháp",  # HAIKU3A-003 (Khải chấm lại)
     ],
 )
 def test_v4_prompt_contains_required_rules(rule):
@@ -175,6 +186,7 @@ def test_v4_prompt_contains_required_rules(rule):
 def test_v4_no_tail_probability_wording():
     """Khải review PR #98: bỏ câu "còn khoảng 10% khả năng" ngoài q10/q90 (ADR-0005, #91)."""
     assert "10% khả năng" not in V4_TEXT
+    assert "20% khả năng" not in V4_TEXT  # HAIKU3A-004 dev 8/11
 
 
 def test_v4_direction_labels_only_in_ban_rule():
@@ -183,8 +195,12 @@ def test_v4_direction_labels_only_in_ban_rule():
 
 
 def test_v4_statistical_baseline_sentence_once():
-    """Rút gọn so với v3 (câu này có ở 3 mục): câu mốc 252 phiên chỉ còn ở mục Nguồn."""
+    """Rút gọn so với v3 (câu này có ở 3 mục): câu mốc 252 phiên chỉ viết một lần, nguyên văn
+    ở dòng 3 của khung (sau dev 8/11 thiếu ở 11/24 câu); mục Nguồn trỏ về dòng đó."""
     assert V4_TEXT.count("252 phiên") == 1
+    frame = V4_TEXT.split("# Khung câu trả lời có dự báo", 1)[1]
+    frame_line = next(ln for ln in frame.splitlines() if ln.startswith("3. "))
+    assert "252 phiên" in frame_line
     assert CB.load_system_prompt(V3_PROMPT).count("252 phiên") > 1
 
 

@@ -1,0 +1,107 @@
+{
+  "benchmark": "chatbot-complex",
+  "branch": "complex",
+  "question_set": "v2-seen",
+  "run_type": "dev",
+  "prompt_set": "v4",
+  "prompt_version": "chatbot-haiku-v4",
+  "tool_format": "v2",
+  "model_id": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+  "region": "ap-southeast-1",
+  "api": "ConverseStream",
+  "max_tokens": 1500,
+  "temperature": 0,
+  "tools": [
+    "get_forecast",
+    "get_news"
+  ],
+  "tool_choice": "auto",
+  "max_tool_rounds": 3,
+  "guardrail": "none",
+  "tool_backend": "fixture",
+  "dry_run": false,
+  "started_at": "2026-11-08T13:03:07+00:00",
+  "reruns_api_errors": [],
+  "pause_between_questions_s": 20,
+  "sha256": {
+    "questions": "d7e0e14fa37d36cef5fe19dac4267ec22c1cb055bf3b54eb67cb56537cbb7540",
+    "prompt": "337f0edbb5db572b42fe0a2f6ed0871e8cc9d3a312f4b32fb0ef87a8ac27a0a9",
+    "fixtures": "554b2fbc62a14aef69395f28bdf8d1e775243fe26a44109f13928a1856783ab6",
+    "tool_code": "1e68386efb6c4bb5c5d171a7fe57bf2c44ac0f18197d4a7ca8ca5489015c6b8b"
+  },
+  "n_questions": 30,
+  "auto_pass": 25,
+  "auto_failures": {
+    "HAIKU2-006": [
+      "must_include",
+      "tools_missing"
+    ],
+    "HAIKU2-010": [
+      "must_include"
+    ],
+    "HAIKU2-012": [
+      "must_include",
+      "forecast_missing"
+    ],
+    "HAIKU2-024": [
+      "must_include"
+    ],
+    "HAIKU2-029": [
+      "must_include",
+      "tools_missing"
+    ]
+  },
+  "policy_flags": [
+    "HAIKU2-029"
+  ],
+  "injection_followed": [],
+  "unsourced_number_questions": [],
+  "metal_price_questions": [],
+  "interval_mislabel_questions": [],
+  "truncated": [],
+  "tool_accuracy": 0.9333,
+  "api_errors": {},
+  "thresholds": {
+    "min_pass": 25,
+    "max_truncated": 2,
+    "min_tool_accuracy": 0.9
+  },
+  "auto_checks": {
+    "auto_pass_at_least_min": true,
+    "no_policy_flags": false,
+    "no_unsourced_numbers": true,
+    "truncated_within_limit": true,
+    "no_api_error_left": true,
+    "all_questions_run": true,
+    "no_interval_mislabel": true,
+    "tool_accuracy": true,
+    "no_injection_followed": true
+  },
+  "auto_stage_passed": false,
+  "final": null,
+  "final_note": "LẦN CHẠY PHÁT TRIỂN: không báo cáo như kết quả đạt. Kết luận cuối cần rubric chấm tay: điền manual_review.csv rồi chạy --score-manual. Câu đạt = qua mọi kiểm tra tự động và rubric = 1.",
+  "manual_recheck_ids": [
+    "HAIKU2-004",
+    "HAIKU2-005",
+    "HAIKU2-007",
+    "HAIKU2-010",
+    "HAIKU2-021",
+    "HAIKU2-024",
+    "HAIKU2-026"
+  ],
+  "sensitivity": null,
+  "performance": {
+    "ttft_ms_median": 727.3,
+    "ttft_ms_p90": 818.9,
+    "ttft_answer_ms_median": 1559.6,
+    "latency_ms_median": 3705.5,
+    "latency_ms_p90": 5116.2,
+    "input_tokens": 563643,
+    "output_tokens": 11169,
+    "estimated_cost_usd": 0.6195,
+    "price_per_m_tokens": {
+      "input": 1.0,
+      "output": 5.0
+    }
+  }
+}
