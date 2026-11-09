@@ -1,6 +1,6 @@
 # ADR-0008: Target, phân vị, xác suất tăng và cách đánh giá mô hình
 
-- Ngày: 2026-10-16 (cập nhật theo review của Long trên PR #6)
+- Ngày: 2026-10-16 (cập nhật theo review của Long trên PR #6; 2026-11-09: ghi thí nghiệm PCHIP mục 3 là không thực hiện)
 - Trạng thái: Đề xuất (chờ Long xác nhận; thông qua ở buổi họp 16/10)
 - Người viết: Trịnh Tiến Khải; người duyệt: Long
 - Liên quan: ADR-0002 (thay thế một phần), ADR-0005 (nguồn giá, lịch giao dịch, cờ `roll`), ADR-0007 (cache CEEMDAN), `docs/api/contract.md`, `docs/experiments/roll-analysis-2026-10.md`
@@ -58,6 +58,7 @@ ADR này giữ quyết định cốt lõi của ADR-0002 (dự báo phân vị l
 - Trường hợp biên: 0 < q05 → 0.95; 0 > q95 → 0.05; 0 trùng một phân vị → dùng đúng mức của phân vị đó.
 - Thứ tự đánh giá: kiểm tra tỷ lệ trúng từng phân vị trước, sau đó mới đánh giá `prob_up` bằng Brier score và độ hiệu chỉnh trên dự báo ngoài mẫu.
 - Thí nghiệm khi có dự báo DLinear trên validation 2019: so Brier score của (a) nội suy tuyến tính và (b) PCHIP, trên cùng các điểm của tập đánh giá chung. Định nghĩa ΔBS = BS(PCHIP) − BS(tuyến tính), lấy trung bình đều trên 4 tài sản × 7 mức h. Khoảng tin cậy 95% tính bằng block bootstrap theo ngày: rút cùng một khối ngày cho mọi tài sản và h để giữ tương quan; độ dài khối định trước trong config. Chỉ chuyển sang PCHIP khi khoảng tin cậy nằm hoàn toàn dưới 0; nếu khoảng chứa 0 hoặc nằm trên 0 thì giữ nội suy tuyến tính. ΔBS theo từng tài sản × h chỉ để tham khảo, không dùng để chọn phương pháp riêng cho từng cặp.
+- **Không thực hiện (Khải chốt 04/11/2026, ghi 09/11/2026):** điều kiện chạy là có dự báo DLinear trên validation 2019, nhưng DLinear không thành champion (thua mốc 252 phiên ở 28/28 nhóm) và K3, K3b, K4 cũng không đạt ([ADR-0009](0009-ceemdan-dlinear-k3-result.md), [ADR-0010](0010-k3b-volatility-scaling-result.md), [ADR-0012](0012-k4-fhs-gjr-result.md)). Validation 2019 đã dùng cho nhiều lần chọn, thêm một lần chọn phương pháp trên đó không còn sạch. test2020 đã khóa với nội suy tuyến tính (runner `a71db84`, `config_hash` `d8e3f59e…3640`). Vì vậy giữ nội suy tuyến tính cho production, `rolling_8w` và test2020. `prob_up_pchip()` giữ trong `src/forecast/returns.py` chỉ cho thí nghiệm sau này; muốn chuyển sang PCHIP phải chạy trên dự báo rolling thật sau buổi trình bày cuối kỳ và ghi bằng ADR mới.
 - Chưa dùng Platt scaling trong MVP; không hiệu chỉnh trên tập test.
 
 ### 4. Mốc so sánh
@@ -165,7 +166,7 @@ Mô hình chung cho 4 tài sản, chỉ báo (GPR, OVX/GVZ, lịch sự kiện) 
 - [ ] Khải: `returns.py` theo mục 1–3 (target theo lịch, `normalize_quantiles()`, kiểm tra đầu vào); `baselines.py` (mốc 252 phiên); `prob_up_pchip()` cho thí nghiệm; test đủ 7 mức phân vị, phân vị cắt nhau, 0 nằm ngoài khoảng và giới hạn [0.05, 0.95]
 - [ ] Long: `metrics.py` theo mục 5 (hạn 20/10)
 - [ ] Long: DLinear MVP theo mục 8, báo cáo trên 2019 (hạn 22/10)
-- [ ] Long: thí nghiệm nội suy xác suất tăng theo mục 3 khi có dự báo DLinear
+- [x] Long: thí nghiệm nội suy xác suất tăng theo mục 3 khi có dự báo DLinear: **không thực hiện** (xem mục 3, ghi 09/11/2026)
 - [ ] Đánh giá dầu theo hai mẫu (mục 6)
 
 ## Tài liệu tham khảo
