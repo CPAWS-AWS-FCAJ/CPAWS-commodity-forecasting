@@ -107,6 +107,8 @@ Năm alarm ở `CpawsOps` cùng một quy tắc: **≥ 1 trong 5 phút**, chu k�
 | `cpaws-dev-chat-api-errors` | `AWS/Lambda Errors` của chat | Timeout hoặc crash |
 | `cpaws-dev-chat-api-internal-errors` | Metric filter trên log chat | Handler bắt lỗi không lường trước và trả `500`. Lỗi 4xx, 429 và lỗi Bedrock có mã riêng là hành vi đã thiết kế, nên không báo |
 
+Log `citation_link_mismatch` của Lambda chat (câu trả lời có URL không thuộc link của tin `get_news` trong lượt, PR #104) chỉ là log WARNING: chưa có metric filter hay alarm. Xem bằng CloudWatch Logs Insights trên log group của chat, lọc `event = "citation_link_mismatch"`.
+
 Ngoài alarm, nhóm **kiểm tay sau mỗi lượt 19:15** (lệnh ở Phụ lục A.3): log `PREDICT_DONE` (`written`, `already_published`), `Duration`, số object shadow trên S3, và trạng thái alarm. Về chi phí, nhóm theo dõi bằng AWS Budgets (mục 2.2). Không có tài nguyên nào tính tiền theo giờ: không endpoint, không NAT Gateway, không OpenSearch.
 
 ## 7. Web trên Amplify Hosting và CORS
