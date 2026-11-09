@@ -51,17 +51,43 @@ def test_prompt_set_v4_changes_only_haiku():
     assert v4["tool_format"] == "v2"
 
 
-def test_only_dev_sets_use_v4_by_default():
-    """v4 chỉ chạy dev cho tới khi có bộ câu mới được khóa: bộ nào mặc định dùng v4 phải là bộ
-    dev không bao giờ khóa (official dừng trước khi gọi Bedrock)."""
+def test_v4_question_sets_have_correct_release_guards():
     v4_sets = {name for name, cfg in C.QUESTION_SETS.items() if cfg["prompt_set"] == "v4"}
-    assert v4_sets == {"v4-horizon-dev"}
-    for name in v4_sets:
+
+    assert v4_sets == {
+        "v4-horizon-dev",
+        "v4-official-a",
+        "v4-official-b",
+    }
+
+    # Bộ dev: được chạy phát triển, không khóa.
+    dev = C.QUESTION_SETS["v4-horizon-dev"]
+    assert dev["require_lock"] is True
+    assert dev["holdout"] is False
+    assert dev["locked_sha256"] is None
+
+    CB.check_dev_allowed("v4-horizon-dev")
+
+    with pytest.raises(RuntimeError, match="chưa khóa"):
+        CB.verify_lock("v4-horizon-dev")
+
+    # Bộ official: không được chạy dev thật.
+    for name in ("v4-official-a", "v4-official-b"):
         cfg = C.QUESTION_SETS[name]
-        assert cfg["require_lock"] and cfg["locked_sha256"] is None and not cfg["holdout"]
-        with pytest.raises(RuntimeError, match="chưa khóa"):
+
+        assert cfg["require_lock"] is True
+        assert cfg["holdout"] is True
+
+        with pytest.raises(RuntimeError, match="giữ riêng"):
+            CB.check_dev_allowed(name)
+
+        # Trước khi khóa phải bị chặn.
+        # Sau khi khóa phải xác minh được SHA-256.
+        if cfg["locked_sha256"] is None:
+            with pytest.raises(RuntimeError, match="chưa khóa"):
+                CB.verify_lock(name)
+        else:
             CB.verify_lock(name)
-        CB.check_dev_allowed(name)
 
 
 def test_horizon_dev_questions_come_from_router_heldout():
