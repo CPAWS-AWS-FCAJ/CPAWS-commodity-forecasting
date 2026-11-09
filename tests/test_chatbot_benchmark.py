@@ -648,11 +648,16 @@ def _unlock_v2(monkeypatch) -> dict:
 
 
 def test_v2_locked_sha256_matches_current_files():
-    """Khóa 29/10 (đề xuất v2 mục 11): sửa câu hỏi, fixture, prompt v2, code tool hay tham số chấm
-    sau khi khóa thì test này đỏ, trước khi lần chạy official bị chặn."""
+    """Khóa 29/10 (đề xuất v2 mục 11) khớp code tới commit trước PR đưa kiểm URL lạ vào
+    check_answer (Khải, review PR #104). Official v2 đã chạy 30/10, không chạy lại. Từ PR đó chỉ
+    tool_code lệch (chatbot_benchmark.py đổi, thêm citations.py); 7 khóa còn lại vẫn phải khớp,
+    và lần chạy official v2 dừng vì lệch khóa."""
     locked = C.QUESTION_SETS["v2"]["locked_sha256"]
-    assert locked == CB.lock_hashes("v2")
-    CB.verify_lock("v2")
+    current = CB.lock_hashes("v2")
+    assert set(current) == set(locked)
+    assert sorted(k for k in locked if locked[k] != current[k]) == ["tool_code"]
+    with pytest.raises(RuntimeError, match=r"lệch khóa SHA-256 ở: \['tool_code'\]"):
+        CB.verify_lock("v2")
 
 
 def test_official_v2_requires_matching_lock(tmp_path, monkeypatch):
