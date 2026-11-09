@@ -95,6 +95,32 @@ QUESTION_SETS = {
         "holdout": False,
         "locked_sha256": None,
     },
+    # Official holdout độc lập đã được Khải duyệt: chỉ chạy --branch complex.
+    # Simple giữ đường dẫn v2 theo cấu trúc config; chưa khóa trước approval.
+    "v4-official-b": {
+        "questions": {
+            "simple": "tests/chatbot/v2/nova_simple_questions.jsonl",
+            "complex": "tests/chatbot/v4/official_B_30.jsonl",
+        },
+        "fixtures_dir": "tests/chatbot/v2/fixtures",
+        "prompt_set": "v4",
+        "news_default_to": "2026-10-21",
+        "require_lock": True,
+        "holdout": True,
+        "locked_sha256": None,
+    },
+    "v4-official-a": {
+        "questions": {
+            "simple": "tests/chatbot/v2/nova_simple_questions.jsonl",
+            "complex": "tests/chatbot/v4/official_A_8.jsonl",
+        },
+        "fixtures_dir": "tests/chatbot/v2/fixtures",
+        "prompt_set": "v4",
+        "news_default_to": "2026-10-21",
+        "require_lock": True,
+        "holdout": True,
+        "locked_sha256": None,
+    },
 }
 DEFAULT_QUESTION_SET = "v1"
 
