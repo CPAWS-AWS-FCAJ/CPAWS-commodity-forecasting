@@ -52,11 +52,7 @@ def test_prompt_set_v4_changes_only_haiku():
 
 
 def test_v4_question_sets_have_correct_release_guards():
-    v4_sets = {
-        name
-        for name, cfg in C.QUESTION_SETS.items()
-        if cfg["prompt_set"] == "v4"
-    }
+    v4_sets = {name for name, cfg in C.QUESTION_SETS.items() if cfg["prompt_set"] == "v4"}
 
     assert v4_sets == {
         "v4-horizon-dev",
