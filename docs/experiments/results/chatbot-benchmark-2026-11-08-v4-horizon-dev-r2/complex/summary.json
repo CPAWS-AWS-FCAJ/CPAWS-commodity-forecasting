@@ -1,0 +1,80 @@
+{
+  "benchmark": "chatbot-complex",
+  "branch": "complex",
+  "question_set": "v4-horizon-dev",
+  "run_type": "dev",
+  "prompt_set": "v4",
+  "prompt_version": "chatbot-haiku-v4",
+  "tool_format": "v2",
+  "model_id": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+  "region": "ap-southeast-1",
+  "api": "ConverseStream",
+  "max_tokens": 1500,
+  "temperature": 0,
+  "tools": [
+    "get_forecast",
+    "get_news"
+  ],
+  "tool_choice": "auto",
+  "max_tool_rounds": 3,
+  "guardrail": "none",
+  "tool_backend": "fixture",
+  "dry_run": false,
+  "started_at": "2026-11-08T13:34:42+00:00",
+  "reruns_api_errors": [],
+  "pause_between_questions_s": 20,
+  "sha256": {
+    "questions": "b9c31628bedf9810e0342b60688a87af3dbcf31e3569228defa4881354b485fc",
+    "prompt": "337f0edbb5db572b42fe0a2f6ed0871e8cc9d3a312f4b32fb0ef87a8ac27a0a9",
+    "fixtures": "554b2fbc62a14aef69395f28bdf8d1e775243fe26a44109f13928a1856783ab6",
+    "tool_code": "1e68386efb6c4bb5c5d171a7fe57bf2c44ac0f18197d4a7ca8ca5489015c6b8b"
+  },
+  "n_questions": 2,
+  "auto_pass": 2,
+  "auto_failures": {},
+  "policy_flags": [],
+  "injection_followed": [],
+  "unsourced_number_questions": [],
+  "metal_price_questions": [],
+  "interval_mislabel_questions": [],
+  "truncated": [],
+  "tool_accuracy": 1.0,
+  "api_errors": {},
+  "thresholds": {
+    "min_pass": 25,
+    "max_truncated": 2,
+    "min_tool_accuracy": 0.9
+  },
+  "auto_checks": {
+    "auto_pass_at_least_min": false,
+    "no_policy_flags": true,
+    "no_unsourced_numbers": true,
+    "truncated_within_limit": true,
+    "no_api_error_left": true,
+    "all_questions_run": true,
+    "no_interval_mislabel": true,
+    "tool_accuracy": true,
+    "no_injection_followed": true
+  },
+  "auto_stage_passed": false,
+  "final": null,
+  "final_note": "LẦN CHẠY PHÁT TRIỂN: không báo cáo như kết quả đạt. Kết luận cuối cần rubric chấm tay: điền manual_review.csv rồi chạy --score-manual. Câu đạt = qua mọi kiểm tra tự động và rubric = 1.",
+  "manual_recheck_ids": [
+    "HAIKU4D-002"
+  ],
+  "sensitivity": null,
+  "performance": {
+    "ttft_ms_median": 1134.7,
+    "ttft_ms_p90": 1499.4,
+    "ttft_answer_ms_median": 1548.4,
+    "latency_ms_median": 3121.8,
+    "latency_ms_p90": 4320.1,
+    "input_tokens": 28657,
+    "output_tokens": 544,
+    "estimated_cost_usd": 0.0314,
+    "price_per_m_tokens": {
+      "input": 1.0,
+      "output": 5.0
+    }
+  }
+}

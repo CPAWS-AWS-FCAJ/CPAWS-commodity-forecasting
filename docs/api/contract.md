@@ -526,7 +526,7 @@ Theo ADR-0003, MVP không cần Knowledge Base. Lambda chat đọc tin từ bả
 - Partition key `asset` (S): `gold`, `silver`, `brent` hoặc `wti`.
 - Sort key `sk` (S): `<published_at>#<article_id>`, ví dụ `2026-10-13T10:45:00Z#3f9a1c0b7e2d4a61`.
 - Một bài liên quan nhiều tài sản thì ghi mỗi tài sản một item, cùng `article_id`.
-- `article_id` cố định cho một bài (ví dụ 16 ký tự hex đầu của SHA-256 của `link`), chỉ gồm chữ thường, số và `-`. Nhờ vậy ghi lại cùng một bài sẽ ghi đè item cũ, không tạo bản trùng.
+- `article_id` cố định cho một bài (ví dụ 16 ký tự hex đầu của SHA-256 của `link`), chỉ gồm chữ thường, số và `-`. Collector ghi bằng conditional `PutItem` với `attribute_not_exists(asset) AND attribute_not_exists(sk)` theo RFC #44. Nếu khóa đã tồn tại thì coi là duplicate, không ghi đè item cũ.
 - Lambda đọc bằng `Query`: `asset = :asset AND sk BETWEEN "<from_date>" AND "<to_date>T23:59:59Z#~"`, `ScanIndexForward = false`, tối đa 5 trang. So sánh chuỗi chỉ đúng thứ tự thời gian khi `sk` bắt đầu bằng `published_at` đúng định dạng bên dưới.
 
 *7 trường của mỗi tin (bảng và file JSON giống nhau)*
@@ -546,7 +546,7 @@ Theo ADR-0003, MVP không cần Knowledge Base. Lambda chat đọc tin từ bả
 
 *Tool trả cho model*
 
-- Mặc định lấy 7 ngày gần nhất tính đến hôm nay (giờ Việt Nam), `min_impact = 2`, khớp prompt `chatbot-haiku-v2`.
+- Mặc định lấy 7 ngày gần nhất tính đến hôm nay (giờ Việt Nam), `min_impact = 2` (`DEFAULT_DAYS`, `DEFAULT_MIN_IMPACT` trong `src/chatbot/news.py`). Prompt `chatbot-haiku-v4` ghi đúng mặc định này: người dùng không nêu ngày thì model không truyền `from_date`, `to_date` (Khải chốt, issue #84 mục 6). Prompt `chatbot-haiku-v2` đang chạy ghi "7 ngày đến base_date", lệch với mặc định này; giữ nguyên vì v2 đã khóa SHA-256.
 - Lọc theo ngày UTC của `published_at` (cùng cách cho cả bảng và file JSON).
 - Bỏ tin có `impact_score` < `min_impact` hoặc `link` không hợp lệ. Sắp tin theo `impact_score` giảm dần, cùng mức thì tin mới trước, rồi lấy tối đa 10 tin.
 - Lambda chat cần quyền `dynamodb:Query` trên bảng `NewsLabels`.

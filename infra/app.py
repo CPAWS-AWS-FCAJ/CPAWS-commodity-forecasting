@@ -145,14 +145,16 @@ auth_stack = CpawsAuthStack(
     env=aws_env,
 )
 
-# REST API: dữ liệu dự báo và POST /chat (Bedrock), xác thực Cognito.
-# Deploy CpawsServing (bảng chat-usage) trước CpawsApi: Lambda /chat dựng ARN bảng theo tên.
+# REST API: dữ liệu dự báo, rolling accuracy và POST /chat (Bedrock), xác thực Cognito.
+# Deploy CpawsServing (bảng chat-usage và Accuracy) trước CpawsApi.
 CpawsApiStack(
     app,
     "CpawsApi",
     env_name=env_name,
     forecasts_table=serving_stack.forecasts_table,
     user_pool=auth_stack.user_pool,
+    model_versions=CHAMPION_MODEL_VERSIONS,
+    champion_effective_base_dates=CHAMPION_EFFECTIVE_BASE_DATES,
     env=aws_env,
 )
 

@@ -14,6 +14,7 @@ from pathlib import Path
 import pytest
 
 from src.chatbot import chat as C
+from src.chatbot import citations as CI
 from src.chatbot import news as N
 from src.chatbot import quota as Q
 from src.chatbot import tools as T
@@ -771,3 +772,116 @@ def test_handler_bad_base64_body_returns_400():
     raw = base64.b64encode(json.dumps({"question": "vàng?"}).encode()).decode()
     resp = H.handle({**event(raw), "isBase64Encoded": True}, deps([_text("Vàng.")]))
     assert resp["statusCode"] == 200
+
+
+# ---------- kiểm link trích nguồn (citation_link_mismatch) ----------
+
+# Ca thật buổi tập 7/11 (request_id 194d6cc6-58a0-45b8-a3b2-162403d2a2bb): model chép
+# "pressrelease" thay cho "pressreleases", link mở lỗi và tin không vào citations.
+FED_LINK = "https://www.federalreserve.gov/newsevents/pressreleases/monetary20261028a.htm"
+FED_LINK_TYPO = "https://www.federalreserve.gov/newsevents/pressrelease/monetary20261028a.htm"
+FED_NEWS = {
+    "title": "Federal Reserve issues FOMC statement",
+    "summary": "Tóm tắt.",
+    "link": FED_LINK,
+    "source": "Federal Reserve",
+    "published_at": "2026-10-28T18:00:00Z",
+    "impact_score": 1,
+    "direction": "bearish",
+}
+
+
+def _fed_answer(link):
+    return (
+        f"Fed giữ lãi suất (Nguồn: Federal Reserve, 28/10/2026, {link}). "
+        "Dự báo mang tính tham khảo, không phải lời khuyên đầu tư."
+    )
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        (_fed_answer(FED_LINK), []),
+        (_fed_answer(FED_LINK_TYPO), [FED_LINK_TYPO]),
+        (f"[FOMC statement]({FED_LINK}).", []),  # Markdown, dấu chấm cuối
+        (f"Xem {FED_LINK}, {FED_LINK}; và {FED_LINK_TYPO}.", [FED_LINK_TYPO]),
+        (f"Hai lần {FED_LINK_TYPO} {FED_LINK_TYPO}?", [FED_LINK_TYPO]),  # không lặp
+        ("Không có link nào.", []),
+        (f"{FED_LINK}/", [f"{FED_LINK}/"]),  # thêm ký tự cũng là lệch
+    ],
+)
+def test_stray_links_compares_verbatim_with_news_links(text, expected):
+    assert CI.stray_links(text, [FED_NEWS]) == expected
+
+
+def test_stray_links_any_url_is_stray_without_news_in_turn():
+    assert CI.stray_links(_fed_answer(FED_LINK), []) == [FED_LINK]
+    # tin không có link không làm chuỗi rỗng thành link hợp lệ
+    assert CI.stray_links("https://x.example/a", [{**FED_NEWS, "link": ""}]) == [
+        "https://x.example/a"
+    ]
+
+
+def _fed_deps(answer_text):
+    # to_date và min_impact để tin Fed (28/10, điểm 1) nằm trong kết quả get_news của lượt
+    news_input = {"asset": "gold", "to_date": "2026-10-29", "min_impact": 1}
+    return deps(
+        [_tool_use(("get_news", news_input)), _text(answer_text)],
+        news=N.StaticNewsRepository({"gold": [FED_NEWS]}),
+    )
+
+
+def test_fed_fixture_news_is_returned_in_turn():
+    d = _fed_deps("x")
+    C.answer(C.parse_request({"question": "Vì sao vàng giảm?"}), d)
+    out = d.client.calls[1]["messages"][-1]["content"][0]["toolResult"]["content"][0]["json"]
+    assert [it["link"] for it in out["items"]] == [FED_LINK]
+
+
+def test_answer_with_typo_link_keeps_answer_and_reports_stray_link():
+    text = _fed_answer(FED_LINK_TYPO)
+    res = C.answer(C.parse_request({"question": "Vì sao vàng giảm?"}), _fed_deps(text))
+    assert res.answer == text  # không sửa answer phía server
+    assert res.citations == []
+    assert res.stray_links == [FED_LINK_TYPO]
+
+
+def test_answer_with_exact_link_has_citation_and_no_stray_link():
+    res = C.answer(
+        C.parse_request({"question": "Vì sao vàng giảm?"}), _fed_deps(_fed_answer(FED_LINK))
+    )
+    assert [c["link"] for c in res.citations] == [FED_LINK]
+    assert res.stray_links == []
+
+
+def _mismatch_logs(caplog):
+    return [
+        json.loads(r.getMessage())
+        for r in caplog.records
+        if "citation_link_mismatch" in r.getMessage()
+    ]
+
+
+def test_handler_logs_citation_link_mismatch_without_question(caplog):
+    text = _fed_answer(FED_LINK_TYPO)
+    with caplog.at_level("INFO"):
+        resp = H.handle(event({"question": "câu hỏi bí mật về vàng"}), _fed_deps(text))
+    assert resp["statusCode"] == 200
+    body = json.loads(resp["body"])
+    assert body["answer"] == text and body["citations"] == []  # contract không đổi
+    (entry,) = _mismatch_logs(caplog)
+    assert entry == {
+        "event": "citation_link_mismatch",
+        "request_id": "req-1",
+        "prompt_version": "chatbot-haiku-v2",
+        "n_stray_links": 1,
+        "stray_links": [FED_LINK_TYPO],
+    }
+    assert "câu hỏi bí mật" not in caplog.text
+
+
+def test_handler_no_mismatch_log_when_links_match(caplog):
+    with caplog.at_level("INFO"):
+        resp = H.handle(event({"question": "Vì sao vàng giảm?"}), _fed_deps(_fed_answer(FED_LINK)))
+    assert resp["statusCode"] == 200
+    assert _mismatch_logs(caplog) == []

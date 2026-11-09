@@ -1,13 +1,14 @@
 """Kiểm tra hạ tầng `POST /chat`: asset Lambda, IAM, route, CORS, bảng chat-usage, alarm.
 
 Đối chiếu contract `POST /chat` (mục "Tài nguyên và quyền IAM của Lambda chat") và docstring của
-infra/lambda/chat_api/handler.py. Cần aws-cdk-lib (có trong infra\\.venv, không có trong CI) nên
-tự bỏ qua khi thiếu. Chạy: infra\\.venv\\Scripts\\activate rồi
+infra/lambda/chat_api/handler.py. Cần aws-cdk-lib (có trong infra/.venv, không có trong CI) nên
+tự bỏ qua khi thiếu. Chạy: infra/.venv/Scripts/activate rồi
 python -m pytest -q tests/test_infra_chat_api.py (từ gốc repo).
 """
 
 import importlib.util
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -69,6 +70,20 @@ def _synth() -> dict:
             env_name="dev",
             forecasts_table=serving.forecasts_table,
             user_pool=auth.user_pool,
+            # Các giá trị fixture chỉ phục vụ synth stack trong test chat.
+            # CpawsApiStack yêu cầu cấu hình champion để tạo Accuracy Lambda.
+            model_versions={
+                "gold": "test-gold-v1",
+                "silver": "test-silver-v1",
+                "brent": "test-brent-v1",
+                "wti": "test-wti-v1",
+            },
+            champion_effective_base_dates={
+                "gold": "2026-10-01",
+                "silver": "2026-10-01",
+                "brent": "2026-10-01",
+                "wti": "2026-10-01",
+            },
             env=env,
         )
         ops = CpawsOpsStack(
@@ -128,16 +143,33 @@ def test_chat_asset_has_exactly_the_documented_files(tmp_path):
         assert (tmp_path / dest).read_bytes() == (ROOT / src).read_bytes(), dest
 
 
+# Module trong src/chatbot cố ý không đóng gói vào Lambda. router.py: không đạt bộ giữ riêng nên
+# chưa nối vào /chat (docs/experiments/chatbot-router-proposal.md mục 6.1); khi nối thì bỏ khỏi đây
+NOT_IN_LAMBDA = {"router.py"}
+
+
 def test_chat_asset_covers_every_module_prompt_and_news_file():
     sources = set(chat_asset.CHAT_ASSET_FILES.values())
     # Phước thêm module mới vào src/chatbot mà quên asset → Lambda lỗi import lúc chạy
     for module in (ROOT / "src" / "chatbot").glob("*.py"):
+        if module.name in NOT_IN_LAMBDA:
+            continue
         assert module.relative_to(ROOT).as_posix() in sources, module.name
     handler = _load_handler()
     for prompt in handler.PROMPT_FILES.values():
         assert chat_asset.CHAT_ASSET_FILES[f"prompts/{prompt}"] == f"docs/prompts/{prompt}"
     for news in (ROOT / "infra" / "lambda" / "chat_api" / "news").glob("*.json"):
         assert chat_asset.CHAT_ASSET_FILES[f"news/{news.name}"] == news.relative_to(ROOT).as_posix()
+
+
+def test_modules_left_out_of_lambda_are_not_imported_by_chat():
+    """Module không đóng gói thì chat.py và handler không được import, nếu không Lambda lỗi."""
+    for path in (ROOT / "src" / "chatbot" / "chat.py", ROOT / "infra/lambda/chat_api/handler.py"):
+        text = path.read_text(encoding="utf-8")
+        for name in NOT_IN_LAMBDA:
+            mod = name.removesuffix(".py")
+            assert f"chatbot.{mod}" not in text, (path.name, name)
+            assert not re.search(rf"from\s+(src\.)?chatbot\s+import\s+[^\n]*\b{mod}\b", text)
 
 
 def test_chat_asset_build_fails_loudly_on_missing_source(tmp_path, monkeypatch):
@@ -302,18 +334,65 @@ def test_forecast_api_role_is_unchanged(templates):
 # ---------- API Gateway ----------
 
 
-def _method(template: dict, http_method: str, path_part: str) -> dict:
+def _method(
+    template: dict,
+    http_method: str,
+    path_part: str,
+    *,
+    parent_path: str | None = None,
+) -> dict:
     resources = _items(template, "AWS::ApiGateway::Resource")
-    ((rid, _),) = [(k, r) for k, r in resources.items() if r["Properties"]["PathPart"] == path_part]
-    ((method,),) = [
-        [
-            m["Properties"]
-            for m in _items(template, "AWS::ApiGateway::Method").values()
-            if m["Properties"]["HttpMethod"] == http_method
-            and m["Properties"]["ResourceId"] == {"Ref": rid}
+
+    if parent_path is None:
+        candidates = [
+            (rid, resource)
+            for rid, resource in resources.items()
+            if resource["Properties"].get("PathPart") == path_part
         ]
+    else:
+        parent_part = parent_path.strip("/").split("/")[-1]
+
+        parent_candidates = [
+            rid
+            for rid, resource in resources.items()
+            if resource["Properties"].get("PathPart") == parent_part
+        ]
+
+        assert len(parent_candidates) == 1, (
+            f"Expected exactly one parent resource for {parent_path!r}; "
+            f"found {len(parent_candidates)}"
+        )
+
+        parent_id = parent_candidates[0]
+
+        candidates = [
+            (rid, resource)
+            for rid, resource in resources.items()
+            if resource["Properties"].get("PathPart") == path_part
+            and resource["Properties"].get("ParentId") == {"Ref": parent_id}
+        ]
+
+    assert len(candidates) == 1, (
+        f"Expected exactly one API resource for path_part={path_part!r}, "
+        f"parent_path={parent_path!r}; found {len(candidates)}"
+    )
+
+    rid, _ = candidates[0]
+
+    methods = [
+        method["Properties"]
+        for method in _items(template, "AWS::ApiGateway::Method").values()
+        if method["Properties"]["HttpMethod"] == http_method
+        and method["Properties"]["ResourceId"] == {"Ref": rid}
     ]
-    return method
+
+    assert len(methods) == 1, (
+        f"Expected exactly one {http_method} method for "
+        f"path_part={path_part!r}, parent_path={parent_path!r}; "
+        f"found {len(methods)}"
+    )
+
+    return methods[0]
 
 
 def test_post_chat_requires_cognito_and_invokes_chat_lambda(templates):
@@ -335,11 +414,20 @@ def test_post_chat_requires_cognito_and_invokes_chat_lambda(templates):
 
 def test_forecast_routes_keep_their_auth(templates):
     assert _method(templates["api"], "GET", "health")["AuthorizationType"] == "NONE"
+
     assert _method(templates["api"], "GET", "forecasts")["AuthorizationType"] == (
         "COGNITO_USER_POOLS"
     )
-    assert _method(templates["api"], "GET", "{asset}")["AuthorizationType"] == (
-        "COGNITO_USER_POOLS"
+
+    # Phải kiểm tra đúng /forecasts/{asset}, không nhầm với /accuracy/{asset}.
+    assert (
+        _method(
+            templates["api"],
+            "GET",
+            "{asset}",
+            parent_path="/forecasts",
+        )["AuthorizationType"]
+        == "COGNITO_USER_POOLS"
     )
 
 

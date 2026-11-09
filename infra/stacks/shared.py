@@ -76,6 +76,11 @@ def forecasts_table_name(env_name: str) -> str:
     return f"cpaws-{env_name}-forecasts"
 
 
+def accuracy_api_function_name(env_name: str) -> str:
+    """Tên Lambda đọc kết quả Rolling Accuracy."""
+    return f"cpaws-{env_name}-accuracy-api"
+
+
 def news_labels_table_name(env_name: str) -> str:
     """Tên bảng DynamoDB NewsLabels (contract POST /chat, ADR-0003 mục 6). Phải KHỚP table_name
     trong cpaws_serving_stack.py (tests/test_infra_stacks.py kiểm tra). Lambda collector tin (ghi)
