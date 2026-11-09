@@ -27,6 +27,7 @@ CHAT_ASSET_FILES: dict[str, str] = {
     "chatbot/tools.py": "src/chatbot/tools.py",
     "chatbot/news.py": "src/chatbot/news.py",
     "chatbot/chat.py": "src/chatbot/chat.py",
+    "chatbot/citations.py": "src/chatbot/citations.py",
     "chatbot/quota.py": "src/chatbot/quota.py",
     # Prompt v2 đã khóa SHA-256; đổi prompt hoặc tin demo đều phải deploy lại CpawsApi
     "prompts/chatbot-nova-v2.md": "docs/prompts/chatbot-nova-v2.md",
