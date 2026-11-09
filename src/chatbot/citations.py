@@ -35,7 +35,11 @@ def cited_items(answer_text: str, items: Iterable[Mapping[str, Any]]) -> list[di
 
 def stray_links(answer_text: str, items: Iterable[Mapping[str, Any]]) -> list[str]:
     """URL trong câu trả lời không trùng nguyên văn link của tin get_news trả về trong lượt này,
-    theo thứ tự xuất hiện, không lặp. Không có tin nào trong lượt thì mọi URL đều lạ."""
+    theo thứ tự xuất hiện, không lặp. Không có tin nào trong lượt thì mọi URL đều lạ.
+
+    URL người dùng tự dán vào câu hỏi mà model chép lại cũng là URL lạ, nên log
+    `citation_link_mismatch` có thể chứa URL đó. Chấp nhận được vì log group của Lambda chat chỉ giữ
+    1 tháng (`infra/stacks/cpaws_api_stack.py`, `RetentionDays.ONE_MONTH`)."""
     known = {it["link"] for it in items if it.get("link")}
     out: list[str] = []
     for m in _URL_RE.finditer(answer_text or ""):
