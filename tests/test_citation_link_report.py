@@ -1,7 +1,8 @@
 """Script đếm URL lạ của benchmark (scripts/benchmark/citation_link_report.py): không gọi mạng.
 
 Fixture là ca thật buổi tập 7/11: link "pressrelease" (thiếu "s") so với link đã lưu
-"pressreleases". Khải chốt (b) ngày 8/11: chỉ đếm, chưa tính trượt, không đổi khóa v2.
+"pressreleases". Script chỉ đếm và liệt kê; check_answer của benchmark chấm URL lạ là trượt bằng
+cùng hàm src/chatbot/citations.py (Khải, review PR #104 điểm 3, thay phương án (b) ngày 8/11).
 """
 
 from __future__ import annotations
@@ -69,9 +70,11 @@ def test_main_reads_raw_jsonl_and_prints_json(tmp_path, capsys):
     assert R.main([str(tmp_path / "missing.jsonl")]) == 2
 
 
-def test_script_and_shared_module_stay_outside_v2_lock():
-    """(b): đo, chưa tính trượt; khóa v2 chỉ dùng đối chiếu lần chạy 30/10, không được đổi."""
-    for path in ("scripts/benchmark/citation_link_report.py", "src/chatbot/citations.py"):
-        assert path not in BC.TOOL_CODE_PATHS
+def test_report_script_outside_lock_and_citations_module_hashed():
+    """Trước đây (phương án (b) 8/11): script và citations.py đều ngoài khóa, check_answer không
+    chấm link. Nay (Khải, review PR #104): check_answer gọi citations.stray_links nên citations.py
+    được băm cùng code chấm; script chỉ đọc lại kết quả cũ nên vẫn ngoài khóa."""
+    assert "scripts/benchmark/citation_link_report.py" not in BC.TOOL_CODE_PATHS
+    assert "src/chatbot/citations.py" in BC.TOOL_CODE_PATHS
     bench = (ROOT / "scripts" / "benchmark" / "chatbot_benchmark.py").read_text(encoding="utf-8")
-    assert "citations" not in bench.split("def check_answer", 1)[1].split("\ndef ", 1)[0]
+    assert "CI.stray_links(" in bench.split("def check_answer", 1)[1].split("\ndef ", 1)[0]

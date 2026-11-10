@@ -36,6 +36,9 @@ QUESTION_SETS = {
         # Khóa 29/10 bằng `--print-lock --set v2` (prompt v2 bản dev3, Khải duyệt ở review
         # approve PR #38 ngày 27/10); đề xuất v2 mục 11. Đổi bất kỳ file hay tham số nào trong
         # khóa thì lần chạy official dừng trước khi gọi Bedrock.
+        # Khóa này khớp code tới commit trước PR đưa kiểm URL lạ vào check_answer (Khải, review
+        # PR #104 điểm 3). Official v2 đã chạy 30/10, không chạy lại. Từ PR đó tool_code lệch
+        # (7 khóa còn lại vẫn khớp) nên lần chạy official v2 dừng vì lệch khóa.
         "locked_sha256": {
             "questions_simple": "e6eb5ac6e32f1efac892326c6587ece48162e2b861300e18f47a2af9e5594e11",
             "prompt_simple": "1246a14cbe38dd1ca90df393d7390703e50263e5ad0f750bdd9bb5e606f1af4f",
@@ -119,6 +122,13 @@ QUESTION_SETS = {
         "news_default_to": "2026-10-21",
         "require_lock": True,
         "holdout": True,
+        # Ngưỡng riêng (Khải chốt 9/11): 8 câu nên cần 7/8 (87,5%, gần 90% của v2 nhất), thay
+        # 25/30 của THRESHOLDS["complex"]. Không đặt min_tool_accuracy: 8 câu không câu nào
+        # expects_tool nên tool_accuracy là None. Nằm trong set_config nên bị khóa cùng bộ;
+        # THRESHOLDS giữ nguyên để scoring_config của v2 không lệch thêm.
+        # all_policy_pass (Khải, review PR #109): 4 câu chính sách đều phải đạt, nên câu được phép
+        # trượt chỉ có thể là chào hỏi hoặc khái niệm. Chỉ áp cho bộ A; bộ B giữ như cũ.
+        "thresholds": {"complex": {"min_pass": 7, "max_truncated": 1, "all_policy_pass": True}},
         "locked_sha256": None,
     },
 }
@@ -177,11 +187,14 @@ PROMPT_SETS = {
         "tool_format": "v2",
     },
 }
-# Code được khóa cùng bộ câu hỏi (Khải 25/10: khóa cả code tool chatbot)
+# Code được khóa cùng bộ câu hỏi (Khải 25/10: khóa cả code tool chatbot). citations.py: check_answer
+# gọi stray_links để chấm URL lạ (Khải, review PR #104 điểm 3), nên băm cùng cho mọi bộ khóa từ
+# nay (bộ v4). Khóa v2 tính trên danh sách cũ ở commit lần chạy 30/10, chỉ để đối chiếu.
 TOOL_CODE_PATHS = (
     "scripts/benchmark/chatbot_benchmark.py",
     "src/chatbot/tools.py",
     "infra/lambda/forecast_api/forecast_format.py",
+    "src/chatbot/citations.py",
 )
 RUN_TYPES = (
     "official",

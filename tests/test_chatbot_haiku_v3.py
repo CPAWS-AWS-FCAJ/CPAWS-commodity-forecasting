@@ -37,9 +37,14 @@ def _no_real_sleep(monkeypatch):
 
 
 def test_v2_lock_unchanged_with_v3_sets():
-    """Thêm PROMPT_SETS["v3"] và hai bộ dev không đổi bất kỳ mục nào trong khóa 29/10 của v2."""
-    assert CB.lock_hashes("v2") == C.QUESTION_SETS["v2"]["locked_sha256"]
-    CB.verify_lock("v2")
+    """Thêm PROMPT_SETS["v3"] và hai bộ dev không đổi mục nào trong khóa 29/10 của v2 ngoài
+    tool_code (lệch từ PR đưa kiểm URL lạ vào check_answer; official v2 đã chạy 30/10)."""
+    locked = C.QUESTION_SETS["v2"]["locked_sha256"]
+    current = CB.lock_hashes("v2")
+    diff = sorted(k for k in set(locked) | set(current) if locked.get(k) != current.get(k))
+    assert diff == ["tool_code"]
+    with pytest.raises(RuntimeError, match="lệch khóa"):
+        CB.verify_lock("v2")
 
 
 def test_v2_set_config_ignores_v3_prompt_set(monkeypatch):

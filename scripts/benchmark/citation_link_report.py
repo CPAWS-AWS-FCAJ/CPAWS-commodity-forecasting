@@ -4,9 +4,9 @@ URL lạ: URL trong câu trả lời không trùng nguyên văn link của tin g
 đó (buổi tập 7/11: model chép "pressrelease" thay cho "pressreleases", link mở lỗi và tin không vào
 citations). Cách so dùng chung với Lambda: `src/chatbot/citations.py`.
 
-Đây là số đo ghi nhận, chưa tính trượt (Khải chốt (b) ngày 8/11): script và `citations.py` không
-nằm trong TOOL_CODE_PATHS (configs/chatbot_benchmark.py), nên không đổi khóa SHA-256 của bộ câu hỏi
-nào. Khi khóa bộ câu mới cho v4 thì đưa kiểm này vào `check_answer` và băm `citations.py` cùng.
+Script này chỉ đếm và liệt kê. `check_answer` của benchmark chấm URL lạ là trượt bằng cùng hàm
+`stray_links`, và `citations.py` nằm trong TOOL_CODE_PATHS, để khóa cùng bộ chính thức v4 (Khải,
+review PR #104 điểm 3). Script không nằm trong TOOL_CODE_PATHS: đọc lại kết quả cũ không đổi khóa bộ nào.
 
 Chạy: python scripts/benchmark/citation_link_report.py <raw.jsonl> [<raw.jsonl> ...] [--json]
 """

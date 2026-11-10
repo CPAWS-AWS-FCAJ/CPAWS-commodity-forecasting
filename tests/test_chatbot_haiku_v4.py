@@ -35,8 +35,14 @@ V4_TEXT = CB.load_system_prompt(V4_PROMPT)
 
 
 def test_v2_lock_unchanged_with_v4_set():
-    assert CB.lock_hashes("v2") == C.QUESTION_SETS["v2"]["locked_sha256"]
-    CB.verify_lock("v2")
+    """Thêm bộ prompt v4 và các bộ v4 không đổi mục nào trong khóa v2 ngoài tool_code (lệch từ PR
+    đưa kiểm URL lạ vào check_answer; official v2 đã chạy 30/10, không chạy lại)."""
+    locked = C.QUESTION_SETS["v2"]["locked_sha256"]
+    current = CB.lock_hashes("v2")
+    diff = sorted(k for k in set(locked) | set(current) if locked.get(k) != current.get(k))
+    assert diff == ["tool_code"]
+    with pytest.raises(RuntimeError, match="lệch khóa"):
+        CB.verify_lock("v2")
 
 
 def test_report_script_not_in_locked_code():

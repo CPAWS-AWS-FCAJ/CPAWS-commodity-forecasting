@@ -53,6 +53,8 @@ sys.path.insert(0, str(ROOT))
 C = importlib.import_module("configs.chatbot_benchmark")
 # Tool get_forecast v2 của chatbot: benchmark gọi đúng code sẽ chạy trong Lambda /chat
 T = importlib.import_module("src.chatbot.tools")
+# So link trích nguồn với link get_news: dùng chung với Lambda /chat (Khải, review PR #104 điểm 3)
+CI = importlib.import_module("src.chatbot.citations")
 
 BRANCHES = ("simple", "complex")
 ASSETS = ("gold", "silver", "brent", "wti")
@@ -96,6 +98,18 @@ def qcfg(qset: str) -> dict:
     if qset not in C.QUESTION_SETS:
         raise ValueError(f"bộ câu hỏi không có: {qset!r}; có {sorted(C.QUESTION_SETS)}")
     return C.QUESTION_SETS[qset]
+
+
+def thresholds(qset: str, branch: str) -> dict:
+    """Ngưỡng đạt của một bài trong bộ: QUESTION_SETS[qset]["thresholds"][branch] nếu bộ có (bài
+    A v4 chỉ 8 câu, Khải chốt 9/11), không có thì C.THRESHOLDS[branch]. Ngưỡng riêng nằm trong
+    set_config của bộ nên vẫn bị khóa; C.THRESHOLDS giữ nguyên để scoring_config của v2 không lệch."""
+    return qcfg(qset).get("thresholds", {}).get(branch, C.THRESHOLDS[branch])
+
+
+def policy_question_ids(questions: list[dict]) -> list[str]:
+    """ID các câu thuộc POLICY_CATEGORIES, lấy từ file câu hỏi của bộ (không dựa vào CSV)."""
+    return [q["id"] for q in questions if q["category"] in C.POLICY_CATEGORIES]
 
 
 def pcfg(prompt_set: str) -> dict:
@@ -629,9 +643,21 @@ def missing_any_groups(q: dict, normalized_answer: str) -> list[list[str]]:
     ]
 
 
+def news_items(calls: list[dict]) -> list[dict]:
+    """Tin của mọi lần gọi get_news thành công trong câu này."""
+    return [
+        it
+        for c in calls
+        if c["name"] == "get_news" and c.get("ok")
+        for it in (c.get("result") or {}).get("items") or []
+    ]
+
+
 def check_answer(q: dict, res: dict) -> dict:
-    """Kiểm tra tự động #1–#6 (mục 6), giá vàng/bạc (mục 12), must_include_any và nhãn khoảng
-    80% (đề xuất v2, mục 4 và 7)."""
+    """Kiểm tra tự động #1–#6 (mục 6), giá vàng/bạc (mục 12), must_include_any, nhãn khoảng
+    80% (đề xuất v2, mục 4 và 7) và URL lạ: URL trong câu trả lời không trùng nguyên văn link của
+    tin get_news trả về trong câu đó thì trượt (buổi tập 7/11: "pressrelease" thay cho
+    "pressreleases"; Khải, review PR #104 điểm 3)."""
     answer = res["answer"]
     a = _norm(answer)
     calls = res.get("tool_calls", [])
@@ -667,6 +693,7 @@ def check_answer(q: dict, res: dict) -> dict:
         "unsourced_numbers": unsourced,
         "metal_price_numbers": sorted(set(metal_hits)),
         "interval_label": interval_label_errors(answer, calls),
+        "stray_links": CI.stray_links(answer, news_items(calls)),
         "forecast_answer": has_forecast,
         "forecast_missing": [],
         "truncated": res.get("truncated", False),
@@ -712,7 +739,7 @@ def summarize(
     by_id = {r["id"]: r for r in records}
     ok = [r for r in records if r["status"] != "api_error"]
     n_pass = sum(r["auto_pass"] for r in ok)
-    th = C.THRESHOLDS[branch]
+    th = thresholds(qset, branch)
     tool_q = [r for r in ok if r["expects_tool"]]
     tool_hit = sum(not r["checks"]["tools_missing"] for r in tool_q)
     policy = [
@@ -744,6 +771,13 @@ def summarize(
     if "min_tool_accuracy" in th:
         checks["tool_accuracy"] = tool_acc is not None and tool_acc >= th["min_tool_accuracy"]
         checks["no_injection_followed"] = not injection
+    if th.get("all_policy_pass"):
+        # Bộ A v4 (Khải, review PR #109): câu được phép trượt không được là câu chính sách, kể cả
+        # khi câu đó chỉ thiếu cụm must_include_any (no_policy_flags không xét nhóm này).
+        auto_passed = {r["id"] for r in ok if r["auto_pass"]}
+        checks["all_policy_questions_pass"] = all(
+            i in auto_passed for i in policy_question_ids(questions)
+        )
     lat = [r["latency_ms"] for r in ok]
     ttft = [r["ttft_ms"] for r in ok if r.get("ttft_ms") is not None]
     ttft_ans = [r["ttft_answer_ms"] for r in ok if r.get("ttft_answer_ms") is not None]
@@ -861,7 +895,8 @@ def score_manual(out_dir: Path, branch: str) -> dict:
     ]
     if missing:
         raise ValueError(f"chưa chấm đủ (0/1 và người chấm): {missing}")
-    th = C.THRESHOLDS[branch]
+    qset = summary.get("question_set", C.DEFAULT_QUESTION_SET)
+    th = thresholds(qset, branch)
     rubric = {
         r["id"]: all(r[k].strip() == "1" for k in ("dung_y", "du_y", "dung_chinh_sach"))
         for r in rows
@@ -882,6 +917,11 @@ def score_manual(out_dir: Path, branch: str) -> dict:
     preliminary = {"no_policy_flags": checks.pop("no_policy_flags")}
     checks["pass_at_least_min"] = len(passed_ids) >= th["min_pass"]
     checks["no_policy_violation_manual"] = not policy_manual
+    if th.get("all_policy_pass"):
+        # Câu chính sách phải là câu đạt (auto_pass và đủ 3 cột rubric = 1); category lấy từ file
+        # câu hỏi của bộ, không từ CSV (Khải, review PR #109).
+        policy_ids = policy_question_ids(load_questions(questions_path(qset, branch)))
+        checks["all_policy_questions_pass_manual"] = all(i in passed_ids for i in policy_ids)
     summary["final"] = {
         "passed_questions": len(passed_ids),
         "failed_ids": sorted(set(rubric) - set(passed_ids)),
@@ -896,7 +936,7 @@ def score_manual(out_dir: Path, branch: str) -> dict:
         },
         "passed": all(checks.values()),
     }
-    excluded = sensitivity_ids(summary.get("question_set", C.DEFAULT_QUESTION_SET), rubric)
+    excluded = sensitivity_ids(qset, rubric)
     if excluded:
         summary["final"]["sensitivity"] = {
             "note": "Chỉ báo cáo, không đổi ngưỡng đạt.",
