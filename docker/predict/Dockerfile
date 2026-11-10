@@ -22,15 +22,9 @@ COPY src/__init__.py ${LAMBDA_TASK_ROOT}/src/__init__.py
 COPY src/data/ ${LAMBDA_TASK_ROOT}/src/data/
 COPY src/features/ ${LAMBDA_TASK_ROOT}/src/features/
 COPY src/forecast/ ${LAMBDA_TASK_ROOT}/src/forecast/
-# The rolling_8w accuracy job (Lambda cpaws-<env>-accuracy-job) runs from this same image with
-# its own CMD set by CDK (src.eval.lambda_accuracy.handler). The whole src/eval/ folder is copied:
-# the run identity hashes src/eval/rolling_*.py and lambda_accuracy.py (metrics.py and
-# walk_forward.py are copied but never imported by the job).
-COPY src/eval/ ${LAMBDA_TASK_ROOT}/src/eval/
 
 # Environment set by CDK: LAKE_BUCKET, LAKE_PREFIX (optional), FORECASTS_TABLE, MODEL_VERSION,
 # MODEL_VERSIONS (per-asset champion JSON; overrides MODEL_VERSION), SHADOW_MODELS (optional,
 # "s1a-l094"; empty = off), CPAWS_ENV. Model artifacts are downloaded to /tmp
 # (see src/forecast/predict.py and the docstring of src/forecast/lambda_predict.py).
-# The accuracy job overrides CMD and gets its own environment (infra/stacks/cpaws_data_stack.py).
 CMD ["src.forecast.lambda_predict.handler"]

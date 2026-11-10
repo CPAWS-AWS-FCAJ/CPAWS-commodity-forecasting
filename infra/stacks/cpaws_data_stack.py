@@ -3,10 +3,6 @@
 Luồng hằng ngày: Scheduler → Lambda ingest (bất đồng bộ, retry 1) → destination OnSuccess và
 OnFailure đều gọi Lambda predict (retry 0). Ingest lỗi một nguồn vẫn ghi snapshot cho tài sản tốt
 nên predict vẫn chạy; tài sản thiếu phiên cuối bị bỏ qua và predict raise PredictFailed (alarm).
-
-Job accuracy rolling_8w (Walk-forward Contract §7): Lambda riêng từ image predict (CMD
-src.eval.lambda_accuracy.handler), lịch 13:45 UTC thứ Ba-thứ Bảy, tạo ở trạng thái TẮT tới khi nhóm
-xem dry-run 4 tài sản và quyết cách xử lý base_price_revision_mismatch (handoff §7).
 """
 
 import json
@@ -26,8 +22,6 @@ from aws_cdk import aws_scheduler as scheduler
 from constructs import Construct
 
 from .shared import (
-    ACCURACY_HANDLER,
-    ACCURACY_SCHEDULE_EXPRESSION,
     ALLOWED_SHADOW_MODELS,
     BASELINE_MODEL_VERSION,
     FORECAST_ASSETS,
@@ -37,8 +31,6 @@ from .shared import (
     PREDICT_METRIC_NAMESPACE,
     PREDICT_SHADOW_ERROR_LOG_TERMS,
     PREDICT_SHADOW_ERRORS_METRIC,
-    accuracy_job_function_name,
-    accuracy_table_name,
     forecasts_table_name,
     ingest_function_name,
     predict_function_name,
@@ -98,64 +90,6 @@ def predict_champion_environment(
     return env
 
 
-# Khóa evidence job accuracy đọc (rolling_sources.Evidence, rolling_shadow); khóa lạ = gõ sai.
-ROLLING_EVIDENCE_KEYS = ("release", "legacy", "shadow_release")
-# Tổng kích thước env của một Lambda tối đa 4 KB (tên + giá trị). Vượt thì chuyển evidence sang
-# ROLLING_EVIDENCE_PATH (file trong image, handoff §2), không cắt bớt evidence.
-LAMBDA_ENV_LIMIT_BYTES = 4096
-
-
-def accuracy_job_environment(
-    *,
-    lake_bucket: str,
-    forecasts_table: str,
-    accuracy_table: str,
-    model_versions: Mapping[str, str],
-    effective_base_dates: Mapping[str, str],
-    evidence: Mapping[str, Any],
-) -> dict[str, str]:
-    """Biến môi trường job accuracy (handoff rolling accuracy §2), kiểm ngay lúc synth.
-
-    - MODEL_VERSIONS, CHAMPION_EFFECTIVE_BASE_DATES: cùng giá trị đã kiểm cho predict (truyền
-      từ CpawsDataStack.champion_*), cùng thứ tự tài sản; contract cấm suy từ STATE.
-    - ROLLING_EVIDENCE_JSON: evidence đã duyệt qua PR (trust boundary là review, handoff §3);
-      chỉ nhận object có khóa trong ROLLING_EVIDENCE_KEYS. `{}` = fail-closed (not_ready).
-    - Không đặt LAKE_PREFIX (rỗng, giống predict) và ROLLING_REVISION (mặc định 0): đổi revision
-      là correction có audit, làm bằng PR riêng.
-    """
-    if not isinstance(evidence, Mapping):
-        raise TypeError("accuracy evidence must be a JSON object")
-    unknown = sorted(set(evidence) - set(ROLLING_EVIDENCE_KEYS))
-    if unknown:
-        raise ValueError(f"unknown accuracy evidence keys: {unknown}")
-    if not isinstance(evidence.get("legacy", []), list):
-        raise TypeError("accuracy evidence 'legacy' must be a list")
-    for key in ("release", "shadow_release"):
-        if not isinstance(evidence.get(key, {}), Mapping):
-            raise TypeError(f"accuracy evidence {key!r} must be an object")
-    env = {
-        "LAKE_BUCKET": lake_bucket,
-        "FORECASTS_TABLE": forecasts_table,
-        "ACCURACY_TABLE": accuracy_table,
-        "MODEL_VERSIONS": json.dumps(
-            {a: model_versions[a] for a in FORECAST_ASSETS}, separators=(",", ":")
-        ),
-        "CHAMPION_EFFECTIVE_BASE_DATES": json.dumps(
-            {a: effective_base_dates[a] for a in FORECAST_ASSETS}, separators=(",", ":")
-        ),
-        "ROLLING_EVIDENCE_JSON": json.dumps(
-            dict(evidence), separators=(",", ":"), sort_keys=True, ensure_ascii=True
-        ),
-    }
-    size = sum(len(k.encode()) + len(v.encode()) for k, v in env.items())
-    if size >= LAMBDA_ENV_LIMIT_BYTES:
-        raise ValueError(
-            f"accuracy job environment ~{size} bytes exceeds the 4 KB Lambda limit: "
-            "move evidence to ROLLING_EVIDENCE_PATH"
-        )
-    return env
-
-
 class CpawsDataStack(Stack):
     def __init__(
         self,
@@ -169,8 +103,6 @@ class CpawsDataStack(Stack):
         predict_model_versions: Mapping[str, str],
         champion_effective_base_dates: Mapping[str, str],
         predict_shadow_models: str,
-        accuracy_image_tag: str,
-        accuracy_evidence: Mapping[str, Any],
         eia_parameter_name: str | None = None,
         predict_repo_only: bool = False,
         **kwargs: Any,
@@ -184,19 +116,9 @@ class CpawsDataStack(Stack):
             effective_base_dates=champion_effective_base_dates,
             shadow_models=predict_shadow_models,
         )
-        # Lambda accuracy-job dùng cùng giá trị, không khai báo lần hai.
+        # Lambda accuracy-job (PR sau) dùng cùng giá trị, không khai báo lần hai.
         self.champion_model_versions = dict(predict_model_versions)
         self.champion_effective_base_dates = dict(champion_effective_base_dates)
-        # Kiểm env job accuracy cả khi predict_repo_only (sai thì dừng ở synth). Tên bucket ghi
-        # thẳng (bằng bucket_name của Lake bên dưới) để kiểm được kích thước env 4 KB.
-        accuracy_env = accuracy_job_environment(
-            lake_bucket=f"cpaws-{env_name}-lake",
-            forecasts_table=forecasts_table_name(env_name),
-            accuracy_table=accuracy_table_name(env_name),
-            model_versions=self.champion_model_versions,
-            effective_base_dates=self.champion_effective_base_dates,
-            evidence=accuracy_evidence,
-        )
 
         # Data lake: raw/ clean/ features/ kb/ models/ (xem skill aws-serverless-platform)
         self.lake = s3.Bucket(
@@ -261,14 +183,6 @@ class CpawsDataStack(Stack):
                 champion_env=predict_champion_env,
             )
             predict_destination = destinations.LambdaDestination(self.predict_fn)
-
-        # Job accuracy cũng chạy từ image trong repo predict: chưa có image thì chưa tạo.
-        self.accuracy_fn: lambda_.DockerImageFunction | None = None
-        self.accuracy_schedule: scheduler.CfnSchedule | None = None
-        if not predict_repo_only:
-            self.accuracy_fn, self.accuracy_schedule = self._accuracy_job(
-                env_name=env_name, image_tag=accuracy_image_tag, accuracy_env=accuracy_env
-            )
 
         # Execution role của Lambda ingest, quyền tối thiểu theo
         # docs/handoff/ingest-lambda.md (mục "Quyền IAM tối thiểu"). Tuấn review.
@@ -425,9 +339,6 @@ class CpawsDataStack(Stack):
         CfnOutput(self, "PredictRepoUri", value=self.predict_repo.repository_uri)
         if self.predict_fn is not None:
             CfnOutput(self, "PredictFunctionName", value=self.predict_fn.function_name)
-        if self.accuracy_fn is not None and self.accuracy_schedule is not None:
-            CfnOutput(self, "AccuracyFunctionName", value=self.accuracy_fn.function_name)
-            CfnOutput(self, "AccuracyScheduleName", value=self.accuracy_schedule.name or "")
 
     def _predict_function(
         self, *, env_name: str, image_tag: str, model_version: str, champion_env: dict[str, str]
@@ -531,156 +442,3 @@ class CpawsDataStack(Stack):
                 **champion_env,
             },
         )
-
-    def _accuracy_job(
-        self, *, env_name: str, image_tag: str, accuracy_env: dict[str, str]
-    ) -> tuple[lambda_.DockerImageFunction, scheduler.CfnSchedule]:
-        """Lambda job accuracy rolling_8w + lịch TẮT (Walk-forward Contract §7.2, §7.5;
-        handoff rolling accuracy §2, §7, §8). IAM theo §7.5: đọc Forecasts/clean/shadow, ghi
-        Accuracy và chỉ eval/shadow_eval/. Tuấn review IAM."""
-        table_arn = self.format_arn(
-            service="dynamodb", resource="table", resource_name=accuracy_table_name(env_name)
-        )
-        forecasts_arn = self.format_arn(
-            service="dynamodb", resource="table", resource_name=forecasts_table_name(env_name)
-        )
-        role = iam.Role(
-            self,
-            "AccuracyJobRole",
-            role_name=f"cpaws-{env_name}-accuracy-job-role",
-            assumed_by=iam.ServicePrincipal("lambda.amazonaws.com"),
-            managed_policies=[
-                iam.ManagedPolicy.from_aws_managed_policy_name(
-                    "service-role/AWSLambdaBasicExecutionRole"
-                )
-            ],
-        )
-        # Sources đọc snapshot clean/prices/dt=<ngày>/ (prices, quality, rejected) và shadow S1a
-        # eval/shadow/s1a-l094/dt=<ngày>/<asset>.json; head_object dùng cùng quyền GetObject.
-        role.add_to_policy(
-            iam.PolicyStatement(
-                sid="LakeReadPricesShadow",
-                actions=["s3:GetObject"],
-                resources=[
-                    self.lake.arn_for_objects("clean/prices/*"),
-                    self.lake.arn_for_objects("eval/shadow/s1a-l094/*"),
-                ],
-            )
-        )
-        # GetObject bị 403 thì Sources gọi ListObjectsV2(Prefix=key) để phân biệt thiếu object với
-        # thiếu quyền (§7.5): giới hạn đúng hai prefix đọc, không mở toàn lake.
-        role.add_to_policy(
-            iam.PolicyStatement(
-                sid="LakeListPricesShadow",
-                actions=["s3:ListBucket"],
-                resources=[self.lake.bucket_arn],
-                conditions={
-                    "StringLike": {"s3:prefix": ["clean/prices/*", "eval/shadow/s1a-l094/*"]}
-                },
-            )
-        )
-        # Report so sánh S1a: put_object có IfNoneMatch="*" (không ghi đè), chỉ prefix shadow_eval.
-        role.add_to_policy(
-            iam.PolicyStatement(
-                sid="WriteShadowEvalReports",
-                actions=["s3:PutObject"],
-                resources=[self.lake.arn_for_objects("eval/shadow_eval/*")],
-            )
-        )
-        # Forecasts chỉ Query (Sources.records); không Scan/GetItem/ghi.
-        role.add_to_policy(
-            iam.PolicyStatement(
-                sid="ForecastsQuery",
-                actions=["dynamodb:Query"],
-                resources=[forecasts_arn],
-            )
-        )
-        # AccuracyStore: PutItem/UpdateItem có điều kiện, GetItem + Query ConsistentRead.
-        # Không Scan, DeleteItem, BatchWriteItem hay index (§7.5: bảng không có GSI/LSI).
-        role.add_to_policy(
-            iam.PolicyStatement(
-                sid="AccuracyReadWrite",
-                actions=[
-                    "dynamodb:GetItem",
-                    "dynamodb:PutItem",
-                    "dynamodb:UpdateItem",
-                    "dynamodb:Query",
-                ],
-                resources=[table_arn],
-            )
-        )
-
-        log_group = logs.LogGroup(
-            self,
-            "AccuracyJobLogGroup",
-            log_group_name=f"/aws/lambda/{accuracy_job_function_name(env_name)}",
-            retention=logs.RetentionDays.ONE_MONTH,
-            removal_policy=RemovalPolicy.DESTROY,
-        )
-
-        # 1.024 MB / 300 s (§7.2) chưa đo trên dữ liệu thật: ghi Duration và Max Memory Used ở
-        # lần dry-run đầu (handoff §7). Không reserved concurrency (§7.2): idempotency nhờ
-        # run fingerprint và ghi có điều kiện.
-        fn = lambda_.DockerImageFunction(
-            self,
-            "AccuracyJobFunction",
-            function_name=accuracy_job_function_name(env_name),
-            description="Daily rolling_8w accuracy of champion forecasts (and S1a shadow report)",
-            code=lambda_.DockerImageCode.from_ecr(
-                self.predict_repo, tag_or_digest=image_tag, cmd=[ACCURACY_HANDLER]
-            ),
-            architecture=lambda_.Architecture.X86_64,
-            memory_size=1024,
-            timeout=Duration.seconds(300),
-            role=role,
-            log_group=log_group,
-            # Retry 0 (§7.2): lượt lỗi chờ lượt sau; alarm Errors ở CpawsOps.
-            retry_attempts=0,
-            environment=accuracy_env,
-        )
-
-        # Role riêng cho lịch accuracy (không dùng chung role lịch ingest): chỉ gọi được Lambda này.
-        schedule_group_arn = self.format_arn(
-            service="scheduler", resource="schedule-group", resource_name=INGEST_SCHEDULE_GROUP
-        )
-        schedule_role = iam.Role(
-            self,
-            "AccuracyScheduleRole",
-            role_name=f"cpaws-{env_name}-accuracy-schedule-role",
-            assumed_by=iam.PrincipalWithConditions(
-                iam.ServicePrincipal("scheduler.amazonaws.com"),
-                {
-                    "StringEquals": {
-                        "aws:SourceAccount": self.account,
-                        "aws:SourceArn": schedule_group_arn,
-                    }
-                },
-            ),
-        )
-        schedule_role.add_to_policy(
-            iam.PolicyStatement(
-                sid="InvokeAccuracyJobFunction",
-                actions=["lambda:InvokeFunction"],
-                resources=[fn.function_arn],
-            )
-        )
-        # TẮT (handoff §7 bước 4): chỉ bật bằng PR sau dry-run 4 tài sản, kiểm IAM/image và
-        # thống nhất phương án base_price_revision_mismatch. Payload {} = 4 tài sản, ghi thật.
-        schedule = scheduler.CfnSchedule(
-            self,
-            "AccuracySchedule",
-            name=f"cpaws-{env_name}-accuracy-daily",
-            group_name=INGEST_SCHEDULE_GROUP,
-            description="Daily rolling_8w accuracy, 13:45 UTC Tue-Sat (after predict)",
-            schedule_expression=ACCURACY_SCHEDULE_EXPRESSION,
-            schedule_expression_timezone="UTC",
-            flexible_time_window=scheduler.CfnSchedule.FlexibleTimeWindowProperty(mode="OFF"),
-            state="DISABLED",
-            target=scheduler.CfnSchedule.TargetProperty(
-                arn=fn.function_arn,
-                role_arn=schedule_role.role_arn,
-                input="{}",
-                retry_policy=scheduler.CfnSchedule.RetryPolicyProperty(maximum_retry_attempts=0),
-            ),
-        )
-        return fn, schedule

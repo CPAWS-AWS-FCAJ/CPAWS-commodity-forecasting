@@ -48,32 +48,16 @@ PREDICT_SHADOW_ERROR_LOG_TERMS = (
 )
 
 
-# ---------- Lambda job accuracy rolling_8w (Walk-forward Contract §7.2, §7.5, §7.6) ----------
-
-# Lịch job: sau predict (12:15 UTC), thứ Ba-thứ Bảy 13:45 UTC = 20:45 giờ VN. Logical as_of của
-# job là job_utc_date T13:45:00Z (src/eval/lambda_accuracy.py), nên lịch không được sớm hơn mốc này.
-ACCURACY_SCHEDULE_EXPRESSION = "cron(45 13 ? * TUE-SAT *)"
-# Handler riêng trong cùng image predict (CMD ghi đè lúc tạo Lambda).
-ACCURACY_HANDLER = "src.eval.lambda_accuracy.handler"
-
-
-def accuracy_job_function_name(env_name: str) -> str:
-    """Tên Lambda job accuracy. CpawsData đặt function_name và log group theo tên này, CpawsOps
-    dùng nó cho dimension của alarm (giống ingest_function_name)."""
-    return f"cpaws-{env_name}-accuracy-job"
-
-
-def accuracy_table_name(env_name: str) -> str:
-    """Tên bảng DynamoDB Accuracy theo Walk-forward Contract §7.5 (`cpaws-<env>-accuracy`).
-    Bảng do Tuấn tạo (PR riêng); job dựng ARN từ tên này, không export chéo stack."""
-    return f"cpaws-{env_name}-accuracy"
-
-
 def forecasts_table_name(env_name: str) -> str:
     """Tên bảng DynamoDB Forecasts. Phải KHỚP table_name trong cpaws_serving_stack.py
     (tests/test_infra_stacks.py kiểm tra). CpawsData tham chiếu bảng theo tên thay vì export
     chéo stack, để không khóa CpawsServing khi sau này đổi bảng."""
     return f"cpaws-{env_name}-forecasts"
+
+
+def accuracy_table_name(env_name: str) -> str:
+    """Tên bảng DynamoDB Accuracy."""
+    return f"cpaws-{env_name}-accuracy"
 
 
 def accuracy_api_function_name(env_name: str) -> str:

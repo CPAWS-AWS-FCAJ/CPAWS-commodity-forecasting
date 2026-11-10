@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 """Điểm vào CDK của CPAWS."""
 
-import json
 import os
-from pathlib import Path
 
 import aws_cdk as cdk
 from stacks.cpaws_api_stack import CpawsApiStack
@@ -11,12 +9,7 @@ from stacks.cpaws_auth_stack import CpawsAuthStack
 from stacks.cpaws_data_stack import CpawsDataStack
 from stacks.cpaws_ops_stack import CpawsOpsStack
 from stacks.cpaws_serving_stack import CpawsServingStack
-from stacks.shared import (
-    accuracy_job_function_name,
-    chat_api_function_name,
-    ingest_function_name,
-    predict_function_name,
-)
+from stacks.shared import chat_api_function_name, ingest_function_name, predict_function_name
 
 # Tag image của Lambda ingest trong ECR = SHA ngắn của commit merge PR #43 trên developer
 # (gồm #36: đọc EIA key từ SSM, và #43: cờ INGEST_STALE). Không dùng 6956620/3d391dd:
@@ -51,18 +44,6 @@ CHAMPION_EFFECTIVE_BASE_DATES = {
 #   cdk deploy CpawsData -c shadow_models=off
 DEFAULT_PREDICT_SHADOW_MODELS = "s1a-l094"
 
-# Image của Lambda job accuracy (cpaws-<env>-accuracy-job): repo predict, CMD riêng. Tag = SHA
-# ngắn của commit e31c928 (PR job accuracy, commit đầu: thêm COPY src/eval/ vào
-# docker/predict/Dockerfile; src/ còn lại giống c61abdd). Lambda predict vẫn giữ c61abdd (mốc #79).
-# Đổi: cdk deploy CpawsData -c accuracy_image_tag=<commit>
-DEFAULT_ACCURACY_IMAGE_TAG = "e31c928"
-# Evidence đã duyệt cho job accuracy (handoff rolling accuracy §3): release cutover #48 (PR #82,
-# Khải approve). Đổi evidence (thêm legacy[] hay shadow_release) = PR sửa file + cdk deploy.
-ACCURACY_EVIDENCE_FILE = (
-    Path(__file__).resolve().parents[1]
-    / "docs/eval/evidence/rolling-release-cutover-2026-10-30.json"
-)
-
 app = cdk.App()
 env_name = app.node.try_get_context("env") or "dev"
 ingest_image_tag = app.node.try_get_context("ingest_image_tag") or DEFAULT_INGEST_IMAGE_TAG
@@ -83,8 +64,6 @@ predict_shadow_models = (
 )
 if predict_shadow_models.lower() in ("off", "none"):
     predict_shadow_models = ""
-accuracy_image_tag = app.node.try_get_context("accuracy_image_tag") or DEFAULT_ACCURACY_IMAGE_TAG
-accuracy_evidence = json.loads(ACCURACY_EVIDENCE_FILE.read_text(encoding="utf-8"))
 # Chỉ dùng ở lần deploy ĐẦU TIÊN (tạo ECR predict trước khi có image): -c predict_repo_only=true
 predict_repo_only = str(app.node.try_get_context("predict_repo_only") or "").lower() == "true"
 
@@ -110,13 +89,11 @@ CpawsDataStack(
     predict_model_versions=CHAMPION_MODEL_VERSIONS,
     champion_effective_base_dates=CHAMPION_EFFECTIVE_BASE_DATES,
     predict_shadow_models=predict_shadow_models,
-    accuracy_image_tag=accuracy_image_tag,
-    accuracy_evidence=accuracy_evidence,
     predict_repo_only=predict_repo_only,
     env=aws_env,
 )
 
-# Monitoring và cảnh báo cho Lambda ingest, predict (cả shadow S1a), job accuracy và /chat
+# Monitoring và cảnh báo cho Lambda ingest, predict (cả shadow S1a) và /chat
 CpawsOpsStack(
     app,
     "CpawsOps",
@@ -124,7 +101,6 @@ CpawsOpsStack(
     ingest_function_name=ingest_function_name(env_name),
     predict_function_name=predict_function_name(env_name),
     chat_function_name=chat_api_function_name(env_name),
-    accuracy_function_name=accuracy_job_function_name(env_name),
     alarm_email=alarm_email,
     env=aws_env,
 )

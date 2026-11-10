@@ -8,13 +8,5 @@
     "conditional_write": true,
     "input_asof_checked": true
   },
-  "legacy": [],
-  "shadow_release": {
-    "approved": true,
-    "approved_by": "kha1rk19fpt",
-    "approved_at": "2026-11-04T14:22:51Z",
-    "reference": "pr79-deploy-2026-11-04T05:33:31Z+run-2026-11-04T12:15Z",
-    "deployed_at": "2026-11-04T05:33:31.234Z",
-    "immutable_write": true
-  }
+  "legacy": []
 }

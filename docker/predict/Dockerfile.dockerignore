@@ -6,6 +6,5 @@
 !src/data/
 !src/features/
 !src/forecast/
-!src/eval/
 **/__pycache__
 **/*.pyc

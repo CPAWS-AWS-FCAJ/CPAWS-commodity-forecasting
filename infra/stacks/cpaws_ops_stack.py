@@ -1,5 +1,4 @@
-"""Stack CpawsOps: alarm cho Lambda ingest, predict (cả shadow S1a), job accuracy và /chat, gửi
-email qua SNS."""
+"""Stack CpawsOps: alarm cho Lambda ingest, predict (cả shadow S1a) và /chat, gửi email qua SNS."""
 
 from typing import Any
 
@@ -28,7 +27,6 @@ class CpawsOpsStack(Stack):
         ingest_function_name: str,
         predict_function_name: str,
         chat_function_name: str | None = None,
-        accuracy_function_name: str | None = None,
         alarm_email: str | None = None,
         **kwargs: Any,
     ) -> None:
@@ -111,37 +109,10 @@ class CpawsOpsStack(Stack):
         )
         shadow_alarm.add_alarm_action(cw_actions.SnsAction(self.alarm_topic))
 
-        if accuracy_function_name:
-            self._add_accuracy_alarm(env_name, accuracy_function_name)
-
         if chat_function_name:
             self._add_chat_alarms(env_name, chat_function_name)
 
         CfnOutput(self, "AlarmTopicArn", value=self.alarm_topic.topic_arn)
-
-    def _add_accuracy_alarm(self, env_name: str, accuracy_function_name: str) -> None:
-        """Job accuracy raise AccuracyFailed khi có tài sản FAILED (không tính dry_run, not_ready),
-        cộng timeout/crash: đều vào Errors của Lambda (Walk-forward Contract §7.2). Lịch đang tắt
-        thì không có số liệu → bình thường."""
-        accuracy_errors = cloudwatch.Metric(
-            namespace="AWS/Lambda",
-            metric_name="Errors",
-            dimensions_map={"FunctionName": accuracy_function_name},
-            statistic="Sum",
-            period=Duration.minutes(5),
-        )
-        alarm = cloudwatch.Alarm(
-            self,
-            "AccuracyJobErrorsAlarm",
-            alarm_name=f"cpaws-{env_name}-accuracy-job-errors",
-            alarm_description="Accuracy job reported >= 1 error (asset FAILED, timeout or crash)",
-            metric=accuracy_errors,
-            threshold=1,
-            evaluation_periods=1,
-            comparison_operator=cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,
-            treat_missing_data=cloudwatch.TreatMissingData.NOT_BREACHING,
-        )
-        alarm.add_alarm_action(cw_actions.SnsAction(self.alarm_topic))
 
     def _add_chat_alarms(self, env_name: str, chat_function_name: str) -> None:
         """Hai alarm cho Lambda /chat: timeout/crash (Errors của Lambda) và lỗi không lường trước
