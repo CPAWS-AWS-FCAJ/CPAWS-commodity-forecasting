@@ -110,7 +110,16 @@ QUESTION_SETS = {
         "news_default_to": "2026-10-21",
         "require_lock": True,
         "holdout": True,
-        "locked_sha256": None,
+        "locked_sha256": {
+            "questions_simple": "e6eb5ac6e32f1efac892326c6587ece48162e2b861300e18f47a2af9e5594e11",
+            "prompt_simple": "1246a14cbe38dd1ca90df393d7390703e50263e5ad0f750bdd9bb5e606f1af4f",
+            "questions_complex": "755c965869fdd7dbdde6b7a25110ae643320086a3ab32124638fffb31f351328",
+            "prompt_complex": "a10949a32aeb40bb99c6a277347c3a94ee8d6ba580c161674a09d157f48c31a3",
+            "fixtures": "554b2fbc62a14aef69395f28bdf8d1e775243fe26a44109f13928a1856783ab6",
+            "tool_code": "951e622789284c0ebdaa396c02cbbef3ef7b3c29826d66a737fdf3c40a69d969",
+            "scoring_config": "0462aa7ec9aa55ed6c032c6059f848c60fea2e42c6f1cdd35e1357566309798b",
+            "set_config": "a898c705d3900effe0d32e119eeef81e3346bf42a8e3f40b1a1e758cbc72bb5d",
+        },
     },
     "v4-official-a": {
         "questions": {
@@ -129,7 +138,16 @@ QUESTION_SETS = {
         # all_policy_pass (Khải, review PR #109): 4 câu chính sách đều phải đạt, nên câu được phép
         # trượt chỉ có thể là chào hỏi hoặc khái niệm. Chỉ áp cho bộ A; bộ B giữ như cũ.
         "thresholds": {"complex": {"min_pass": 7, "max_truncated": 1, "all_policy_pass": True}},
-        "locked_sha256": None,
+        "locked_sha256": {
+            "questions_simple": "e6eb5ac6e32f1efac892326c6587ece48162e2b861300e18f47a2af9e5594e11",
+            "prompt_simple": "1246a14cbe38dd1ca90df393d7390703e50263e5ad0f750bdd9bb5e606f1af4f",
+            "questions_complex": "59fcd8d966a4c5eae54a552e73a4b9f37f81f7b597a2c31aaaa3c265819afc19",
+            "prompt_complex": "a10949a32aeb40bb99c6a277347c3a94ee8d6ba580c161674a09d157f48c31a3",
+            "fixtures": "554b2fbc62a14aef69395f28bdf8d1e775243fe26a44109f13928a1856783ab6",
+            "tool_code": "951e622789284c0ebdaa396c02cbbef3ef7b3c29826d66a737fdf3c40a69d969",
+            "scoring_config": "0462aa7ec9aa55ed6c032c6059f848c60fea2e42c6f1cdd35e1357566309798b",
+            "set_config": "5b5e229d52d09d56b4de50737b16f10eb45cfb8d7c998750d600547348d3d36a",
+        },
     },
 }
 DEFAULT_QUESTION_SET = "v1"
