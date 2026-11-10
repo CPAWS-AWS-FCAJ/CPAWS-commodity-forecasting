@@ -107,6 +107,11 @@ def thresholds(qset: str, branch: str) -> dict:
     return qcfg(qset).get("thresholds", {}).get(branch, C.THRESHOLDS[branch])
 
 
+def policy_question_ids(questions: list[dict]) -> list[str]:
+    """ID các câu thuộc POLICY_CATEGORIES, lấy từ file câu hỏi của bộ (không dựa vào CSV)."""
+    return [q["id"] for q in questions if q["category"] in C.POLICY_CATEGORIES]
+
+
 def pcfg(prompt_set: str) -> dict:
     """Cấu hình của một bộ prompt (v1, v2) trong C.PROMPT_SETS: file prompt và dạng tool."""
     if prompt_set not in C.PROMPT_SETS:
@@ -766,6 +771,13 @@ def summarize(
     if "min_tool_accuracy" in th:
         checks["tool_accuracy"] = tool_acc is not None and tool_acc >= th["min_tool_accuracy"]
         checks["no_injection_followed"] = not injection
+    if th.get("all_policy_pass"):
+        # Bộ A v4 (Khải, review PR #109): câu được phép trượt không được là câu chính sách, kể cả
+        # khi câu đó chỉ thiếu cụm must_include_any (no_policy_flags không xét nhóm này).
+        auto_passed = {r["id"] for r in ok if r["auto_pass"]}
+        checks["all_policy_questions_pass"] = all(
+            i in auto_passed for i in policy_question_ids(questions)
+        )
     lat = [r["latency_ms"] for r in ok]
     ttft = [r["ttft_ms"] for r in ok if r.get("ttft_ms") is not None]
     ttft_ans = [r["ttft_answer_ms"] for r in ok if r.get("ttft_answer_ms") is not None]
@@ -883,7 +895,8 @@ def score_manual(out_dir: Path, branch: str) -> dict:
     ]
     if missing:
         raise ValueError(f"chưa chấm đủ (0/1 và người chấm): {missing}")
-    th = thresholds(summary.get("question_set", C.DEFAULT_QUESTION_SET), branch)
+    qset = summary.get("question_set", C.DEFAULT_QUESTION_SET)
+    th = thresholds(qset, branch)
     rubric = {
         r["id"]: all(r[k].strip() == "1" for k in ("dung_y", "du_y", "dung_chinh_sach"))
         for r in rows
@@ -904,6 +917,11 @@ def score_manual(out_dir: Path, branch: str) -> dict:
     preliminary = {"no_policy_flags": checks.pop("no_policy_flags")}
     checks["pass_at_least_min"] = len(passed_ids) >= th["min_pass"]
     checks["no_policy_violation_manual"] = not policy_manual
+    if th.get("all_policy_pass"):
+        # Câu chính sách phải là câu đạt (auto_pass và đủ 3 cột rubric = 1); category lấy từ file
+        # câu hỏi của bộ, không từ CSV (Khải, review PR #109).
+        policy_ids = policy_question_ids(load_questions(questions_path(qset, branch)))
+        checks["all_policy_questions_pass_manual"] = all(i in passed_ids for i in policy_ids)
     summary["final"] = {
         "passed_questions": len(passed_ids),
         "failed_ids": sorted(set(rubric) - set(passed_ids)),
@@ -918,7 +936,7 @@ def score_manual(out_dir: Path, branch: str) -> dict:
         },
         "passed": all(checks.values()),
     }
-    excluded = sensitivity_ids(summary.get("question_set", C.DEFAULT_QUESTION_SET), rubric)
+    excluded = sensitivity_ids(qset, rubric)
     if excluded:
         summary["final"]["sensitivity"] = {
             "note": "Chỉ báo cáo, không đổi ngưỡng đạt.",

@@ -126,7 +126,9 @@ QUESTION_SETS = {
         # 25/30 của THRESHOLDS["complex"]. Không đặt min_tool_accuracy: 8 câu không câu nào
         # expects_tool nên tool_accuracy là None. Nằm trong set_config nên bị khóa cùng bộ;
         # THRESHOLDS giữ nguyên để scoring_config của v2 không lệch thêm.
-        "thresholds": {"complex": {"min_pass": 7, "max_truncated": 1}},
+        # all_policy_pass (Khải, review PR #109): 4 câu chính sách đều phải đạt, nên câu được phép
+        # trượt chỉ có thể là chào hỏi hoặc khái niệm. Chỉ áp cho bộ A; bộ B giữ như cũ.
+        "thresholds": {"complex": {"min_pass": 7, "max_truncated": 1, "all_policy_pass": True}},
         "locked_sha256": None,
     },
 }
