@@ -20,6 +20,20 @@ PREDICT_TAG = "def5678"
 ASSETS = ("gold", "silver", "brent", "wti")
 BASELINE_VERSIONS = dict.fromkeys(ASSETS, "baseline-q252")
 EFFECTIVE_DATES = dict.fromkeys(ASSETS, "2026-10-26")
+ACCURACY_TAG = "acc1234"
+# Cùng dạng file evidence release của #82 (docs/eval/evidence/...), giá trị tổng hợp cho test
+RELEASE_EVIDENCE = {
+    "release": {
+        "approved": True,
+        "approved_by": "reviewer",
+        "approved_at": "2026-11-04T03:49:22Z",
+        "reference": "synthetic-reference",
+        "cutover_at": "2026-10-30T08:10:06Z",
+        "conditional_write": True,
+        "input_asof_checked": True,
+    },
+    "legacy": [],
+}
 
 
 def _synth(
@@ -30,6 +44,7 @@ def _synth(
     model_versions: dict | None = None,
     effective_base_dates: dict | None = None,
     shadow_models: str = "s1a-l094",
+    accuracy_evidence: dict | None = None,
 ) -> dict:
     """Synth CpawsData, CpawsOps và CpawsServing cho env dev, trả về template dạng dict."""
     sys.path.insert(0, str(INFRA_DIR))
@@ -41,7 +56,11 @@ def _synth(
         from stacks.cpaws_data_stack import CpawsDataStack
         from stacks.cpaws_ops_stack import CpawsOpsStack
         from stacks.cpaws_serving_stack import CpawsServingStack
-        from stacks.shared import ingest_function_name, predict_function_name
+        from stacks.shared import (
+            accuracy_job_function_name,
+            ingest_function_name,
+            predict_function_name,
+        )
 
         configured_model_versions = BASELINE_VERSIONS if model_versions is None else model_versions
         configured_effective_dates = (
@@ -59,6 +78,8 @@ def _synth(
             predict_model_versions=configured_model_versions,
             champion_effective_base_dates=configured_effective_dates,
             predict_shadow_models=shadow_models,
+            accuracy_image_tag=ACCURACY_TAG,
+            accuracy_evidence=RELEASE_EVIDENCE if accuracy_evidence is None else accuracy_evidence,
             predict_repo_only=predict_repo_only,
             eia_parameter_name=eia_parameter_name,
         )
@@ -68,6 +89,7 @@ def _synth(
             env_name="dev",
             ingest_function_name=ingest_function_name("dev"),
             predict_function_name=predict_function_name("dev"),
+            accuracy_function_name=accuracy_job_function_name("dev"),
         )
         serving = CpawsServingStack(app, "CpawsServing", env_name="dev")
 
@@ -145,7 +167,7 @@ def test_alarms_watch_the_deployed_lambdas(templates):
         r["Properties"]["FunctionName"]
         for r in _resources(templates["data"], "AWS::Lambda::Function")
     }
-    assert fn_names == {"cpaws-dev-ingest", "cpaws-dev-predict"}
+    assert fn_names == {"cpaws-dev-ingest", "cpaws-dev-predict", "cpaws-dev-accuracy-job"}
     watched = set()
     for alarm in _resources(templates["ops"], "AWS::CloudWatch::Alarm"):
         if alarm["Properties"]["Namespace"] != "AWS/Lambda":
@@ -358,7 +380,9 @@ def test_predict_table_name_matches_serving_stack(templates):
 def test_repo_only_mode_creates_repo_without_predict_lambda():
     t = _synth(predict_repo_only=True)["data"]
     names = {r["Properties"]["FunctionName"] for r in _resources(t, "AWS::Lambda::Function")}
-    assert names == {"cpaws-dev-ingest"}
+    assert names == {"cpaws-dev-ingest"}  # job accuracy cũng cần image trong repo predict
+    schedules = {r["Properties"]["Name"] for r in _resources(t, "AWS::Scheduler::Schedule")}
+    assert schedules == {"cpaws-dev-ingest-daily"}
     repos = {r["Properties"]["RepositoryName"] for r in _resources(t, "AWS::ECR::Repository")}
     assert repos == {"cpaws-dev-ingest", "cpaws-dev-predict"}
     cfg = _event_invoke_config(t, _function_id(t, "cpaws-dev-ingest"))
@@ -366,11 +390,19 @@ def test_repo_only_mode_creates_repo_without_predict_lambda():
     assert "DestinationConfig" not in cfg
 
 
+def _schedule(template: dict, name: str) -> dict:
+    (schedule,) = [
+        r
+        for r in _resources(template, "AWS::Scheduler::Schedule")
+        if r["Properties"]["Name"] == name
+    ]
+    return schedule
+
+
 def test_schedule_matches_config(templates):
     from src.data.config import INGEST_SCHEDULE_EXPRESSION, INGEST_SCHEDULE_TIMEZONE
 
-    (schedule,) = _resources(templates["data"], "AWS::Scheduler::Schedule")
-    props = schedule["Properties"]
+    props = _schedule(templates["data"], "cpaws-dev-ingest-daily")["Properties"]
     assert props["ScheduleExpression"] == INGEST_SCHEDULE_EXPRESSION
     assert props["ScheduleExpressionTimezone"] == INGEST_SCHEDULE_TIMEZONE
     assert props["Target"]["RetryPolicy"]["MaximumRetryAttempts"] == 0
@@ -417,7 +449,7 @@ def _render(value) -> str:
     raise AssertionError(f"Chưa hỗ trợ intrinsic function: {value!r}")
 
 
-def _scheduler_role_id(template: dict) -> str:
+def _scheduler_role_id(template: dict, role_name: str = "cpaws-dev-ingest-schedule-role") -> str:
     roles = [
         rid
         for rid, role in _items(template, "AWS::IAM::Role").items()
@@ -426,16 +458,21 @@ def _scheduler_role_id(template: dict) -> str:
             for st in role["Properties"]["AssumeRolePolicyDocument"]["Statement"]
         )
     ]
-    assert len(roles) == 1
-    return roles[0]
+    # Hai lịch (ingest, accuracy), mỗi lịch một role riêng
+    assert len(roles) == 2
+    (rid,) = [r for r in roles if template["Resources"][r]["Properties"]["RoleName"] == role_name]
+    return rid
 
 
-def _scheduler_role(template: dict) -> dict:
-    return template["Resources"][_scheduler_role_id(template)]
+def _scheduler_role(template: dict, role_name: str = "cpaws-dev-ingest-schedule-role") -> dict:
+    return template["Resources"][_scheduler_role_id(template, role_name)]
 
 
-def test_scheduler_trust_policy_is_scoped_to_account_and_schedule_group(templates):
-    role = _scheduler_role(templates["data"])
+@pytest.mark.parametrize(
+    "role_name", ["cpaws-dev-ingest-schedule-role", "cpaws-dev-accuracy-schedule-role"]
+)
+def test_scheduler_trust_policy_is_scoped_to_account_and_schedule_group(templates, role_name):
+    role = _scheduler_role(templates["data"], role_name)
     (statement,) = role["Properties"]["AssumeRolePolicyDocument"]["Statement"]
     assert statement["Effect"] == "Allow"
     assert statement["Action"] == "sts:AssumeRole"
@@ -451,8 +488,9 @@ def test_scheduler_trust_policy_is_scoped_to_account_and_schedule_group(template
     )
 
 
-def test_schedule_belongs_to_the_group_allowed_by_the_trust_policy(templates):
-    (schedule,) = _resources(templates["data"], "AWS::Scheduler::Schedule")
+@pytest.mark.parametrize("name", ["cpaws-dev-ingest-daily", "cpaws-dev-accuracy-daily"])
+def test_schedule_belongs_to_the_group_allowed_by_the_trust_policy(templates, name):
+    schedule = _schedule(templates["data"], name)
     assert schedule["Properties"]["GroupName"] == EXPECTED_SCHEDULE_GROUP
 
 
@@ -598,8 +636,243 @@ def test_news_labels_statements_are_least_privilege(statement_fn, action):
 
 def test_existing_lambdas_have_no_news_labels_access(templates):
     for name in ("data", "ops", "serving"):
-        for policy in _resources(templates[name], "AWS::IAM::Policy"):
-            assert "news-labels" not in str(policy["Properties"]["PolicyDocument"])
+        for p in _resources(templates[name], "AWS::IAM::Policy"):
+            assert "news-labels" not in str(p["Properties"]["PolicyDocument"])
+
+
+# ---------- Job accuracy rolling_8w (Walk-forward Contract §7.2, §7.5; handoff §2, §7, §8) ----------
+
+
+def _accuracy_fn(template: dict) -> dict:
+    return template["Resources"][_function_id(template, "cpaws-dev-accuracy-job")]["Properties"]
+
+
+def test_accuracy_job_lambda_configuration(templates):
+    sys.path.insert(0, str(INFRA_DIR))
+    try:
+        from stacks import shared
+    finally:
+        sys.path.remove(str(INFRA_DIR))
+    t = templates["data"]
+    fn = _accuracy_fn(t)
+    # §7.2: timeout 300 s, retry 0, không reserved concurrency; ngoài VPC như predict
+    assert fn["MemorySize"] == 1024 and fn["Timeout"] == 300
+    assert fn["PackageType"] == "Image" and fn["Architectures"] == ["x86_64"]
+    assert "VpcConfig" not in fn and "ReservedConcurrentExecutions" not in fn
+    assert _event_invoke_config(t, _function_id(t, "cpaws-dev-accuracy-job")) == {
+        "FunctionName": {"Ref": _function_id(t, "cpaws-dev-accuracy-job")},
+        "MaximumRetryAttempts": 0,
+        "Qualifier": "$LATEST",
+    }
+    # Cùng repo ECR predict, tag riêng, CMD = handler accuracy
+    image_parts = fn["Code"]["ImageUri"]["Fn::Join"][1]
+    assert image_parts[-1].endswith(f":{ACCURACY_TAG}") and "PredictRepo" in str(image_parts)
+    assert fn["ImageConfig"] == {"Command": [shared.ACCURACY_HANDLER]}
+    (log_group,) = [
+        r["Properties"]
+        for r in _resources(t, "AWS::Logs::LogGroup")
+        if r["Properties"]["LogGroupName"] == "/aws/lambda/cpaws-dev-accuracy-job"
+    ]
+    assert log_group["RetentionInDays"] == 30
+
+
+def test_accuracy_job_environment_matches_handler(templates):
+    env = _accuracy_fn(templates["data"])["Environment"]["Variables"]
+    assert set(env) == {
+        "LAKE_BUCKET",
+        "FORECASTS_TABLE",
+        "ACCURACY_TABLE",
+        "MODEL_VERSIONS",
+        "CHAMPION_EFFECTIVE_BASE_DATES",
+        "ROLLING_EVIDENCE_JSON",
+    }
+    assert env["ACCURACY_TABLE"] == "cpaws-dev-accuracy"  # Walk-forward Contract §7.5
+    assert env["FORECASTS_TABLE"] == "cpaws-dev-forecasts"
+    assert env["LAKE_BUCKET"] == "cpaws-dev-lake"
+    # Cùng mapping với predict (một nguồn trong app.py), đúng thứ tự tài sản
+    assert env["MODEL_VERSIONS"] == _predict_env(templates["data"])["MODEL_VERSIONS"]
+    assert json.loads(env["CHAMPION_EFFECTIVE_BASE_DATES"]) == EFFECTIVE_DATES
+    assert json.loads(env["ROLLING_EVIDENCE_JSON"]) == RELEASE_EVIDENCE
+    # Handler đọc được đúng env này (không cần AWS). infra\\.venv không có pandas/boto3 thì bỏ qua
+    # phần này (venv gốc có pandas nhưng không có aws_cdk): chạy đủ trong venv có cả hai.
+    parse_config = pytest.importorskip("src.eval.lambda_accuracy").parse_config
+
+    configs, evidence, dry_run = parse_config({"dry_run": True}, env, "2026-11-07T14:00:00Z")
+    assert [c.asset for c in configs] == list(ASSETS) and evidence == RELEASE_EVIDENCE
+    assert dry_run is True
+
+
+@pytest.mark.parametrize(
+    "evidence",
+    [
+        {"releases": {}},  # khóa gõ sai
+        {"legacy": {}},  # legacy phải là list
+        {"release": []},  # release phải là object
+        {"legacy": [{"note": "x" * 4000}]},  # vượt 4 KB env Lambda
+    ],
+)
+def test_invalid_accuracy_evidence_fails_at_synth(evidence):
+    with pytest.raises((ValueError, TypeError)):
+        _synth(accuracy_evidence=evidence)
+
+
+def test_empty_accuracy_evidence_is_fail_closed_but_synthesizes():
+    """`{}` hợp lệ: job chạy nhưng mọi tài sản not_ready, không ghi (handoff §2)."""
+    env = _accuracy_fn(_synth(accuracy_evidence={})["data"])["Environment"]["Variables"]
+    assert env["ROLLING_EVIDENCE_JSON"] == "{}"
+
+
+def test_repo_accuracy_evidence_file_fits_lambda_env():
+    """File evidence thật (app.py đọc) synth được, vào env nguyên vẹn, env dưới 4 KB."""
+    evidence = json.loads(
+        (ROOT / "docs/eval/evidence/rolling-release-cutover-2026-10-30.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert evidence["shadow_release"]["approved"] is True  # Khải duyệt ở #89
+    env = _accuracy_fn(_synth(accuracy_evidence=evidence)["data"])["Environment"]["Variables"]
+    assert json.loads(env["ROLLING_EVIDENCE_JSON"]) == evidence
+    assert sum(len(k) + len(v) for k, v in env.items() if isinstance(v, str)) < 4096
+
+
+def test_accuracy_job_role_is_least_privilege(templates):
+    t = templates["data"]
+    role_id = _accuracy_fn(t)["Role"]["Fn::GetAtt"][0]
+    by_sid = {st["Sid"]: st for st in _role_statements(t, role_id)}
+    assert set(by_sid) == {
+        "LakeReadPricesShadow",
+        "LakeListPricesShadow",
+        "WriteShadowEvalReports",
+        "ForecastsQuery",
+        "AccuracyReadWrite",
+    }
+    read = by_sid["LakeReadPricesShadow"]
+    assert read["Action"] == "s3:GetObject"
+    assert sorted(_render(r).split("/", 1)[-1] for r in read["Resource"]) == [
+        "clean/prices/*",
+        "eval/shadow/s1a-l094/*",
+    ]
+    lst = by_sid["LakeListPricesShadow"]
+    assert lst["Action"] == "s3:ListBucket"
+    assert lst["Condition"] == {
+        "StringLike": {"s3:prefix": ["clean/prices/*", "eval/shadow/s1a-l094/*"]}
+    }
+    put = by_sid["WriteShadowEvalReports"]
+    assert put["Action"] == "s3:PutObject"
+    assert _render(put["Resource"]).endswith("/eval/shadow_eval/*")
+    query = by_sid["ForecastsQuery"]
+    assert query["Action"] == "dynamodb:Query"
+    assert _render(query["Resource"]).endswith(":table/cpaws-dev-forecasts")
+    acc = by_sid["AccuracyReadWrite"]
+    assert sorted(acc["Action"]) == [
+        "dynamodb:GetItem",
+        "dynamodb:PutItem",
+        "dynamodb:Query",
+        "dynamodb:UpdateItem",
+    ]
+    assert _render(acc["Resource"]).endswith(":table/cpaws-dev-accuracy")  # không index/*
+    for st in by_sid.values():
+        assert "*" not in str(st["Action"]) and st.get("Resource") != "*"
+        assert "Delete" not in str(st["Action"]) and "Scan" not in str(st["Action"])
+
+
+def test_predict_role_has_no_accuracy_access(templates):
+    """Predict không đọc/ghi Accuracy (§7.5); job accuracy không ghi Forecasts."""
+    t = templates["data"]
+    for fname in ("cpaws-dev-predict", "cpaws-dev-ingest"):
+        role_id = t["Resources"][_function_id(t, fname)]["Properties"]["Role"]["Fn::GetAtt"][0]
+        assert "cpaws-dev-accuracy" not in json.dumps(_role_statements(t, role_id))
+
+
+def test_accuracy_schedule_is_disabled_with_contract_cron(templates):
+    sys.path.insert(0, str(INFRA_DIR))
+    try:
+        from stacks import shared
+    finally:
+        sys.path.remove(str(INFRA_DIR))
+    t = templates["data"]
+    props = _schedule(t, "cpaws-dev-accuracy-daily")["Properties"]
+    # Cố ý ghi cứng: §7.2 chốt 13:45 UTC TUE-SAT (as_of = job date T13:45:00Z)
+    assert props["ScheduleExpression"] == "cron(45 13 ? * TUE-SAT *)"
+    assert shared.ACCURACY_SCHEDULE_EXPRESSION == props["ScheduleExpression"]
+    assert props["ScheduleExpressionTimezone"] == "UTC"
+    # Handoff §7 bước 4: tạo TẮT, chỉ bật sau dry-run 4 tài sản
+    assert props["State"] == "DISABLED"
+    assert props["Target"]["RetryPolicy"]["MaximumRetryAttempts"] == 0
+    assert props["Target"]["Input"] == "{}"
+    assert props["Target"]["Arn"] == {
+        "Fn::GetAtt": [_function_id(t, "cpaws-dev-accuracy-job"), "Arn"]
+    }
+    role_id = _scheduler_role_id(t, "cpaws-dev-accuracy-schedule-role")
+    assert props["Target"]["RoleArn"] == {"Fn::GetAtt": [role_id, "Arn"]}
+    (invoke,) = _role_statements(t, role_id)
+    assert invoke["Action"] == "lambda:InvokeFunction"
+    assert invoke["Resource"] == props["Target"]["Arn"]
+
+
+def test_ingest_schedule_role_cannot_invoke_accuracy_job(templates):
+    t = templates["data"]
+    acc_arn = {"Fn::GetAtt": [_function_id(t, "cpaws-dev-accuracy-job"), "Arn"]}
+    holders = [
+        p["Properties"]["Roles"]
+        for p in _resources(t, "AWS::IAM::Policy")
+        for st in p["Properties"]["PolicyDocument"]["Statement"]
+        if st["Action"] == "lambda:InvokeFunction"
+        and acc_arn in (st["Resource"] if isinstance(st["Resource"], list) else [st["Resource"]])
+    ]
+    assert holders == [[{"Ref": _scheduler_role_id(t, "cpaws-dev-accuracy-schedule-role")}]]
+
+
+def test_accuracy_job_errors_alarm(templates):
+    alarms = {
+        r["Properties"]["AlarmName"]: r["Properties"]
+        for r in _resources(templates["ops"], "AWS::CloudWatch::Alarm")
+    }
+    alarm = alarms["cpaws-dev-accuracy-job-errors"]
+    assert alarm["Namespace"] == "AWS/Lambda" and alarm["MetricName"] == "Errors"
+    assert alarm["Dimensions"] == [{"Name": "FunctionName", "Value": "cpaws-dev-accuracy-job"}]
+    assert alarm["Threshold"] == 1 and alarm["TreatMissingData"] == "notBreaching"
+    assert alarm["AlarmActions"]
+
+
+def test_accuracy_constants_match_eval_code():
+    """Tên bảng, handler và mốc as_of trong shared.py phải khớp code/contract của job."""
+    sys.path.insert(0, str(INFRA_DIR))
+    try:
+        from stacks import shared
+    finally:
+        sys.path.remove(str(INFRA_DIR))
+    module, func = shared.ACCURACY_HANDLER.rsplit(".", 1)
+    assert func == "handler"
+    src = (ROOT / Path(*module.split("."))).with_suffix(".py").read_text(encoding="utf-8")
+    assert "def handler(event, context=None):" in src
+    assert 'as_of = date + "T13:45:00Z"' in src  # lịch 13:45 UTC không sớm hơn as_of
+    contract = (ROOT / "docs" / "eval" / "walk-forward-contract.md").read_text(encoding="utf-8")
+    assert "`cpaws-<env>-accuracy`" in contract
+    assert shared.accuracy_table_name("dev") == "cpaws-dev-accuracy"
+    assert f"`{shared.ACCURACY_SCHEDULE_EXPRESSION}` UTC" in contract
+
+
+def test_predict_image_copies_eval_code_for_accuracy_job():
+    """Image dùng chung: Dockerfile + dockerignore phải đưa src/eval/ và mọi file mà run identity
+    băm (rolling_accuracy.implementation_identity) vào image."""
+    dockerfile = (ROOT / "docker" / "predict" / "Dockerfile").read_text(encoding="utf-8")
+    ignore = (ROOT / "docker" / "predict" / "Dockerfile.dockerignore").read_text(encoding="utf-8")
+    copied = [line.split()[1] for line in dockerfile.splitlines() if line.startswith("COPY src/")]
+    assert "src/eval/" in copied
+    assert "!src/eval/" in ignore.splitlines()
+    for path in (
+        "src/eval/lambda_accuracy.py",
+        "src/data/calendars.py",
+        "src/data/config.py",
+        "src/forecast/returns.py",
+        "src/forecast/baselines.py",
+        "src/forecast/forecast_record.py",
+    ):
+        assert any(path.startswith(c) for c in copied), path
+        assert (ROOT / path).is_file(), path
+    # CMD mặc định vẫn là predict: Lambda predict không đổi hành vi
+    assert 'CMD ["src.forecast.lambda_predict.handler"]' in dockerfile
 
 
 def test_accuracy_api_lambda_configuration(templates: dict) -> None:
