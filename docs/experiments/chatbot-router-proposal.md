@@ -3,7 +3,7 @@
 - Ngày: 25/10/2026
 - Người soạn: Phước
 - Người duyệt: Khải
-- Trạng thái: **Không đạt bộ giữ riêng** (26/30, ngưỡng ≥ 90%; mục 6.1). Luật khóa ngày 4/11/2026 ở commit `984d3fe`; Khải chạy bộ giữ riêng một lần cùng ngày. `/chat` giữ mọi câu đi Haiku
+- Trạng thái: **Không đạt bộ giữ riêng** (26/30, ngưỡng ≥ 90%; mục 6.1). Luật khóa ngày 4/11/2026 ở commit `984d3fe`; Khải chạy bộ giữ riêng một lần cùng ngày. `/chat` giữ mọi câu đi Haiku. Tùy chọn làm lại ở mục 6.2 **không thực hiện** (Khải chốt 10/11/2026)
 - Căn cứ: ADR-0004 mục 1 (router dùng luật, không gọi LLM; không chắc thì sang Claude Haiku 4.5)
 - Code: `src/chatbot/router.py`, cụm từ ở `configs/chatbot_router.py`, test ở `tests/test_router.py`, bộ câu ở `tests/router/cases.jsonl`, script chấm bộ giữ riêng ở `scripts/eval_router.py`, bộ giữ riêng ở `tests/router/heldout_v1.jsonl`, output lần chạy ở `docs/experiments/results/router-heldout-2026-11-04/eval_output.txt`
 - Phạm vi: code router có trên repo để chạy lại được, nhưng **không nối vào Lambda `/chat`** (`choose_branch()` trong `src/chatbot/chat.py` vẫn trả `complex` cho mọi câu). Demo 8/11 không dùng router (Khải, PR #66)
@@ -63,7 +63,7 @@ Luật xét theo thứ tự, luật đầu tiên khớp sẽ quyết định:
 
 1. **Sửa luật tư vấn lồng phân tích: đã sửa khi khóa luật (Phước, 4/11).** Câu xin tư vấn được coi là kèm phân tích (→ complex) khi có tài sản **và** có cụm phân tích/tin, kỳ hạn hoặc hỏi con số. Hệ quả: câu chỉ xin chiến lược có kèm kỳ hạn ("chiến lược lướt sóng WTI tuần này") sang Haiku. Không sao, vì Haiku cũng từ chối tư vấn, chỉ tốn chi phí hơn; lỗi đắt (thiếu số liệu) quan trọng hơn chi phí.
 2. Ngưỡng ở mục 4; Khải phụ trách và giữ bộ giữ riêng (cách soạn ở mục 6.1).
-3. **Không đưa router vào `/chat`** vì không đạt bộ giữ riêng (mục 6.1); mọi câu đi Haiku. Tùy chọn còn lại ở mục 6.2.
+3. **Không đưa router vào `/chat`** vì không đạt bộ giữ riêng (mục 6.1); mọi câu đi Haiku. Tùy chọn làm lại ở mục 6.2 không thực hiện (Khải chốt 10/11/2026).
 
 ## 6. Chạy bộ giữ riêng (một lần)
 
@@ -101,7 +101,13 @@ SHA-256 (nội dung đã đổi xuống dòng về LF) in trong output, đã đ�
 
 **Router không đạt.** Không sửa luật rồi chấm lại trên bộ này: bộ đã được xem, chấm lại sẽ cho kết quả lạc quan. Kết quả cũng cho thấy 100% trên bộ phát triển là quá lạc quan, đúng như cảnh báo ở mục 2.
 
-### 6.2. Tùy chọn sau kết quả (chưa quyết)
+### 6.2. Tùy chọn sau kết quả (không thực hiện)
+
+**Không thực hiện (Khải chốt 10/11/2026):** ưu tiên official v4 13–14/11 và đổi prompt trước 18/11; `/chat` giữ mọi câu đi Haiku.
+
+Lý do: lần chạy 4/11 có 4 câu sai, đều là câu đơn giản bị đưa sang Haiku (RH-003, RH-004, RH-007, RH-012), và 0 câu cần Haiku bị đưa sang Nova (mục 6.1). Vì vậy cho mọi câu đi Haiku chỉ tốn thêm chút chi phí, không mất chất lượng hay số liệu.
+
+Các tùy chọn đã cân nhắc (giữ lại làm dấu vết):
 
 Nếu nhóm còn thời gian:
 
