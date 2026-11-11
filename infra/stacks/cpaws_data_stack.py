@@ -5,8 +5,9 @@ OnFailure đều gọi Lambda predict (retry 0). Ingest lỗi một nguồn vẫ
 nên predict vẫn chạy; tài sản thiếu phiên cuối bị bỏ qua và predict raise PredictFailed (alarm).
 
 Job accuracy rolling_8w (Walk-forward Contract §7): Lambda riêng từ image predict (CMD
-src.eval.lambda_accuracy.handler), lịch 13:45 UTC thứ Ba-thứ Bảy, tạo ở trạng thái TẮT tới khi nhóm
-xem dry-run 4 tài sản và quyết cách xử lý base_price_revision_mismatch (handoff §7).
+src.eval.lambda_accuracy.handler), lịch 13:45 UTC thứ Ba-thứ Bảy. Lịch tạo TẮT (#89), BẬT sau
+dry-run 4 tài sản và review (handoff §7 bước 4); tắt lại không cần sửa code:
+cdk deploy CpawsData -c accuracy_schedule=off.
 """
 
 import json
@@ -171,6 +172,7 @@ class CpawsDataStack(Stack):
         predict_shadow_models: str,
         accuracy_image_tag: str,
         accuracy_evidence: Mapping[str, Any],
+        accuracy_schedule_enabled: bool = True,
         eia_parameter_name: str | None = None,
         predict_repo_only: bool = False,
         **kwargs: Any,
@@ -267,7 +269,10 @@ class CpawsDataStack(Stack):
         self.accuracy_schedule: scheduler.CfnSchedule | None = None
         if not predict_repo_only:
             self.accuracy_fn, self.accuracy_schedule = self._accuracy_job(
-                env_name=env_name, image_tag=accuracy_image_tag, accuracy_env=accuracy_env
+                env_name=env_name,
+                image_tag=accuracy_image_tag,
+                accuracy_env=accuracy_env,
+                schedule_enabled=accuracy_schedule_enabled,
             )
 
         # Execution role của Lambda ingest, quyền tối thiểu theo
@@ -533,7 +538,12 @@ class CpawsDataStack(Stack):
         )
 
     def _accuracy_job(
-        self, *, env_name: str, image_tag: str, accuracy_env: dict[str, str]
+        self,
+        *,
+        env_name: str,
+        image_tag: str,
+        accuracy_env: dict[str, str],
+        schedule_enabled: bool,
     ) -> tuple[lambda_.DockerImageFunction, scheduler.CfnSchedule]:
         """Lambda job accuracy rolling_8w + lịch TẮT (Walk-forward Contract §7.2, §7.5;
         handoff rolling accuracy §2, §7, §8). IAM theo §7.5: đọc Forecasts/clean/shadow, ghi
@@ -664,8 +674,9 @@ class CpawsDataStack(Stack):
                 resources=[fn.function_arn],
             )
         )
-        # TẮT (handoff §7 bước 4): chỉ bật bằng PR sau dry-run 4 tài sản, kiểm IAM/image và
-        # thống nhất phương án base_price_revision_mismatch. Payload {} = 4 tài sản, ghi thật.
+        # Handoff §7 bước 4: tạo TẮT (#89), bật sau dry-run 4 tài sản, kiểm IAM/image và review
+        # base_price_revision_mismatch. Tắt lại: -c accuracy_schedule=off. Payload {} = 4 tài
+        # sản, ghi thật.
         schedule = scheduler.CfnSchedule(
             self,
             "AccuracySchedule",
@@ -675,7 +686,7 @@ class CpawsDataStack(Stack):
             schedule_expression=ACCURACY_SCHEDULE_EXPRESSION,
             schedule_expression_timezone="UTC",
             flexible_time_window=scheduler.CfnSchedule.FlexibleTimeWindowProperty(mode="OFF"),
-            state="DISABLED",
+            state="ENABLED" if schedule_enabled else "DISABLED",
             target=scheduler.CfnSchedule.TargetProperty(
                 arn=fn.function_arn,
                 role_arn=schedule_role.role_arn,
