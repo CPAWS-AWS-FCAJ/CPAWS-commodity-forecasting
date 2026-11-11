@@ -4,6 +4,7 @@ import { config } from "../api/config";
 import { isAssetId } from "../api/types";
 import type { AssetId, ForecastDetail } from "../api/types";
 import { useForecast, useHistory } from "../api/hooks";
+import { AmountConverter } from "../components/AmountConverter";
 import { ChatPanel } from "../components/ChatPanel";
 import { FanChart } from "../components/FanChart";
 import { HorizonCards } from "../components/HorizonCards";
@@ -107,6 +108,9 @@ function AssetContent({ asset }: { asset: AssetId }) {
               selected={selectedHorizon(detail, horizonDays)}
               onSelect={setHorizonDays}
             />
+
+            {/* ADR-0005 (2): quy đổi khoảng dự báo ra số tiền, cả 4 tài sản, cả hai chế độ */}
+            <AmountConverter asset={asset} detail={detail} horizonDays={selectedHorizon(detail, horizonDays)} />
 
             {!hidePrice && (!config.historyAvailable || history.isError) ? (
               <EmptyBlock title="Chưa có lịch sử giá">
