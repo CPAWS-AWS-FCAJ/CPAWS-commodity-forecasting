@@ -57,7 +57,7 @@
 | Mục | Giá trị |
 |---|---|
 | AWS Budgets | 50 USD/tháng; gửi tới email của Tuấn |
-| Cost Anomaly Detection | Monitor: <tên>; ngưỡng: <USD>; gửi tới email của Tuấn |
+| Cost Anomaly Detection | Monitor: `Default-Services-Monitor` (DIMENSIONAL/SERVICE); Subscription: `Default-Services-Subscription`; tần suất DAILY; email nhận cảnh báo đã CONFIRMED; điều kiện: impact tuyệt đối ≥ 100 USD AND impact tương đối ≥ 40% (xác minh 11/11/2026) |
 | Tag bắt buộc | `Project=CPAWS`, `Owner=<tên>`, `Env=dev\|prod` |
 
 ### Credit
@@ -95,7 +95,7 @@
 - [ ] Kiểm tra gói tài khoản (Free/Paid), ghi vào bảng Tài khoản (Tuấn)
 - [ ] Xác nhận credit có áp cho model Anthropic không qua Bills (Tuấn), ghi vào bảng Credit
 - [ ] Kiểm tra Service Quotas cho Bedrock, xin tăng nếu gần 0 (Tuấn)
-- [ ] Điền Cost Anomaly Detection (Tuấn)
+- [x] Kiểm tra và ghi nhận Cost Anomaly Detection (Tuấn, xác minh 11/11/2026)
 - [ ] Chuyển policy `CPAWS-Bedrock-Four-Models` sang group `cpaws-genai` (Tuấn)
 - [ ] `cdk bootstrap` ở `ap-southeast-1` (Tuấn), sau đó Tiến `cdk deploy` stack `CpawsData`
 - [ ] Ghi kết quả test model vào ADR-0004 (Phước)
