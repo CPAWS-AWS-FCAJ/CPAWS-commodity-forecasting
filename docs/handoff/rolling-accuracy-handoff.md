@@ -87,6 +87,8 @@ cryptographic verifier: không suy approved từ tên PR hoặc timestamp. Bảo
 - `shadow_release`: approval/reference, `deployed_at` UTC, `immutable_write=true`; nguồn S1a vẫn
   cần input provenance, q50 khớp champion ở precision q6, đúng target và S3 LastModified trước nhãn.
   Baseline champion q6 phải khớp baseline tái lập ở q6 trước paired comparison.
+  Lượt shadow sau `deployed_at` nhưng trước `approved_at` vẫn được tính: `approved_at` là duyệt vận
+  hành (cổng `approved_at <= as_of`), không phải mốc dữ liệu. Khải chốt 11/11/2026 (#89).
 
 **Giới hạn quan trọng:** snapshot daily trong source có thể bị overwrite. Code fail-closed nếu
 snapshot issuance hiện có được viết sau forecast, khác legacy binding hoặc đổi giữa read/publish.
