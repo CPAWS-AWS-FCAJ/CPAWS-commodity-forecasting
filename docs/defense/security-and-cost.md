@@ -1,15 +1,16 @@
 # Bảo mật và kiểm soát chi phí CPAWS
 
-> Bản nháp chương báo cáo cuối kỳ, cập nhật ngày 11/11/2026. Nội dung phân biệt giữa biện pháp đã triển khai, bằng chứng đã kiểm chứng và rủi ro còn tồn tại. Không xem kế hoạch hoặc cấu hình đang chờ phê duyệt là kết quả hoàn tất.
+> Bản cập nhật chương báo cáo cuối kỳ ngày 11/11/2026. Nội dung phân biệt giữa biện pháp đã triển khai, bằng chứng đã kiểm chứng và rủi ro còn tồn tại. Không xem kế hoạch hoặc cấu hình đang chờ phê duyệt là kết quả hoàn tất.
 
 ## 1. Phạm vi bảo mật
 
-CPAWS sử dụng một môi trường AWS `dev` tại `ap-southeast-1`. Các biện pháp bảo mật tập trung vào bốn nhóm:
+CPAWS sử dụng một môi trường AWS `dev` tại `ap-southeast-1`. Các biện pháp bảo mật tập trung vào năm nhóm:
 
 1. Kiểm soát tài khoản và quyền truy cập AWS.
 2. Bảo vệ dữ liệu, bí mật và tài nguyên lưu trữ.
-3. Kiểm soát quyền ghi và tính bất biến của artifact đánh giá.
-4. Theo dõi chi phí và cảnh báo bất thường.
+3. Kiểm soát quyền ghi, xóa và tính bất biến của artifact đánh giá.
+4. Bảo vệ API và chatbot.
+5. Theo dõi chi phí và cảnh báo bất thường.
 
 Các biện pháp này giảm thiểu rủi ro vận hành trong phạm vi đồ án; không đồng nghĩa hệ thống đã đạt chứng nhận hoặc tiêu chuẩn an toàn thông tin độc lập.
 
@@ -37,9 +38,9 @@ Nhóm phân quyền thông qua IAM user và group:
 
 Chỉ người phụ trách quản trị được phép thay đổi IAM policy. Các thay đổi IAM và hạ tầng phải được review qua Pull Request trước khi triển khai.
 
-**Giới hạn đã ghi nhận:** `ReadOnlyAccess` gắn với group `cpaws-developers` có phạm vi rộng hơn nhu cầu đọc một số prefix cụ thể. Nhóm chưa thu hẹp quyền này trước cửa sổ test2020 ngày 16–22/11/2026 để không ảnh hưởng quyền đọc artifact phục vụ audit. Cần đánh giá lại sau khi kết thúc cửa sổ chạy.
+**Giới hạn đã ghi nhận:** `ReadOnlyAccess` gắn với group `cpaws-developers` có phạm vi rộng hơn nhu cầu đọc một số prefix cụ thể. Nhóm quyết định giữ nguyên quyền hiện tại trước và trong cửa sổ test2020 từ ngày 16–22/11/2026 để Long có thể đọc artifact phục vụ audit. Quyền đọc không thay thế quyền ghi hoặc xóa; các thao tác xóa trên prefix test2020 được kiểm soát riêng bằng explicit deny. Nhóm sẽ đánh giá lại phạm vi `ReadOnlyAccess` sau khi kết thúc cửa sổ chạy.
 
-## 3. Bảo vệ dữ liệu và bí mật
+## 3. Bảo vệ dữ liệu, bí mật và API
 
 ### 3.1. S3 và dữ liệu dự án
 
@@ -52,6 +53,12 @@ Bucket dữ liệu `cpaws-dev-lake` có các biện pháp:
 - Không commit dữ liệu thực vào Git; dữ liệu mẫu nhỏ được quản lý riêng.
 
 S3 là nơi lưu trữ chính của data lake. Nhóm có bản sao lưu Google Drive theo quy trình thủ công; code pipeline không tự truy cập Drive.
+
+**Rủi ro ghi đè artifact:** Đối với các prefix đánh giá như `eval/*` và `shadow_eval/*`, cơ chế ngăn ghi đè hiện chưa được cưỡng chế đầy đủ ở cấp IAM hoặc bucket policy. Luồng ghi dựa vào conditional write `IfNoneMatch="*"` trong application code và các kiểm thử tương ứng. PR #115 bổ sung kiểm thử cho cơ chế này. Job role phục vụ chạy đánh giá không được cấp quyền xóa object.
+
+Versioning giúp giữ lại phiên bản cũ khi object bị ghi đè, nhưng lifecycle chỉ giữ phiên bản cũ trong 30 ngày. Vì vậy, khả năng khôi phục do ghi đè không được bảo đảm sau thời hạn này.
+
+**Rủi ro còn lại và hướng cải thiện:** Nếu application code bỏ qua conditional write hoặc có luồng ghi khác không tuân thủ hợp đồng, object vẫn có nguy cơ bị ghi đè. Nhóm đề xuất bổ sung điều kiện `s3:if-none-match` trong bucket policy để cưỡng chế conditional write ở tầng lưu trữ. Đây là hướng cải thiện, không mô tả như cấu hình đã triển khai.
 
 ### 3.2. Quản lý API key
 
@@ -69,9 +76,20 @@ Không đưa API key, mật khẩu, mã MFA, access token hoặc thông tin đă
 
 Các cấu hình trên giảm bề mặt truy cập công khai, nhưng không thay thế việc kiểm thử bảo mật định kỳ hoặc rà soát quyền theo nguyên tắc least privilege.
 
+### 3.4. Chatbot và kiểm soát đầu vào
+
+Chatbot CPAWS được cung cấp qua endpoint `/chat` và sử dụng Cognito authorizer để xác thực người dùng. Các biện pháp kiểm soát gồm:
+
+- Giới hạn mức sử dụng theo người dùng thông qua bảng `chat-usage`.
+- Dữ liệu số liệu trong câu trả lời phải lấy từ các công cụ/dữ liệu của hệ thống, không tự tạo số liệu thị trường.
+- Luồng kiểm tra liên kết đáng ngờ được ghi nhận trong PR #104 và #109.
+- Người dùng cần đăng nhập trước khi sử dụng route chatbot.
+
+**Giới hạn đã ghi nhận:** Theo quyết định ngày 11/11/2026, Guardrails của Amazon Bedrock chưa được bật cho chatbot. Vì vậy, không xem bộ lọc Guardrails là biện pháp đã triển khai. Việc kiểm soát prompt attack và các chủ đề tư vấn đầu tư vẫn là nội dung cần đánh giá, kiểm thử và quyết định phạm vi trước khi đóng băng hệ thống.
+
 ## 4. Bảo vệ artifact đánh giá test2020
 
-Runner test2020 cần ghi artifact vào prefix `eval/test2020/*`, nhưng không được tự xóa hoặc ghi đè artifact đã tạo.
+Runner test2020 cần ghi artifact vào prefix `eval/test2020/`, nhưng không được tự xóa hoặc ghi đè artifact đã tạo.
 
 Chính sách IAM áp dụng:
 
@@ -80,9 +98,9 @@ Chính sách IAM áp dụng:
 - Runner sử dụng conditional write `IfNoneMatch="*"`.
 - Không xóa claim hoặc artifact để mở lại lượt chạy đã được ghi nhận.
 
-### 4.1. Kết quả kiểm chứng ngày 04/11/2026
+### 4.1. Kết quả kiểm chứng ngày 04/11 và 11/11/2026
 
-Long thực hiện kiểm tra bằng AWS CLI với profile `cpaws-dev` và phiên đăng nhập MFA:
+**Bằng chứng ngày 04/11/2026:** Long thực hiện kiểm tra bằng AWS CLI với profile `cpaws-dev` và phiên đăng nhập MFA. Kết quả ghi nhận:
 
 | Thử nghiệm | Kết quả | Ý nghĩa |
 |---|---|---|
@@ -91,9 +109,27 @@ Long thực hiện kiểm tra bằng AWS CLI với profile `cpaws-dev` và phiê
 | DeleteObject | PASS | Bị explicit deny, trả AccessDenied |
 | DeleteObjectVersion | Chưa kiểm chứng thực tế | Mới kiểm tra bằng IAM Policy Simulator |
 
+**Bằng chứng bổ sung ngày 11/11/2026:** Long kiểm tra từ Codespaces bằng principal `user/long`, đăng nhập qua `aws login --remote`. Object kiểm tra sử dụng key `eval/test2020/_iam-check-2026-11-11.txt`.
+
+| Thử nghiệm | Kết quả | Ý nghĩa |
+|---|---|---|
+| PutObject với `IfNoneMatch="*"` | PASS | Ghi object mới thành công |
+| Ghi lại cùng key | PASS | Nhận HTTP 412, không ghi đè object |
+| DeleteObject | PASS | Bị từ chối với AccessDenied |
+
+Cùng ngày, Tuấn chạy IAM Policy Simulator cho IAM user `user/long`:
+
+| Thao tác | Kết quả Policy Simulator |
+|---|---|
+| `s3:PutObject` | Allowed |
+| `s3:DeleteObject` | ExplicitDeny |
+| `s3:DeleteObjectVersion` | ExplicitDeny |
+
+Đối với `DeleteObjectVersion`, nhóm chỉ xác minh bằng IAM Policy Simulator; không cố ý thực hiện thao tác xóa version thật trên prefix chính thức. Quyền IAM hiện tại được giữ nguyên trong và trước cửa sổ test2020 từ ngày 16–22/11/2026.
+
 Object kiểm tra được giữ lại trên S3 vì quyền xóa bị chặn. Đây là object kiểm tra riêng, không phải artifact của lượt chạy test2020 chính thức.
 
-**Kết luận:** đã có bằng chứng thực tế cho conditional write và chặn `DeleteObject`. Chưa tuyên bố đã kiểm chứng thực tế việc chặn xóa version. Test2020 chính thức dự kiến chạy từ 16–22/11/2026, sau khi hoàn tất phê duyệt và preflight.
+**Kết luận:** Đã có bằng chứng thực tế cho conditional write, ngăn ghi đè cùng key và chặn `DeleteObject`. Quyền `DeleteObjectVersion` đã được xác minh bằng Policy Simulator nhưng chưa được kiểm chứng bằng thao tác thực tế. Test2020 chính thức dự kiến chạy từ 16–22/11/2026, sau khi hoàn tất phê duyệt và preflight.
 
 ## 5. Kiểm soát chi phí AWS
 
@@ -116,26 +152,30 @@ CPAWS ưu tiên tài nguyên có thể chạy theo nhu cầu thay vì duy trì d
 |---|---|
 | AWS Budgets | Ngân sách 50 USD/tháng |
 | Cost Anomaly Detection | Monitor mặc định, kiểm tra hằng ngày |
-| Ngưỡng cảnh báo bất thường | Đồng thời đạt mức tuyệt đối từ 100 USD và mức tương đối từ 40% |
+| Ngưỡng cảnh báo bất thường | Mức tuyệt đối từ 100 USD và mức tương đối từ 40%, theo cấu hình đã ghi nhận |
 | Thông báo | Email subscription đã xác nhận |
 
-Cấu hình Cost Anomaly Detection đã được tạo trên AWS. PR #114 ghi nhận cấu hình này và đang chờ review; không xem việc PR chưa merge là đã hoàn tất quy trình tài liệu.
+Cấu hình Cost Anomaly Detection đã được tạo trên AWS. PR #114 ghi nhận cấu hình này và **đã được merge**. Đây là cơ chế phát hiện biến động chi phí và gửi cảnh báo, không phải cơ chế tự động giới hạn hoặc ngắt dịch vụ khi vượt ngân sách. AWS Budgets cũng không bảo đảm mọi khoản chi đều bị chặn khi chạm ngưỡng.
 
-Cost Anomaly Detection giúp phát hiện biến động chi phí, không phải cơ chế tự động giới hạn hoặc ngắt dịch vụ khi vượt ngân sách. AWS Budgets cũng không bảo đảm mọi khoản chi đều bị chặn khi chạm ngưỡng.
+### 5.3. Theo dõi chi phí thực tế và dự toán tạm thời
 
-### 5.3. Theo dõi chi phí thực tế
+Số liệu tạm tính tại ngày 11/11/2026:
 
-Số liệu chi phí phải lấy từ AWS Cost Explorer hoặc Billing tại thời điểm lập báo cáo. Không dùng dự toán thay cho chi phí thực tế, không suy luận mức tiêu thụ từ số tiền credit còn lại.
+| Hạng mục | Số tiền ước tính | Ghi chú |
+|---|---:|---|
+| Chi phí thực tế từ 12/10 đến 11/11 | Khoảng 5,28 USD | Được credit AWS hiện có bao phủ |
+| Dự báo chi phí từ 12/11 đến 29/11 | Khoảng 1,14 USD | Dự toán, chưa phải chi phí phát sinh thực tế |
+| Credit còn lại tại ngày 11/11 | Khoảng 194,67 USD | Số dư ước tính tại thời điểm ghi nhận |
 
-Báo cáo tổng kết cần đối chiếu:
+Các số liệu trên là số liệu tạm thời phục vụ theo dõi trong quá trình thực hiện đồ án; không thay thế báo cáo billing chốt kỳ. Credit còn lại không được dùng để suy luận chi phí tiêu thụ.
+
+Sau ngày 30/11/2026, nhóm cần cập nhật báo cáo cuối kỳ bằng số liệu AWS Cost Explorer hoặc Billing, bao gồm:
 
 - Chi phí thực tế theo dịch vụ.
 - Chi phí Amazon Bedrock, đặc biệt các lượt gọi chatbot.
 - Chi phí Lambda, S3, DynamoDB, CloudWatch và các dịch vụ liên quan.
 - Credit còn lại và thời hạn sử dụng.
 - Chênh lệch giữa chi phí thực tế và ngân sách.
-
-**Lưu ý:** số liệu cuối kỳ cần được cập nhật sau khi kết thúc giai đoạn chạy thử và tổng hợp hóa đơn đến ngày chốt báo cáo.
 
 ## 6. Rủi ro dữ liệu và điều khoản nhà cung cấp
 
@@ -175,16 +215,20 @@ Nếu nhà cung cấp yêu cầu ngừng sử dụng:
 | CLI dùng credentials ngắn hạn | Đã áp dụng |
 | Quản lý secret bằng SSM SecureString | Đã triển khai |
 | S3 chặn public, bắt buộc SSL, bật versioning | Đã cấu hình |
-| Conditional write test2020 | Đã kiểm chứng thực tế |
+| Conditional write test2020 | Đã kiểm chứng thực tế ngày 04/11 và 11/11 |
+| Chặn ghi đè cùng key test2020 | Đã kiểm chứng thực tế, nhận HTTP 412 |
 | Chặn DeleteObject | Đã kiểm chứng thực tế |
-| Chặn DeleteObjectVersion | Mới kiểm tra bằng Policy Simulator |
-| Thu hẹp quyền ReadOnlyAccess | Chờ sau test2020 |
+| Chặn DeleteObjectVersion | Đã kiểm tra bằng Policy Simulator; chưa thử xóa version thật |
+| Ngăn ghi đè ở tầng bucket policy cho `shadow_eval/*` | Chưa triển khai; đang dựa vào application conditional write và kiểm thử |
+| Thu hẹp quyền ReadOnlyAccess | Đánh giá lại sau cửa sổ test2020 |
+| Chatbot `/chat` dùng Cognito và quota | Đã triển khai theo cấu hình hiện tại |
+| Bedrock Guardrails | Chưa bật theo quyết định ngày 11/11 |
 | AWS Budgets 50 USD/tháng | Đã cấu hình |
-| Cost Anomaly Detection | Đã cấu hình AWS; PR #114 chờ review |
+| Cost Anomaly Detection | Đã cấu hình AWS; PR #114 đã merge |
 | Rủi ro điều khoản Yahoo | Đã ghi nhận và chấp nhận; chưa loại bỏ |
-| Tổng hợp chi phí cuối kỳ | Chờ số liệu chốt kỳ |
+| Tổng hợp chi phí cuối kỳ | Chờ số liệu chốt sau ngày 30/11 |
 
-CPAWS đã triển khai các biện pháp cơ bản để kiểm soát truy cập, bảo vệ dữ liệu, hạn chế ghi đè/xóa artifact và theo dõi chi phí. Tuy nhiên, nhóm vẫn cần tiếp tục rà soát least privilege, hoàn tất kiểm chứng quyền xóa version, tổng hợp chi phí thực tế và quản trị rủi ro điều khoản dữ liệu trước khi kết thúc đồ án.
+CPAWS đã triển khai các biện pháp cơ bản để kiểm soát truy cập, bảo vệ dữ liệu, hạn chế ghi đè/xóa artifact và theo dõi chi phí. Tuy nhiên, nhóm vẫn cần tiếp tục rà soát least privilege, hoàn tất kiểm chứng quyền xóa version theo phương pháp phù hợp, đánh giá khả năng cưỡng chế conditional write ở tầng bucket policy, xem xét Guardrails và tổng hợp chi phí thực tế trước khi kết thúc đồ án.
 
 ## Tài liệu đối chiếu
 
@@ -192,4 +236,9 @@ CPAWS đã triển khai các biện pháp cơ bản để kiểm soát truy cậ
 - [ADR-0005: Nguồn dữ liệu giá](../adr/0005-price-data-sources.md)
 - [Runbook test2020](../experiments/test2020-runbook.md)
 - [Triển khai và vận hành CPAWS](trien-khai-van-hanh.md)
+- [PR #88: Kế hoạch test2020](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/88)
+- [PR #89: Thay đổi liên quan shadow evaluation](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/89)
+- [PR #104: Kiểm tra liên kết chatbot](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/104)
+- [PR #109: Bổ sung kiểm tra liên kết](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/109)
 - [PR #114: Ghi nhận cấu hình Cost Anomaly Detection](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/114)
+- [PR #115: Kiểm thử conditional write](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/115)
