@@ -54,7 +54,7 @@ Bucket dữ liệu `cpaws-dev-lake` có các biện pháp:
 
 S3 là nơi lưu trữ chính của data lake. Nhóm có bản sao lưu Google Drive theo quy trình thủ công; code pipeline không tự truy cập Drive.
 
-**Rủi ro ghi đè artifact:** Đối với các prefix đánh giá như `eval/*` và `shadow_eval/*`, cơ chế ngăn ghi đè hiện chưa được cưỡng chế đầy đủ ở cấp IAM hoặc bucket policy. Luồng ghi dựa vào conditional write `IfNoneMatch="*"` trong application code và các kiểm thử tương ứng. PR #115 bổ sung kiểm thử cho cơ chế này. Job role phục vụ chạy đánh giá không được cấp quyền xóa object.
+**Rủi ro ghi đè artifact:** Đối với prefix `eval/shadow_eval/*` do role job accuracy sử dụng, cơ chế ngăn ghi đè hiện chưa được cưỡng chế đầy đủ ở cấp IAM hoặc bucket policy. Luồng ghi dựa vào conditional write `IfNoneMatch="*"` trong application code và các kiểm thử tương ứng. PR #115 bổ sung kiểm thử cho cơ chế này. Job role phục vụ chạy đánh giá không được cấp quyền xóa object. Prefix `eval/test2020/` được kiểm soát riêng: user và runner bị explicit deny quyền xóa object, runner sử dụng conditional write `IfNoneMatch="*"` để tránh ghi đè.
 
 Versioning giúp giữ lại phiên bản cũ khi object bị ghi đè, nhưng lifecycle chỉ giữ phiên bản cũ trong 30 ngày. Vì vậy, khả năng khôi phục do ghi đè không được bảo đảm sau thời hạn này.
 
@@ -82,10 +82,10 @@ Chatbot CPAWS được cung cấp qua endpoint `/chat` và sử dụng Cognito a
 
 - Giới hạn mức sử dụng theo người dùng thông qua bảng `chat-usage`.
 - Dữ liệu số liệu trong câu trả lời phải lấy từ các công cụ/dữ liệu của hệ thống, không tự tạo số liệu thị trường.
-- Luồng kiểm tra liên kết đáng ngờ được ghi nhận trong PR #104 và #109.
+- Lambda `/chat` chỉ ghi log mức `WARNING` với mã `citation_link_mismatch` khi câu trả lời chứa URL lạ; cơ chế này không chặn câu trả lời (PR #104). Benchmark chấm trượt câu trả lời có URL lạ (PR #109).
 - Người dùng cần đăng nhập trước khi sử dụng route chatbot.
 
-**Giới hạn đã ghi nhận:** Theo quyết định ngày 11/11/2026, Guardrails của Amazon Bedrock chưa được bật cho chatbot. Vì vậy, không xem bộ lọc Guardrails là biện pháp đã triển khai. Việc kiểm soát prompt attack và các chủ đề tư vấn đầu tư vẫn là nội dung cần đánh giá, kiểm thử và quyết định phạm vi trước khi đóng băng hệ thống.
+**Giới hạn đã ghi nhận:** Theo quyết định ngày 11/11/2026, nhóm không bật Guardrails của Amazon Bedrock trong phạm vi đồ án. Chủ đề tư vấn đầu tư và prompt attack hiện được kiểm soát bằng các quy tắc trong prompt và bộ benchmark có kiểm tra chính sách. Guardrails là hướng cải tiến sau đồ án, không phải biện pháp đã triển khai.
 
 ## 4. Bảo vệ artifact đánh giá test2020
 
@@ -219,7 +219,7 @@ Nếu nhà cung cấp yêu cầu ngừng sử dụng:
 | Chặn ghi đè cùng key test2020 | Đã kiểm chứng thực tế, nhận HTTP 412 |
 | Chặn DeleteObject | Đã kiểm chứng thực tế |
 | Chặn DeleteObjectVersion | Đã kiểm tra bằng Policy Simulator; chưa thử xóa version thật |
-| Ngăn ghi đè ở tầng bucket policy cho `shadow_eval/*` | Chưa triển khai; đang dựa vào application conditional write và kiểm thử |
+| Ngăn ghi đè ở tầng bucket policy cho `eval/shadow_eval/*` | Chưa triển khai; đang dựa vào application conditional write và kiểm thử |
 | Thu hẹp quyền ReadOnlyAccess | Đánh giá lại sau cửa sổ test2020 |
 | Chatbot `/chat` dùng Cognito và quota | Đã triển khai theo cấu hình hiện tại |
 | Bedrock Guardrails | Chưa bật theo quyết định ngày 11/11 |
@@ -228,7 +228,7 @@ Nếu nhà cung cấp yêu cầu ngừng sử dụng:
 | Rủi ro điều khoản Yahoo | Đã ghi nhận và chấp nhận; chưa loại bỏ |
 | Tổng hợp chi phí cuối kỳ | Chờ số liệu chốt sau ngày 30/11 |
 
-CPAWS đã triển khai các biện pháp cơ bản để kiểm soát truy cập, bảo vệ dữ liệu, hạn chế ghi đè/xóa artifact và theo dõi chi phí. Tuy nhiên, nhóm vẫn cần tiếp tục rà soát least privilege, hoàn tất kiểm chứng quyền xóa version theo phương pháp phù hợp, đánh giá khả năng cưỡng chế conditional write ở tầng bucket policy, xem xét Guardrails và tổng hợp chi phí thực tế trước khi kết thúc đồ án.
+CPAWS đã triển khai các biện pháp cơ bản để kiểm soát truy cập, bảo vệ dữ liệu, hạn chế ghi đè/xóa artifact và theo dõi chi phí. Tuy nhiên, nhóm vẫn cần tiếp tục rà soát least privilege, hoàn tất kiểm chứng quyền xóa version theo phương pháp phù hợp, đánh giá khả năng cưỡng chế conditional write ở tầng bucket policy và tổng hợp chi phí thực tế trước khi kết thúc đồ án. Guardrails được ghi nhận là hướng cải tiến sau đồ án theo quyết định ngày 11/11/2026.
 
 ## Tài liệu đối chiếu
 
@@ -236,8 +236,9 @@ CPAWS đã triển khai các biện pháp cơ bản để kiểm soát truy cậ
 - [ADR-0005: Nguồn dữ liệu giá](../adr/0005-price-data-sources.md)
 - [Runbook test2020](../experiments/test2020-runbook.md)
 - [Triển khai và vận hành CPAWS](trien-khai-van-hanh.md)
-- [PR #88: Kế hoạch test2020](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/88)
-- [PR #89: Thay đổi liên quan shadow evaluation](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/89)
+- [PR #75: Kế hoạch gốc test2020](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/75)
+- [PR #88: Cập nhật snapshot, lineage test2020 và approval chạy official](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/88)
+- [PR #89: Job accuracy rolling_8w và shadow evaluation](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/89)
 - [PR #104: Kiểm tra liên kết chatbot](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/104)
 - [PR #109: Bổ sung kiểm tra liên kết](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/109)
 - [PR #114: Ghi nhận cấu hình Cost Anomaly Detection](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/114)
