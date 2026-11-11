@@ -95,16 +95,18 @@ def test_citations_module_is_hashed_with_tool_code():
 
 
 @pytest.mark.parametrize("qset", ["v4-official-a", "v4-official-b"])
-def test_v4_official_sets_stop_until_locked(qset):
-    """Hai bộ chính thức v4 (Long, PR #108): chưa khóa thì official dừng trước khi gọi Bedrock,
-    và không chạy dev thật trên bộ giữ riêng."""
+def test_v4_official_sets_stop_until_locked(monkeypatch, qset):
+    """Official lock must verify; removing it must block the set before execution."""
     cfg = C.QUESTION_SETS[qset]
     assert cfg["prompt_set"] == "v4"
-    assert cfg["require_lock"] and cfg["locked_sha256"] is None and cfg["holdout"]
-    with pytest.raises(RuntimeError, match="chưa khóa"):
-        CB.verify_lock(qset)
+    assert cfg["require_lock"] and cfg["holdout"]
+    assert cfg["locked_sha256"] is not None
+    CB.verify_lock(qset)
     with pytest.raises(RuntimeError, match="giữ riêng"):
         CB.check_dev_allowed(qset)
+    monkeypatch.setitem(cfg, "locked_sha256", None)
+    with pytest.raises(RuntimeError, match="chưa khóa"):
+        CB.verify_lock(qset)
 
 
 @pytest.mark.parametrize("qset", ["v4-official-a", "v4-official-b"])
@@ -112,6 +114,7 @@ def test_v4_official_run_stops_before_bedrock(monkeypatch, tmp_path, capsys, qse
     def no_bedrock(*_a, **_k):
         raise AssertionError("không được gọi Bedrock khi bộ chưa khóa")
 
+    monkeypatch.setitem(C.QUESTION_SETS[qset], "locked_sha256", None)
     monkeypatch.setattr(CB, "bedrock_client", no_bedrock)
     out = tmp_path / "out"
     assert CB.main(["--branch", "complex", "--set", qset, "--out-dir", str(out)]) == 2
