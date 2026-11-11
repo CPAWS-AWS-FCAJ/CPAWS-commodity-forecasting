@@ -53,7 +53,7 @@ describe("trang sản phẩm và trang chủ với cờ VITE_SHOW_METAL_PRICES",
     expect((await screen.findAllByText(/đang được ẩn/)).length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: "VND" })).toBeNull();
     expect(screen.queryByText(/Giá thực tế và dự báo/)).toBeNull();
-    expect(screen.queryByText(/tỷ giá USD\/VND/)).toBeNull();
+    expect(screen.queryByText(/Giá cuối ngày .* tỷ giá USD\/VND/)).toBeNull();
     expect(screen.getAllByText(/Quạt log return/)).toHaveLength(1);
     expect(screen.getByText(/mức thay đổi nhiều khả năng/)).toBeInTheDocument();
   });
@@ -72,7 +72,7 @@ describe("trang sản phẩm và trang chủ với cờ VITE_SHOW_METAL_PRICES",
     mount("/asset/gold", "basic");
     expect(await screen.findByText(/Giá thực tế và dự báo/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "VND" })).toBeInTheDocument();
-    expect(screen.getByText(/tỷ giá USD\/VND/)).toBeInTheDocument();
+    expect(screen.getByText(/Giá cuối ngày .* tỷ giá USD\/VND/)).toBeInTheDocument();
     expect(screen.queryAllByText(/đang được ẩn/)).toHaveLength(0);
   });
 
@@ -97,6 +97,21 @@ describe("trang sản phẩm và trang chủ với cờ VITE_SHOW_METAL_PRICES",
     expect(screen.getByRole("button", { name: "7 phiên" })).toHaveAttribute("aria-pressed", "false");
     fireEvent.click(screen.getByRole("button", { name: "1 phiên" }));
     expect(cards[0]).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("khối quy đổi ra số tiền có ở vàng (cờ tắt, cả hai chế độ) và dầu; đi theo h đang chọn", async () => {
+    flags.show = false;
+    mount("/asset/gold", "basic");
+    expect(await screen.findByLabelText("Số tiền (đồng)")).toBeInTheDocument();
+    cleanup();
+    mount("/asset/gold", "advanced");
+    expect(await screen.findByLabelText("Số tiền (đồng)")).toBeInTheDocument();
+    cleanup();
+    mount("/asset/wti", "basic");
+    fireEvent.change(await screen.findByLabelText("Số tiền (đồng)"), { target: { value: "10.000.000" } });
+    expect(screen.getByText(/sau 7 phiên \(phiên/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "3 phiên" }));
+    expect(screen.getByText(/sau 3 phiên \(phiên/)).toBeInTheDocument();
   });
 
   it("vàng, cờ tắt: thẻ chỉ có %, không có đơn vị giá", async () => {

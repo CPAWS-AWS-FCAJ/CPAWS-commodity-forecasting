@@ -10,6 +10,7 @@ import {
   roundPercent,
   weekdaysSince,
 } from "./forecast";
+import { MIN_AMOUNT_VND, amountRange, hypotheticalAmount, parseAmountInput, roundToThousand } from "./amount";
 import { isPriceHidden } from "./assets";
 import { LUONG_GRAMS, TROY_OUNCE_GRAMS, usdToVnd } from "./units";
 
@@ -170,5 +171,37 @@ describe("modelDisplayName", () => {
     expect(modelDisplayName("dlinear-41e13dc5de3d")).toBeNull();
     expect(modelDisplayName("sample")).toBeNull();
     expect(modelDisplayName(undefined)).toBeNull();
+  });
+});
+
+describe("amount (ADR-0005 mục (2))", () => {
+  it("ví dụ trong ADR: 10.000.000 đồng, q10 −0,025, q90 +0,031 → 9,75–10,31 triệu", () => {
+    const range = amountRange(10_000_000, -0.025, 0, 0.031);
+    expect(range).toEqual({ low: 9_753_000, mid: 10_000_000, high: 10_315_000 });
+    expect(hypotheticalAmount(10_000_000, -0.025)).toBeCloseTo(10_000_000 * Math.exp(-0.025), 6);
+  });
+
+  it("làm tròn đến nghìn đồng", () => {
+    expect(roundToThousand(9_753_499)).toBe(9_753_000);
+    expect(roundToThousand(9_753_500)).toBe(9_754_000);
+  });
+
+  it("đọc số tiền có dấu nhóm nghìn", () => {
+    expect(parseAmountInput("10.000.000")).toEqual({ ok: true, value: 10_000_000 });
+    expect(parseAmountInput("10,000,000")).toEqual({ ok: true, value: 10_000_000 });
+    expect(parseAmountInput(" 10 000 000 ")).toEqual({ ok: true, value: 10_000_000 });
+    expect(parseAmountInput("10000000")).toEqual({ ok: true, value: 10_000_000 });
+  });
+
+  it("từ chối ô trống, số thập phân, số âm, chữ và số ngoài khoảng", () => {
+    expect(parseAmountInput("")).toEqual({ ok: false, reason: "empty" });
+    expect(parseAmountInput("1.5")).toEqual({ ok: false, reason: "invalid" });
+    expect(parseAmountInput("1,50")).toEqual({ ok: false, reason: "invalid" });
+    expect(parseAmountInput("-1000000")).toEqual({ ok: false, reason: "invalid" });
+    expect(parseAmountInput("10 triệu")).toEqual({ ok: false, reason: "invalid" });
+    expect(parseAmountInput("9.999")).toEqual({ ok: false, reason: "too_small" });
+    expect(parseAmountInput(String(MIN_AMOUNT_VND))).toEqual({ ok: true, value: MIN_AMOUNT_VND });
+    expect(parseAmountInput("100.000.000.001")).toEqual({ ok: false, reason: "too_large" });
+    expect(parseAmountInput("99999999999999999999")).toEqual({ ok: false, reason: "too_large" });
   });
 });
