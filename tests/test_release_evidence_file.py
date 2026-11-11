@@ -62,3 +62,28 @@ def test_shadow_release_opens_comparison_only_after_approval():
     early = replace(cfg, job_date="2026-11-04", as_of="2026-11-04T13:45:00Z")
     report = compare(result, early, sources, evidence)
     assert report == {"status": "shadow_not_ready", "paired_n_obs": 0}
+
+
+def test_shadow_run_between_deployed_and_approved_is_counted():
+    """Khải chốt 11/11/2026 (#89): approved_at là cổng vận hành, không phải mốc dữ liệu.
+
+    Lượt shadow 12:15Z ngày 04/11 tạo sau deployed_at (05:33Z) nhưng trước approved_at
+    (14:22:51Z) vẫn được tính khi job chạy sau giờ duyệt; lượt trước deployed_at bị loại.
+    """
+    shadow_release = _evidence()["shadow_release"]
+    result, cfg, sources, evidence = shadow_case()
+    evidence.config["shadow_release"] = shadow_release
+    deployed, approved_at = utc(shadow_release["deployed_at"]), utc(shadow_release["approved_at"])
+
+    report = compare(result, cfg, sources, evidence)
+    assert utc(cfg.as_of) > approved_at
+    assert report["status"] == "ok" and report["paired_n_obs"] > 0
+
+    # Mọi cặp so sánh đến từ object dt=2026-11-04, ghi trong khoảng [deployed_at, approved_at)
+    objects = {p["shadow_object"]["key"]: p["shadow_object"] for p in report["provenance"]["pairs"]}
+    assert set(objects) == {"eval/shadow/s1a-l094/dt=2026-11-04/gold.json"}
+    for ref in objects.values():
+        assert deployed <= utc(ref["last_modified"]) < approved_at
+
+    # Object dt=2026-11-03 (trước deployed_at) bị loại
+    assert {"dt": "2026-11-03", "reason": "shadow_publication_unverified"} in report["exclusions"]
