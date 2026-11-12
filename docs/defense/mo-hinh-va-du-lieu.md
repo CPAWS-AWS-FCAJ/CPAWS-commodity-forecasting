@@ -98,7 +98,7 @@ Mỗi chuỗi dùng **một nguồn cho cả lịch sử lẫn cập nhật hằ
 | Brent | 2,17% | 49,0% | 64,5% |
 | WTI | 2,29% | 49,4% | 61,6% |
 
-- **Dầu biến động gấp khoảng 2–3 lần kim loại**, nên khoảng dự báo của dầu rộng hơn nhiều.
+- **Dầu biến động mạnh hơn kim loại:** độ lệch chuẩn return 1 phiên trên train 2014–2018 của dầu (2,17–2,29%) gấp khoảng 1,7 lần bạc (1,31%) và 2,6–2,8 lần vàng (0,83%) ([EDA](../eda/eda-prices-2026-10.md)), nên khoảng dự báo của dầu rộng hơn nhiều.
 - **2019 khác giai đoạn train:** vàng và dầu tăng nhiều hơn hẳn, độ lệch chuẩn thấp hơn. Mọi kết quả trên 2019 phải đọc trong bối cảnh một năm "yên và đi lên".
 - **Cửa sổ NaN do thiếu phiên trong train:** Brent 10, WTI 6, kim loại 0 (EDA, bảng cửa sổ NaN).
 
@@ -193,7 +193,7 @@ Nhiều bài báo về CEEMDAN + LSTM (ví dụ ý tưởng của Cao, Li, Li 20
 
 `pinball_skill` ở bảng này tính theo tỷ lệ, không phải điểm % như bảng kết quả 2019: +0,48 nghĩa là pinball loss thấp hơn mốc 48%, −1,20 nghĩa là cao hơn mốc 120%.
 
-- **R-full đẹp bất thường:** R-full của vàng và bạc đoán đúng chiều return một ngày 84–86%. Không dự báo thật nào đạt mức đó; đây là dấu hiệu dùng dữ liệu tương lai. Bản nhân quả R-causal đúng chiều 47–51%, thua cả naive lẫn mốc 252 phiên ở cả 4 tài sản.
+- **R-full đẹp bất thường:** R-full của vàng và bạc đoán đúng chiều return một ngày 84–86%, cao bất thường so với mọi cấu hình nhân quả nhóm đã chạy. Vì R-full tách CEEMDAN trên cả đoạn chứa ngày cần dự báo, các IMF đã mang thông tin tương lai, nên con số này không thể coi là kết quả dự báo nhân quả. Bản nhân quả R-causal đúng chiều 47–51%, thua cả naive lẫn mốc 252 phiên ở cả 4 tài sản.
 - **Cơ chế:** tại cùng ngày gốc, ba IMF tần số cao của hai cách tách gần như là hai đại lượng khác nhau (tương quan 0,07–0,47). Trong bản tách toàn chuỗi, giá trị tại `t` được nội suy bằng cả các điểm sau `t` ([ADR-0001](../adr/0001-causal-ceemdan.md)).
 - **Giới hạn khi đọc:**
   - R-full của dầu cũng thua naive, nên kết luận đúng là "đẹp bất thường ở 2/4 tài sản", không phải "luôn thắng".
