@@ -85,6 +85,12 @@ if predict_shadow_models.lower() in ("off", "none"):
     predict_shadow_models = ""
 accuracy_image_tag = app.node.try_get_context("accuracy_image_tag") or DEFAULT_ACCURACY_IMAGE_TAG
 accuracy_evidence = json.loads(ACCURACY_EVIDENCE_FILE.read_text(encoding="utf-8"))
+# Lịch job accuracy: mặc định bật (sau dry-run 4 tài sản). Tắt không cần sửa code:
+#   cdk deploy CpawsData -c accuracy_schedule=off
+accuracy_schedule_context = str(app.node.try_get_context("accuracy_schedule") or "on").strip()
+if accuracy_schedule_context.lower() not in ("on", "off"):
+    raise ValueError(f"accuracy_schedule must be 'on' or 'off', got {accuracy_schedule_context!r}")
+accuracy_schedule_enabled = accuracy_schedule_context.lower() == "on"
 # Chỉ dùng ở lần deploy ĐẦU TIÊN (tạo ECR predict trước khi có image): -c predict_repo_only=true
 predict_repo_only = str(app.node.try_get_context("predict_repo_only") or "").lower() == "true"
 
@@ -112,6 +118,7 @@ CpawsDataStack(
     predict_shadow_models=predict_shadow_models,
     accuracy_image_tag=accuracy_image_tag,
     accuracy_evidence=accuracy_evidence,
+    accuracy_schedule_enabled=accuracy_schedule_enabled,
     predict_repo_only=predict_repo_only,
     env=aws_env,
 )

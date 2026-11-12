@@ -5,6 +5,7 @@ Chạy: infra .venv Scripts activate rồi pytest tests/test_infra_stacks.py (t�
 """
 
 import ast
+import copy
 import json
 import sys
 from pathlib import Path
@@ -45,6 +46,7 @@ def _synth(
     effective_base_dates: dict | None = None,
     shadow_models: str = "s1a-l094",
     accuracy_evidence: dict | None = None,
+    accuracy_schedule_enabled: bool = True,
 ) -> dict:
     """Synth CpawsData, CpawsOps và CpawsServing cho env dev, trả về template dạng dict."""
     sys.path.insert(0, str(INFRA_DIR))
@@ -80,6 +82,7 @@ def _synth(
             predict_shadow_models=shadow_models,
             accuracy_image_tag=ACCURACY_TAG,
             accuracy_evidence=RELEASE_EVIDENCE if accuracy_evidence is None else accuracy_evidence,
+            accuracy_schedule_enabled=accuracy_schedule_enabled,
             predict_repo_only=predict_repo_only,
             eia_parameter_name=eia_parameter_name,
         )
@@ -784,7 +787,7 @@ def test_predict_role_has_no_accuracy_access(templates):
         assert "cpaws-dev-accuracy" not in json.dumps(_role_statements(t, role_id))
 
 
-def test_accuracy_schedule_is_disabled_with_contract_cron(templates):
+def test_accuracy_schedule_is_enabled_with_contract_cron(templates):
     sys.path.insert(0, str(INFRA_DIR))
     try:
         from stacks import shared
@@ -796,8 +799,8 @@ def test_accuracy_schedule_is_disabled_with_contract_cron(templates):
     assert props["ScheduleExpression"] == "cron(45 13 ? * TUE-SAT *)"
     assert shared.ACCURACY_SCHEDULE_EXPRESSION == props["ScheduleExpression"]
     assert props["ScheduleExpressionTimezone"] == "UTC"
-    # Handoff §7 bước 4: tạo TẮT, chỉ bật sau dry-run 4 tài sản
-    assert props["State"] == "DISABLED"
+    # Handoff §7 bước 4: bật sau dry-run 4 tài sản (tạo TẮT ở #89)
+    assert props["State"] == "ENABLED"
     assert props["Target"]["RetryPolicy"]["MaximumRetryAttempts"] == 0
     assert props["Target"]["Input"] == "{}"
     assert props["Target"]["Arn"] == {
@@ -808,6 +811,16 @@ def test_accuracy_schedule_is_disabled_with_contract_cron(templates):
     (invoke,) = _role_statements(t, role_id)
     assert invoke["Action"] == "lambda:InvokeFunction"
     assert invoke["Resource"] == props["Target"]["Arn"]
+
+
+def test_accuracy_schedule_off_only_changes_state(templates):
+    """-c accuracy_schedule=off (rollback) chỉ đổi State; Lambda, IAM, cron, payload giữ nguyên."""
+    off = _synth(accuracy_schedule_enabled=False)["data"]
+    on = copy.deepcopy(templates["data"])  # fixture dùng chung cả module: không sửa bản gốc
+    assert _schedule(off, "cpaws-dev-accuracy-daily")["Properties"]["State"] == "DISABLED"
+    for t in (on, off):
+        _schedule(t, "cpaws-dev-accuracy-daily")["Properties"].pop("State")
+    assert json.dumps(off, sort_keys=True) == json.dumps(on, sort_keys=True)
 
 
 def test_ingest_schedule_role_cannot_invoke_accuracy_job(templates):

@@ -35,6 +35,7 @@ Phụ thuộc giữa các stack: `CpawsApi` dùng bảng của `CpawsServing` v�
 | SSM Parameter Store SecureString chứa API key EIA | Giá trị bí mật không được vào repo. CDK chỉ nhận **tên** parameter | Tuấn |
 | AWS Budgets (50 USD/tháng theo ADR-0006; trên tài khoản hiện có 2 budget) | Thuộc tài khoản, không thuộc ứng dụng | Tuấn |
 | IAM user và group của thành viên | [ADR-0006](../adr/0006-aws-account-and-access.md) | Tuấn |
+| Statement `DenyDeleteK4EvalObjects` trong bucket policy của `cpaws-dev-lake` (Deny `s3:DeleteObject` trên `eval/k4/*`) | Thêm tay đợt K4 ([`k4-plan.md`](../experiments/k4-plan.md)); CDK chỉ sinh statement bắt buộc SSL. Mỗi lần deploy `CpawsData` phải kiểm `cdk diff` **không** có `AWS::S3::BucketPolicy`, nếu có thì dừng | Tuấn |
 
 ## 3. Luồng chạy hằng ngày
 
@@ -188,6 +189,7 @@ Chạy trong thư mục `infra/`, môi trường ảo có `aws-cdk-lib`, profile
 | Tắt shadow | `cdk deploy CpawsData -c shadow_models=off --profile cpaws-dev` |
 | Quay về image predict #48 | `cdk deploy CpawsData -c predict_image_tag=ce77bcb -c shadow_models=off --profile cpaws-dev` |
 | Quay về image ingest | `cdk deploy CpawsData -c ingest_image_tag=TAG_CU --profile cpaws-dev` |
+| Tắt lịch job accuracy | `cdk deploy CpawsData -c accuracy_schedule=off --profile cpaws-dev` (chỉ đổi `State` của schedule; Lambda, IAM giữ nguyên) |
 | CORS về localhost | `cdk deploy CpawsApi -c allowed_origin=http://localhost:5173 --profile cpaws-dev` |
 
 ## A.3. Kiểm lượt 19:15
