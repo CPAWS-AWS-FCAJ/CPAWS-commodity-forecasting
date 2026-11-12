@@ -31,7 +31,7 @@ Tài liệu nguồn:
 | Lịch sử hội thoại | Không ghi rõ | Web gửi tối đa 3 lượt trước trong `history`. Benchmark chỉ đo câu một lượt (contract, mục `history`), nên **bấm "Xóa hội thoại" trước mỗi câu** |
 | Ngoài phạm vi | Bỏ cả loại | Một câu tùy chọn (Q11). **Mặc định không hỏi**; chỉ hỏi khi còn thời gian, Khải đồng ý và tập dượt đạt (mục 9) |
 
-Kết quả buổi chạy thử 8/11: chờ kết quả 8/11 ở #84. Kết quả này ghi ở issue #84, không ghi vào file này. Hiện #84 mới có kết quả tập dượt 7/11.
+Buổi chạy thử 8/11 không có ghi chép. Thay vào đó, ngày 12/11/2026 Phước hỏi lại 3 câu dự phòng D3, D4, D5 trên web (prompt v2, mỗi câu một hội thoại mới, đúng trang tài sản). Kết quả chấm ghi ở issue #84, không ghi vào file này; kết luận dùng cho mục 6.
 
 ## 2. Nguyên tắc chọn câu
 
@@ -271,7 +271,11 @@ Không sửa dữ liệu để tin hiện ra: không đổi `published_at`, khô
 | D6 | "Từ ngày <từ>/2026 đến <đến>/2026 có tin nào đáng chú ý liên quan đến bạc không? Ghi rõ nguồn giúp mình." | Bạc | Q6, Q7 | Tin 7/10 bị bỏ khỏi bộ tin. Chọn khoảng ngày đã qua chỉ chứa đúng một tin bạc mức 2 ở mọi mức tác động, kiểm bằng lệnh ở mục 5 (đổi ngày) |
 
 - D3, D4, D5 là nguyên văn câu 2, 5, 1 của kịch bản 8/11. D5 đã tập dượt 7/11 (chỉ thiếu "mốc thống kê 252 phiên").
-- Giữ D3, D4, D5 hay bỏ: chờ kết quả 8/11 ở #84. Câu nào sai ở buổi 8/11 thì bỏ khỏi dự phòng.
+- Ngày 12/11/2026 hỏi lại D3, D4, D5 trên web (thay cho buổi 8/11 không có ghi chép; kết quả ở #84). **Giữ cả ba**: không vi phạm chính sách, số khớp nhau và khớp quy tắc kỳ hạn. Lỗi thấy được, người trình bày chỉ ra theo mục 7.1:
+  - D3 (`ea344b38-…`): hiểu "tuần tới" là h = 7, đúng prompt v2. Thiếu ngày cơ sở, thiếu "mốc thống kê 252 phiên", mở đầu "Mình sẽ lấy…".
+  - D4 (`b2d01ae7-…`): đúng câu "Mình không đưa ra lời khuyên đầu tư.", không khuyên, không nêu số; hỏi lại số phiên để mời xem dự báo.
+  - D5 (`d0e9e7eb-…`): thiếu ngày cơ sở và "mốc thống kê 252 phiên"; gọi giá cuối là "giá hiện tại"; viết "giảm tới 7,18% hoặc tăng tới 7,5%" cho q10, q90 (lỗi "giảm tới", HAIKU2-020). Vì D5 cũng có lỗi diễn giải, D5 chỉ thay Q2 khi Q2 sai chiều hoặc nêu số không có trong tool, không thay khi Q2 chỉ có lỗi diễn giải nhẹ.
+  - Ngày dự báo ở D3 (h = 7, 19/11) và D5 (h = 3, 13/11) cùng khớp với ngày cơ sở 10/11/2026, nhưng chưa đối chiếu được với kết quả tool. Hôm trình bày ngày cơ sở sẽ khác, nên ngày dự báo cũng khác.
 - D2 là khoảng ngày bộ tin không có tin nào. Thực tế EIA vẫn ra WPSR giữa tháng 10 nhưng bộ tin không thu bài đó, nên người trình bày nói: "Trong bộ tin đã gắn nhãn của nhóm không có tin WTI nào trong khoảng này." Vì vậy D2 chỉ là dự phòng, Q8 vẫn là câu chính.
 
 ## 7. Cho người trình bày
@@ -286,6 +290,7 @@ Nguyên tắc: nói thật, không chữa lời thay chatbot, ghi `request_id`, 
 | Thiếu ngày cơ sở | "Ngày cơ sở là ngày phiên dữ liệu cuối cùng; trên trang dự báo có ghi. Lỗi thiếu ngày cơ sở đã ghi trong benchmark (8 trên 25 câu)." |
 | Gọi ngày dự báo là "ngày đáo hạn" | "Đây là ngày dự báo, không phải ngày đáo hạn hợp đồng. Lỗi dùng từ này cũng đã ghi trong benchmark." |
 | Viết "giảm x%" thay cho số âm | "Nghĩa không sai, nhưng prompt yêu cầu giữ nguyên số kèm dấu. Đây là nhóm lỗi diễn giải số làm v2 chưa đạt benchmark." |
+| Gọi giá cuối là "giá hiện tại" (dầu) | "Đây là giá đóng cửa của ngày cơ sở, không phải giá lúc này." |
 | Có nhãn "nghiêng tăng/giảm" | "Prompt v2 không cấm nhãn này. Trên web, nhãn hướng chỉ hiện khi xác suất tăng từ 60% trở lên hoặc từ 40% trở xuống." |
 | Tự thêm nhận định không có trong tool (ví dụ về lãi suất) | "Câu này chatbot tự thêm, không có trong kết quả tool. Đây là lỗi đã biết của v2; prompt sau đã có quy tắc chặn nhưng chưa qua được lần chạy chính thức, nên hệ thống vẫn chạy v2." |
 | Thiếu khoảng 80% hoặc xác suất tăng | "Prompt bắt buộc đủ khoảng 80%, trung vị và xác suất tăng; câu này thiếu [phần]. Số đầy đủ có trên trang dự báo." Mở trang dự báo cho hội đồng xem |
@@ -337,6 +342,7 @@ Các câu ở mục 8 của kịch bản 8/11 vẫn dùng được. Thêm các c
 | Sao chỉ hỏi những câu này? | Bộ câu cố định, chọn từ loại câu v2 đã làm đúng trong benchmark và tránh loại câu đã biết là yếu (mục 2). Không câu nào trùng bộ câu dùng để chấm |
 | Chatbot giải thích khái niệm được không (q10, q90, xác suất tăng)? | Có trả lời, nhưng v2 hay gọi tool không cần thiết ở loại câu này, nên nhóm không đưa vào phần hỏi trực tiếp. Người trình bày giải thích: khoảng 80% là từ q10 đến q90, nghĩa là vẫn có khả năng giá nằm ngoài khoảng; xác suất tăng là xác suất giá ở ngày dự báo cao hơn ngày cơ sở |
 | Sao câu tin tức nêu khoảng ngày cụ thể? | Không nêu ngày thì `get_news` chỉ lấy 7 ngày gần nhất với mức tác động từ 2; tin Fed, EIA đạt mức 2 không có mỗi tuần. Nhóm không đổi ngày đăng hay nâng nhãn để tin hiện ra |
+| Sao lấy giá q10 chia giá cuối không ra đúng % chatbot nêu? | Mức % là log return × 100; giá tính bằng giá cuối × e^q (`src/chatbot/tools.py`). Ví dụ D5 ngày 12/11: 85,15 / 91,49 là −6,93% theo tỉ lệ thường, còn log return là −7,18%. Hai số cùng một quantile, khác cách tính |
 | Một câu hỏi tốn bao nhiêu? | Khoảng 0,012 USD mỗi câu theo benchmark v2; giới hạn chung 100 lượt mỗi ngày |
 
 ## 8. Lệnh thử trên AWS (Phước tự chạy)
@@ -372,7 +378,7 @@ python -c "import json,sys; d=json.load(open(sys.argv[1],encoding='utf-8')); pri
 2. **Q11 (ngoài phạm vi): tùy chọn, mặc định không hỏi.** Ngày 2/11 cả loại bị bỏ vì HAIKU3A-006 (dự đoán trong ngày). Chỉ hỏi Q11 khi còn thời gian, Khải đồng ý tách câu xăng bán lẻ (HAIKU3A-005, đúng) khỏi câu dự đoán trong ngày, và tập dượt đạt cả hai lần.
 3. Ngày tập dượt: đề xuất 23–24/11/2026, sau đóng băng tính năng và sau lần deploy `CpawsApi` cuối, để bộ tin và prompt trên Lambda giống hôm trình bày.
 4. Người giữ máy và tài khoản: tài khoản tập dượt và tài khoản trình bày tách riêng, như 8/11.
-5. Kết quả buổi chạy thử 8/11: chờ kết quả 8/11 ở #84 (Phước ghi). Có kết quả rồi mới chốt giữ hay bỏ D3, D4, D5.
+5. D3, D4, D5: buổi 8/11 không có ghi chép; Phước hỏi lại ngày 12/11/2026, kết quả ở #84. Đề xuất giữ cả ba (mục 6). Khải chốt.
 
 ## 10. Kết quả kiểm trùng câu hỏi
 
