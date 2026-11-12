@@ -1,6 +1,6 @@
 # Chatbot hỏi đáp dự báo CPAWS
 
-> Bản nháp chương Chatbot cho báo cáo cuối kỳ (trình bày trước hội đồng thực tập FCAJ-AWS), cập nhật ngày 05/11/2026. Trạng thái triển khai và số liệu là tại ngày viết; mọi con số lấy từ tài liệu và kết quả trong repo, chỗ nào là suy luận thì ghi rõ.
+> Bản nháp chương Chatbot cho báo cáo cuối kỳ (trình bày trước hội đồng thực tập FCAJ-AWS), cập nhật ngày 12/11/2026. Trạng thái triển khai và số liệu là tại ngày viết; mọi con số lấy từ tài liệu và kết quả trong repo, hoặc từ issue/PR có dẫn link, chỗ nào là suy luận thì ghi rõ.
 
 ## 1. Mục tiêu và phạm vi
 
@@ -31,7 +31,7 @@ Một request đi qua các bước sau (code: [`handler.py`](../../infra/lambda/
 
 Mã lỗi trả theo dạng chung `{"error", "message"}`; `message` của lỗi 5xx không chứa chi tiết nội bộ. Bảng mã lỗi và cơ chế đếm lượt ở [Phụ lục A](#phụ-lục-a--chi-tiết-hợp-đồng-post-chat).
 
-Hạ tầng (PR [#63](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/63)) đã deploy ngày 02/11/2026, `/chat` chạy Haiku với prompt v2 ([kịch bản demo](../demo/demo-chatbot-2026-11-08.md), mục 1). Web gọi `/chat` qua `ChatPanel` (PR [#80](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/80)).
+Hạ tầng (PR [#63](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/63)) đã deploy ngày 02/11/2026, `/chat` chạy Haiku với prompt v2 ([kịch bản demo](../demo/demo-chatbot-2026-11-08.md), mục 1). Web gọi `/chat` qua `ChatPanel` (PR [#80](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/80)). Lần deploy `CpawsApi` gần nhất được ghi lại là ngày 07/11 từ commit `09dd1d4`: đổi origin sang domain Amplify và đưa bộ tin demo mới (PR [#92](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/92)) lên Lambda chat ([chương triển khai và vận hành](trien-khai-van-hanh.md), mục 7). Prompt trên Lambda vẫn là `chatbot-haiku-v2`; prompt v4 không đạt lần chạy chính thức nên không thay (mục 7.4).
 
 ## 3. Chọn nhánh và router theo luật
 
@@ -55,15 +55,15 @@ Luật khóa ngày 04/11/2026 ở commit `984d3fe`. Cùng ngày Khải chạy b�
 | Câu cần Haiku bị đưa sang Nova | 0 | ≤ 1 | ✅ |
 | Câu đơn giản bị đưa sang Haiku | 4 (RH-003, 004, 007, 012) | — | |
 
-**Router không đạt.** Cả 4 câu sai đều là câu đơn giản bị đưa sang Haiku, tức chỉ tốn thêm chi phí, không có câu nào bị mất số liệu. Quyết định: **không đưa router vào `/chat`, mọi câu đi Haiku**; không sửa luật rồi chấm lại trên bộ đã xem. Bộ câu giữ riêng ([`tests/router/heldout_v1.jsonl`](../../tests/router/heldout_v1.jsonl)), output nguyên văn của lần chạy ([`eval_output.txt`](../experiments/results/router-heldout-2026-11-04/eval_output.txt)) và phân tích 4 câu sai ở [đề xuất router](../experiments/chatbot-router-proposal.md), mục 6.1.
+**Router không đạt.** Cả 4 câu sai đều là câu đơn giản bị đưa sang Haiku, tức chỉ tốn thêm chi phí, không có câu nào bị mất số liệu. Quyết định: **không đưa router vào `/chat`, mọi câu đi Haiku**; không sửa luật rồi chấm lại trên bộ đã xem. Bộ câu giữ riêng ([`tests/router/heldout_v1.jsonl`](../../tests/router/heldout_v1.jsonl)), output nguyên văn của lần chạy ([`eval_output.txt`](../experiments/results/router-heldout-2026-11-04/eval_output.txt)) và phân tích 4 câu sai ở [đề xuất router](../experiments/chatbot-router-proposal.md), mục 6.1 (PR [#100](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/100)). Tùy chọn làm lại router (đề xuất router, mục 6.2) **không thực hiện**: Khải chốt ngày 10/11/2026 (PR [#111](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/111)), nên router dừng ở kết quả này tới khi bảo vệ.
 
 Đây là một **kết quả âm có kiểm soát**: luật khóa trước, ngưỡng chốt trước, người viết luật không thấy bộ kiểm trước khi khóa, chạy một lần, và quyết định thiết kế đi theo kết quả. Kết quả bộ giữ riêng cũng cho thấy độ chính xác 100% trên bộ phát triển là quá lạc quan.
 
 ### 3.3. Hệ quả của việc mọi câu đi Haiku
 
 - `choose_branch()` trả `complex` cho mọi câu, đúng quy tắc "không chắc thì Haiku" và phương án dự phòng đã chốt ở contract (quyết định 9).
-- Chi phí khoảng 0,012 USD/câu (mục 7.4). Với giới hạn 100 lượt/ngày, tối đa khoảng 1,2 USD/ngày.
-- Câu chào hỏi, khái niệm và ngoài phạm vi cũng do Haiku trả lời với prompt viết cho câu có tool. Hành vi này chỉ được đo trên 8 câu dev (mục 7.3), chưa có lần đo chính thức.
+- Chi phí khoảng 0,012 USD/câu (mục 7.5). Với giới hạn 100 lượt/ngày, tối đa khoảng 1,2 USD/ngày.
+- Câu chào hỏi, khái niệm và ngoài phạm vi cũng do Haiku trả lời với prompt viết cho câu có tool. Với prompt v2 đang chạy, hành vi này chỉ được đo trên 8 câu dev (mục 7.3). Lần đo chính thức duy nhất cho loại câu này là bộ A 8 câu ngày 11/11, nhưng chạy trên prompt v4, không phải v2 (mục 7.4).
 
 ## 4. Model Bedrock và cách gọi
 
@@ -94,13 +94,13 @@ Tool đọc thẳng bảng DynamoDB `Forecasts` (bản ghi mới nhất của t�
 
 Kết quả còn có ngày cơ sở, ngày dự báo, `model_version`, cờ dữ liệu mẫu, nguồn dữ liệu chưa cập nhật, cờ chuyển hợp đồng dầu, tỷ giá và câu disclaimer. Lỗi trả dạng `{"error", "message"}` (`invalid_asset`, `invalid_horizon`, `not_found`) để model nói rõ là chưa có bản ghi, thay vì bịa số. Đây là dữ liệu nội bộ giữa Lambda và model; API công khai không đổi.
 
-Theo ADR-0005 sửa ngày 04/11/2026 (PR [#91](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/91), chưa merge tại ngày viết), web hiển thị giá và khoảng giá vàng, bạc; chatbot vẫn giữ tool v2, không trả giá vàng, bạc, tới khi có PR riêng.
+Theo ADR-0005 sửa ngày 04/11/2026 (PR [#91](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/91), merge ngày 07/11/2026), web hiển thị giá và khoảng giá vàng, bạc; chatbot vẫn giữ tool v2, không trả giá vàng, bạc, tới khi có PR riêng.
 
 ### 5.2. `get_news(asset, from_date?, to_date?, min_impact?)`
 
 Tool đọc tin đã gắn nhãn theo schema 7 trường (`title`, `summary`, `link`, `source`, `published_at`, `impact_score` 0–3, `direction`), từ bảng `NewsLabels` hoặc từ file JSON, chọn bằng biến môi trường và **không tự chuyển nguồn**. Mặc định lấy 7 ngày, `min_impact` 2, sắp theo mức tác động rồi theo thời gian, tối đa 10 tin; tin thiếu link hợp lệ bị bỏ vì chatbot phải trích nguồn có link. Nguồn tin lỗi thì tool trả `news_unavailable`; câu trả lời vẫn có phần dự báo, request không thành `500` ([contract](../api/contract.md), mục "Nguồn dữ liệu của tool `get_news`").
 
-**Nhãn tin làm tay tới khi bảo vệ.** Bước gắn nhãn tự động bằng Nova 2 Lite trượt hai lần kiểm: labeling-v3 trên 49 thông cáo Fed/EIA thật chỉ đạt direction 52,4% (ngưỡng ≥ 80%) và evidence duyệt tay 2/10 (ngưỡng ≥ 8/10). Nhóm chọn gắn nhãn tay 2–3 thông cáo Fed/EIA mỗi tuần theo quy ước v3 đã duyệt, collector không gọi Bedrock ([ADR-0013](../adr/0013-manual-news-labels-until-defense.md)). Tại ngày viết, Lambda đọc bộ tin demo dạng JSON đóng gói cùng asset (`NEWS_DIR`), chưa đọc bảng `NewsLabels` ([demo-news](../api/demo-news.md)). Bộ này chỉ gồm thông cáo thật trên `federalreserve.gov` và `eia.gov`, không đổi ngày đăng để tin lọt vào khoảng mặc định.
+**Nhãn tin làm tay tới khi bảo vệ.** Bước gắn nhãn tự động bằng Nova 2 Lite trượt hai lần kiểm: labeling-v3 trên 49 thông cáo Fed/EIA thật chỉ đạt direction 52,4% (ngưỡng ≥ 80%) và evidence duyệt tay 2/10 (ngưỡng ≥ 8/10). Nhóm chọn gắn nhãn tay 2–3 thông cáo Fed/EIA mỗi tuần theo quy ước v3 đã duyệt, collector không gọi Bedrock ([ADR-0013](../adr/0013-manual-news-labels-until-defense.md)). Tại ngày viết, Lambda đọc bộ tin demo dạng JSON đóng gói cùng asset (`NEWS_DIR`), chưa đọc bảng `NewsLabels` ([demo-news](../api/demo-news.md)); bộ tin này được làm mới ở PR [#92](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/92) và lên Lambda trong lần deploy 07/11. Bộ này chỉ gồm thông cáo thật trên `federalreserve.gov` và `eia.gov`, không đổi ngày đăng để tin lọt vào khoảng mặc định.
 
 ## 6. Quy tắc không tư vấn và an toàn nội dung
 
@@ -120,6 +120,10 @@ Prompt `chatbot-haiku-v2` khóa SHA-256 ngày 29/10/2026 sau khi Khải duyệt 
 Prompt có thể bị model bỏ qua, nên một số quy tắc được thực thi lại bằng code, không phụ thuộc model:
 
 - **`citations` chỉ gồm tin do `get_news` trả về trong lượt này và có link xuất hiện trong câu trả lời.** Server không bao giờ lấy link từ chữ model tự viết; web chỉ tạo link từ `citations`, chỉ nhận `http`/`https`.
+- **Ghi log link lạ trong câu trả lời** (PR [#104](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/104)). Mỗi câu trả lời có link không trùng link của tin `get_news` trong lượt được ghi một dòng log `citation_link_mismatch` gồm `request_id`, `prompt_version`, số link lạ và các link đó; không ghi câu hỏi hay câu trả lời. Lớp này không sửa câu trả lời, chỉ để đếm và tra lại. Hàm kiểm link nằm ở [`citations.py`](../../src/chatbot/citations.py), dùng chung cho Lambda và benchmark. Log có thể chứa URL người dùng tự dán vào câu hỏi; log group giữ 1 tháng (PR [#107](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/107)). Log chỉ ở mức WARNING, chưa có metric filter hay alarm ([chương triển khai và vận hành](trien-khai-van-hanh.md), mục 6).
+  - *Nguồn gốc:* ở buổi tập dượt 07/11, một câu trả lời về tin chép sai link `federalreserve.gov` (`pressrelease` thay cho `pressreleases`). Link hỏng, và vì không trùng link của tool nên tin đó bị loại khỏi `citations`. Prompt v4 đã thêm quy tắc chép nguyên văn link; #104 thêm lớp kiểm ở code.
+  - *Benchmark:* từ PR [#109](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/109), câu có link lạ bị tính trượt kiểm tra tự động, và `citations.py` nằm trong phần code tool bị khóa SHA-256. Soát lại 396 câu trả lời của các lần chạy trước: 0 câu có link lạ.
+  - *Trạng thái deploy (suy ra):* chương triển khai chưa ghi lần deploy `CpawsApi` nào sau khi #104 merge (09/11), và #104 ghi rõ phải tới lần deploy tiếp theo mới có log này. Vì vậy tại ngày viết, log này có thể chưa chạy trên Lambda.
 - **`answer` hiển thị dạng văn bản thuần**: web không render Markdown hay HTML, không tự biến URL thành link.
 - **`disclaimer` và `forecasts_used` luôn có trong response**, để web hiện câu disclaimer và nhãn "dữ liệu mẫu" kể cả khi câu trả lời quên.
 - **`history` do client gửi không phải nguồn số liệu**: muốn nêu số, model vẫn phải gọi `get_forecast` trong lượt hiện tại.
@@ -127,7 +131,7 @@ Prompt có thể bị model bỏ qua, nên một số quy tắc được thực 
 
 Guardrails của Bedrock là lớp thứ ba theo thiết kế, nhưng còn `DRAFT` nên chưa hoạt động (mục 4).
 
-## 7. Đánh giá: benchmark v2 và lần dev prompt v3
+## 7. Đánh giá: benchmark v2, prompt v3 và prompt v4
 
 ### 7.1. Cách đánh giá
 
@@ -175,7 +179,38 @@ v3 sửa được 6 câu (thiếu mốc thống kê, bỏ dấu âm, không gọ
 
 Cùng đợt, 8 câu loại bài A (chào hỏi, khái niệm, ngoài phạm vi, tư vấn đầu tư) được chạy qua Haiku với prompt v2 để chọn kịch bản demo: đạt 4/8. Một câu khái niệm gọi `get_forecast` không cần thiết; một câu ngoài phạm vi (dự đoán trong ngày) bị trả lời bằng dự báo h = 1, **chấm tay là vi phạm chính sách**. Bốn câu chào hỏi và chỉ xin tư vấn đều đúng. Nhóm bỏ loại câu khái niệm và ngoài phạm vi khỏi kịch bản demo, giữ chào hỏi và chỉ xin tư vấn ([báo cáo dev v3](../experiments/chatbot-haiku-v3-dev-2026-11-01.md), mục 8).
 
-### 7.4. Hiệu năng và chi phí
+### 7.4. Prompt v4 (dev 08/11, chính thức 11/11/2026): không đạt, giữ v2
+
+**Dev 08/11.** Prompt `chatbot-haiku-v4` dựa trên v3, sửa theo các điểm gom ở issue [#84](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/issues/84) và kết quả buổi tập dượt 07/11. Các lần chạy dev dùng bộ v2 đã xem, 8 câu loại A và 2 câu kỳ hạn, nên chỉ là dev (kết quả thô ở [`docs/experiments/results/`](../experiments/results/), các thư mục `chatbot-benchmark-2026-11-08-*`; số tóm tắt ở comment trên #84 và PR [#105](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/105)):
+
+- Vòng 1: bộ v2 qua kiểm tra tự động 25/30; câu trả lời có `**` còn 0/30 (v2: 28/30); thiếu câu công bố mốc thống kê 252 phiên ở 11/24 câu.
+- Vòng sửa cuối (r2): bộ v2 qua tự động 25/30; thiếu câu mốc thống kê 3/24; markdown và link lạ 0/0; 8 câu loại A 6/8; 2 câu kỳ hạn 2/2. Sau vòng này prompt khóa, không sửa thêm ([prompt v4](../prompts/chatbot-haiku-v4.md), SHA-256 `a10949a3…`).
+
+**Bộ câu chính thức.** Long soạn hai bộ mới mà không đọc prompt v4 (PR [#108](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/108)): bộ B 30 câu cần tool và bộ A 8 câu (chào hỏi, khái niệm, ngoài phạm vi, tư vấn đầu tư). Bộ câu, prompt, fixture v2 và code tool khóa SHA-256 ở PR [#112](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/112) trước khi chạy. Ngưỡng chốt trước trong [`configs/chatbot_benchmark.py`](../../configs/chatbot_benchmark.py):
+
+- Bộ B: ≥ 25/30 câu đạt, tối đa 2 câu bị cắt, gọi đúng tool ≥ 90%.
+- Bộ A: ≥ 7/8 câu đạt, tối đa 1 câu bị cắt, mọi câu chính sách đều đạt.
+
+**Kết quả 11/11.** Khải chạy đúng một lần: ConverseStream, `temperature` 0, không Guardrail, không lỗi API. Kết quả cuối sau chấm tay ở PR [#120](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/120); dữ liệu thô, `summary.json` và bảng chấm tay ở [`…-v4-official-a/`](../experiments/results/chatbot-benchmark-2026-11-11-v4-official-a/) và [`…-v4-official-b/`](../experiments/results/chatbot-benchmark-2026-11-11-v4-official-b/):
+
+| Tiêu chí | Bộ B (30 câu) | Bộ A (8 câu) | Đạt |
+|---|---:|---:|:---:|
+| Câu đạt (tự động **và** chấm tay) | **17/30** (ngưỡng 25) | **5/8** (ngưỡng 7) | ❌ / ❌ |
+| Câu trượt do kiểm tra tự động | 4 | 2 | |
+| Câu trượt do rubric chấm tay | 9 | 1 | |
+| Vi phạm chính sách (chấm tay) | 0 | 0 | ✅ |
+| Làm theo injection / số không nguồn / bị cắt | 0 / 0 / 0 | 0 / 1 / 0 | |
+| Gọi đúng tool | 1,0 | — | ✅ |
+| Thời gian trả lời, trung vị | 4,2 giây | 1,7 giây | |
+
+- Bộ B trượt tự động 4 câu: B-010, B-019, B-023 thiếu cụm bắt buộc; B-015 thiếu cụm bắt buộc và thiếu số dự báo. Trượt rubric 9 câu: B-001, 002, 004, 006, 011, 012, 016, 028, 029.
+- Bộ A trượt 3 câu: A-001 (chào hỏi, thiếu tên "CPAWS") và A-003 (giải thích q10–q90, có số không nguồn) trượt tự động; A-004 trượt khi chấm tay.
+- **Chấm tay:** Phước chấm cả 38 câu; Khải chấm lại 11 câu trong danh sách cần kiểm và 5 câu Phước đánh dấu biên (B-001, 011, 012, 016, 029). B-001, 011, 012, 016 bị chấm 0 ở tiêu chí đúng ý vì tự gắn nhãn nghiêng tăng/giảm, trái `expected_behavior` đã khóa (nhất quán với B-002); B-029 bị chấm 0 vì nhãn tự thêm theo quy tắc prompt, đứng ngay trước câu hỏi nên mua loại nào (nhất quán với B-028). Nếu giữ điểm của Phước, bộ B là 22/30, vẫn không đạt (PR #120).
+- Chi phí cả hai bộ khoảng 0,73 USD (comment của Khải trên #84 ngày 11/11).
+
+**v4 không đạt cả hai bộ.** Theo điều kiện đã chốt, `/chat` **giữ `chatbot-haiku-v2`**; `PROMPT_FILES` và `PROMPT_VERSIONS` không đổi, prompt v4 nằm trên repo nhưng không dùng. Không sửa prompt rồi chạy lại trên hai bộ này. Suy từ ghi chú chấm tay ở #120: ít nhất 7 trong 9 câu trượt rubric của bộ B (5 câu biên cùng B-002, B-028) là do tự gắn nhãn nghiêng tăng/giảm, còn 4 câu trượt tự động là do thiếu phần bắt buộc; quy tắc không tư vấn vẫn giữ được (0 vi phạm).
+
+### 7.5. Hiệu năng và chi phí
 
 | Bài B, Haiku prompt v2 (30/10) | Giá trị |
 |---|---:|
@@ -190,21 +225,22 @@ Cùng đợt, 8 câu loại bài A (chào hỏi, khái niệm, ngoài phạm vi,
 
 **Chất lượng câu trả lời**
 
-- Bài B chưa đạt (14/30, ngưỡng ≥ 25). Lỗi còn lại tập trung ở diễn giải số (dấu âm, so sánh số âm, coi q10/q90 là sàn/trần), thiếu phần bắt buộc và tự thêm nhận định. Vì vậy buổi chạy thử 08/11 dùng **kịch bản câu hỏi cố định**, tránh các loại câu đã biết là yếu ([kịch bản demo](../demo/demo-chatbot-2026-11-08.md), mục 4).
-- Câu chào hỏi, khái niệm, ngoài phạm vi qua Haiku chỉ được đo trên 8 câu dev, và có 1 vi phạm ở câu dự đoán trong ngày.
-- Haiku còn trả Markdown (`**…**`) dù contract quy định văn bản thuần; web đang bỏ cặp `**` khi hiển thị. Các điểm cần sửa prompt sau demo được gom ở issue [#84](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/issues/84).
+- Bài B chưa đạt (14/30, ngưỡng ≥ 25). Lỗi còn lại tập trung ở diễn giải số (dấu âm, so sánh số âm, coi q10/q90 là sàn/trần), thiếu phần bắt buộc và tự thêm nhận định. Vì vậy buổi chạy thử 08/11 đã dùng **kịch bản câu hỏi cố định**, tránh các loại câu đã biết là yếu ([kịch bản demo](../demo/demo-chatbot-2026-11-08.md), mục 4).
+- Prompt v4 sửa được một số lỗi khi chạy dev nhưng không đạt lần chạy chính thức 11/11 (bộ B 17/30, ngưỡng 25; bộ A 5/8, ngưỡng 7; mục 7.4). Lambda giữ v2, nên các lỗi của v2 ở mục 7.2 vẫn còn trên `/chat`.
+- Câu chào hỏi, khái niệm, ngoài phạm vi qua Haiku với prompt v2 chỉ được đo trên 8 câu dev, và có 1 vi phạm ở câu dự đoán trong ngày. Bộ A chính thức đo trên v4, không áp dụng trực tiếp cho v2.
+- Với prompt v2 trên Lambda, Haiku còn trả Markdown (`**…**`) dù contract quy định văn bản thuần (28/30 câu bộ v2); web đang bỏ cặp `**` khi hiển thị. Prompt v4 hết lỗi này khi chạy dev (0/30) nhưng không lên Lambda. Các điểm cần sửa prompt được gom ở issue [#84](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/issues/84).
 
 **Tính hợp lệ của phép đo**
 
 - Benchmark chạy trên fixture, chưa phải bảng `Forecasts` và tin thật; mỗi câu chạy một lần với `temperature` 0, chưa đo dao động giữa các lần chạy.
 - Benchmark chỉ có câu một lượt; hành vi khi có `history` chưa được đo.
 - Mẫu chấm độc lập chỉ 10 câu (khớp 7/10); 8 dòng soát lại được Khải kiểm với hỗ trợ của GPT và Gemini, không hoàn toàn độc lập. Phía Phước dùng Claude gợi ý điểm.
-- Bộ v2 đã được dùng để viết prompt v3, nên mọi lần chạy lại trên bộ này chỉ là dev. Lần chạy chính thức tiếp theo cần bộ câu mới do người khác người viết prompt soạn, và chỉ làm nếu kịp trước 22/11.
+- Bộ v2 đã được dùng để viết prompt v3 và v4, nên mọi lần chạy lại trên bộ này chỉ là dev. Hai bộ câu mới của Long (#108) đã dùng cho lần chạy chính thức v4 ngày 11/11; từ đó hai bộ này cũng chỉ còn giá trị dev.
 
 **Hệ thống**
 
 - Router không đạt bộ giữ riêng, nên mọi câu đi Haiku: chi phí và độ trễ cao hơn cần thiết với câu đơn giản.
-- Guardrails còn `DRAFT`; lớp chống prompt injection hiện chỉ gồm prompt và kiểm soát `citations` phía server.
+- Guardrails còn `DRAFT`; lớp chống prompt injection hiện chỉ gồm prompt, kiểm soát `citations` phía server và log link lạ (#104). Log này chỉ ghi, không chặn, chưa có alarm, và có thể chưa lên Lambda (mục 6.2).
 - Tin tức phụ thuộc một người gắn nhãn tay, 2–3 bài mỗi tuần, có độ trễ; ngoài khoảng đó `get_news` trả rỗng và chatbot nói không tìm thấy tin đáng kể.
 - Mặc định khoảng ngày của `get_news` lệch giữa prompt ("7 ngày đến ngày cơ sở") và code ("7 ngày đến hôm nay theo giờ Việt Nam"); đã ghi ở mục 6 issue #84.
 - Không streaming: người dùng chờ cả câu, trung vị khoảng 4 giây trên benchmark.
@@ -212,7 +248,7 @@ Cùng đợt, 8 câu loại bài A (chào hỏi, khái niệm, ngoài phạm vi,
 
 ## 9. Tóm tắt
 
-`POST /chat` là một Lambda gọi Claude Haiku 4.5 qua Bedrock Converse, lấy số liệu từ bảng `Forecasts` qua `get_forecast` và tin Fed/EIA gắn nhãn tay qua `get_news`, có giới hạn lượt hỏi, hạn chót theo mốc 29 giây của API Gateway và các lớp server bảo vệ trích nguồn. Quy tắc không tư vấn đầu tư được giữ ở mọi lần đo trên bộ chính thức (0 vi phạm, 0 làm theo injection). Chất lượng diễn giải số **chưa đạt ngưỡng** (14/30). Router theo luật không đạt bộ giữ riêng (26/30 < 90%) nên không được đưa vào hệ thống. Cả hai kết quả đều được trình bày như kết quả âm có kiểm soát: ngưỡng chốt trước, chạy một lần, không sửa sau khi xem kết quả, và quyết định thiết kế đi theo kết quả.
+`POST /chat` là một Lambda gọi Claude Haiku 4.5 qua Bedrock Converse, lấy số liệu từ bảng `Forecasts` qua `get_forecast` và tin Fed/EIA gắn nhãn tay qua `get_news`, có giới hạn lượt hỏi, hạn chót theo mốc 29 giây của API Gateway và các lớp server bảo vệ trích nguồn. Quy tắc không tư vấn đầu tư được giữ ở mọi lần đo trên bộ chính thức (0 vi phạm, 0 làm theo injection). Chất lượng diễn giải số **chưa đạt ngưỡng** (14/30). Prompt v4 cũng không đạt lần chạy chính thức 11/11 trên bộ câu mới (bộ B 17/30, bộ A 5/8; 0 vi phạm chính sách), nên `/chat` giữ prompt v2. Router theo luật không đạt bộ giữ riêng (26/30 < 90%) nên không được đưa vào hệ thống. Cả ba kết quả đều được trình bày như kết quả âm có kiểm soát: ngưỡng chốt trước, chạy một lần, không sửa sau khi xem kết quả, và quyết định thiết kế đi theo kết quả.
 
 ---
 
@@ -280,8 +316,11 @@ Nguồn: [đề xuất router](../experiments/chatbot-router-proposal.md), [`src
 | 30/10 | **Chính thức bộ v2** | `chatbot-haiku-v2` (khóa 29/10), tool v2 | v2 | **14/30** | Đang chạy trên `/chat` |
 | 01/11 | Dev | `chatbot-haiku-v3` | v2 (đã xem) | 13/30 | Không đủ điều kiện lên Lambda |
 | 02/11 | Dev, 8 câu loại A | `chatbot-haiku-v2` | 8 câu loại A | 4/8 | Chỉ để chọn kịch bản demo |
+| 08/11 | Dev vòng 1 | `chatbot-haiku-v4` bản nháp | v2 (đã xem), 8 câu loại A, 2 câu kỳ hạn | — | Bộ v2 qua tự động 25/30; `**` 0/30 |
+| 08/11 | Dev vòng sửa cuối (r2) | `chatbot-haiku-v4` (khóa `a10949a3…`) | như trên | — | Bộ v2 qua tự động 25/30; loại A 6/8; kỳ hạn 2/2 |
+| 11/11 | **Chính thức bộ v4** | `chatbot-haiku-v4` | Bộ B 30 câu và bộ A 8 câu của Long (#108) | **17/30** | Không đạt; bộ A 5/8 (ngưỡng 7); 0 vi phạm chính sách. Giữ v2 (#120) |
 
-Nguồn: [báo cáo 23/10](../experiments/bedrock-model-test-2026-10.md) mục 10; [benchmark v2](../experiments/chatbot-benchmark-v2-2026-10.md); [dev v3](../experiments/chatbot-haiku-v3-dev-2026-11-01.md); kết quả thô ở [`docs/experiments/results/`](../experiments/results/).
+Nguồn: [báo cáo 23/10](../experiments/bedrock-model-test-2026-10.md) mục 10; [benchmark v2](../experiments/chatbot-benchmark-v2-2026-10.md); [dev v3](../experiments/chatbot-haiku-v3-dev-2026-11-01.md); v4: issue #84, PR #105, #108, #112, #120; kết quả thô ở [`docs/experiments/results/`](../experiments/results/).
 
 # Phụ lục D — Khác biệt giữa các tài liệu
 
@@ -291,4 +330,5 @@ Nguồn: [báo cáo 23/10](../experiments/bedrock-model-test-2026-10.md) mục 1
 | ADR-0004 mục 1: router theo luật chọn Nova hoặc Haiku | Thiết kế vẫn đúng; router chưa đưa vào Lambda theo kết quả bộ giữ riêng |
 | ADR-0004 mục 2, ADR-0003 mục 4: Nova 2 Lite gắn nhãn tin | Tạm dừng tới khi bảo vệ; nhãn tay theo ADR-0013 |
 | Header file `chatbot-haiku-v2.md`: "Bản nháp, chờ Khải duyệt", "ConverseStream" | Prompt đã được duyệt và khóa SHA-256 29/10 (contract); Lambda gọi Converse, benchmark gọi ConverseStream |
+| Header file `chatbot-haiku-v4.md`: "chờ Khải duyệt", "Chưa dùng trên Lambda" | Prompt đã khóa `a10949a3…` và chạy chính thức 11/11, không đạt; Lambda giữ v2 (mục 7.4) |
 | Contract và comment trong `news.py`: mặc định 7 ngày "khớp prompt" | Code tính đến hôm nay theo giờ Việt Nam, prompt ghi đến ngày cơ sở; ghi ở issue #84 mục 6 |
