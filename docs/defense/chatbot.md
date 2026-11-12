@@ -205,7 +205,7 @@ Cùng đợt, 8 câu loại bài A (chào hỏi, khái niệm, ngoài phạm vi,
 
 - Bộ B trượt tự động 4 câu: B-010, B-019, B-023 thiếu cụm bắt buộc; B-015 thiếu cụm bắt buộc và thiếu số dự báo. Trượt rubric 9 câu: B-001, 002, 004, 006, 011, 012, 016, 028, 029.
 - Bộ A trượt 3 câu: A-001 (chào hỏi, thiếu tên "CPAWS") và A-003 (giải thích q10–q90, có số không nguồn) trượt tự động; A-004 trượt khi chấm tay.
-- **Chấm tay:** Phước chấm cả 38 câu; Khải chấm lại 11 câu trong danh sách cần kiểm và 5 câu Phước đánh dấu biên (B-001, 011, 012, 016, 029). Năm câu biên bị chấm 0 ở tiêu chí đúng ý vì tự gắn nhãn nghiêng tăng/giảm, trái `expected_behavior` đã khóa, nhất quán với B-002, B-028. Nếu giữ điểm của Phước, bộ B là 22/30, vẫn không đạt (PR #120).
+- **Chấm tay:** Phước chấm cả 38 câu; Khải chấm lại 11 câu trong danh sách cần kiểm và 5 câu Phước đánh dấu biên (B-001, 011, 012, 016, 029). B-001, 011, 012, 016 bị chấm 0 ở tiêu chí đúng ý vì tự gắn nhãn nghiêng tăng/giảm, trái `expected_behavior` đã khóa (nhất quán với B-002); B-029 bị chấm 0 vì nhãn tự thêm theo quy tắc prompt, đứng ngay trước câu hỏi nên mua loại nào (nhất quán với B-028). Nếu giữ điểm của Phước, bộ B là 22/30, vẫn không đạt (PR #120).
 - Chi phí cả hai bộ khoảng 0,73 USD (comment của Khải trên #84 ngày 11/11).
 
 **v4 không đạt cả hai bộ.** Theo điều kiện đã chốt, `/chat` **giữ `chatbot-haiku-v2`**; `PROMPT_FILES` và `PROMPT_VERSIONS` không đổi, prompt v4 nằm trên repo nhưng không dùng. Không sửa prompt rồi chạy lại trên hai bộ này. Suy từ ghi chú chấm tay ở #120: ít nhất 7 trong 9 câu trượt rubric của bộ B (5 câu biên cùng B-002, B-028) là do tự gắn nhãn nghiêng tăng/giảm, còn 4 câu trượt tự động là do thiếu phần bắt buộc; quy tắc không tư vấn vẫn giữ được (0 vi phạm).
