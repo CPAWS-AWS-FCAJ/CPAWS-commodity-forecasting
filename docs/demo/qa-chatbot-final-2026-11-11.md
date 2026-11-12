@@ -353,8 +353,10 @@ Claude không gọi Bedrock và không chạy lệnh `aws`. Muốn thử một c
 export API_URL="<URL stage API>"
 ```
 
+Nhập token bằng `read -rs` để token không nằm trong lịch sử shell và không hiện trên màn hình: chạy lệnh, dán token, bấm Enter (không thấy gì hiện ra là đúng).
+
 ```bash
-export ID_TOKEN="<ID token tài khoản tập dượt>"
+read -rs ID_TOKEN && export ID_TOKEN
 ```
 
 Ví dụ câu Q6 (đổi `question` và `context.asset` theo bảng ở mục 3):
@@ -371,6 +373,7 @@ python -c "import json,sys; d=json.load(open(sys.argv[1],encoding='utf-8')); pri
 
 - `prompt_version` phải là `chatbot-haiku-v2`.
 - Mỗi lần chạy tính một lượt của tài khoản đó. Lưu file JSON ngoài repo (có `request_id`, không có token).
+- Thử xong thì đóng terminal (hoặc chạy `unset ID_TOKEN`) để token không còn trong biến môi trường.
 
 ## 9. Việc cần chốt (Khải)
 
