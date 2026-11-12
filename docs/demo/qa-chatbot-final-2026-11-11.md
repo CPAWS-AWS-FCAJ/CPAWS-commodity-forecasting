@@ -3,7 +3,7 @@
 - Người soạn: Phước. Soạn 11/11/2026. Trạng thái: **nháp, chờ Khải duyệt**. Hạn chốt: trước 25/11/2026.
 - Buổi trình bày: cuối tháng 11 hoặc đầu tháng 12/2026 (chưa chốt ngày). Đóng băng tính năng 22/11/2026.
 - Mục tiêu: hội đồng thấy chatbot trả lời thật qua `POST /chat` trên AWS. Số lấy từ tool, tin có trích nguồn, có câu "không phải lời khuyên đầu tư", chatbot từ chối tư vấn đầu tư và nói thẳng khi không có tin.
-- **Prompt: `chatbot-haiku-v2`.** Official `chatbot-haiku-v4` ngày 11/11/2026 không đạt (bài A 6/8, ngưỡng 7/8; issue #84, comment của Khải ngày 11/11), nên Lambda giữ v2. Kịch bản này chỉ dựa trên kết quả đã đo với v2, không dựa trên số của v3 hay v4.
+- **Prompt: `chatbot-haiku-v2`.** Official `chatbot-haiku-v4` chạy ngày 11/11/2026 không đạt cả hai bài: bài A 5/8 (ngưỡng 7/8), bài B 17/30 (ngưỡng 25/30), vi phạm chính sách 0 (kết quả cuối sau chấm tay, PR #120). Vì vậy Lambda giữ v2. Kịch bản này chỉ dựa trên kết quả đã đo với v2, không dựa trên số của v3 hay v4.
 - Kế thừa cấu trúc và quy tắc của [kịch bản chạy thử nội bộ 8/11](demo-chatbot-2026-11-08.md). Phần không nhắc lại ở đây (hạ tầng, quy tắc không chiếu Account ID, ARN, token, email) vẫn theo file đó.
 
 Tài liệu nguồn:
@@ -29,9 +29,9 @@ Tài liệu nguồn:
 | Câu tin "vì sao" (câu 3, vàng, từ 7/10) | Bỏ sau tập dượt 7/11: hai lần đều tự hạ `min_impact`, tự thêm nhận định, lần đầu chép sai link | **Không dùng loại "vì sao".** Câu tin tức hỏi thẳng danh sách tin, với **khoảng ngày đóng** chỉ chứa đúng một tin ở mọi mức tác động (mục 5), nên tự hạ `min_impact` cũng không kéo thêm tin |
 | Ngữ cảnh trang | Không ghi rõ | Web luôn gửi `context: {asset, page: "product"}` theo trang đang mở (`web/src/api/chat.ts`). Mỗi câu ghi rõ phải mở trang tài sản nào |
 | Lịch sử hội thoại | Không ghi rõ | Web gửi tối đa 3 lượt trước trong `history`. Benchmark chỉ đo câu một lượt (contract, mục `history`), nên **bấm "Xóa hội thoại" trước mỗi câu** |
-| Ngoài phạm vi | Bỏ cả loại | Một câu tùy chọn (Q11), chỉ hỏi nếu Khải đồng ý và tập dượt đạt (mục 9) |
+| Ngoài phạm vi | Bỏ cả loại | Một câu tùy chọn (Q11). **Mặc định không hỏi**; chỉ hỏi khi còn thời gian, Khải đồng ý và tập dượt đạt (mục 9) |
 
-Kết quả của buổi chạy thử 8/11 chưa có trong repo (chỉ có kết quả tập dượt 7/11 ở issue #84). Nếu buổi 8/11 có câu sai, Phước bổ sung vào mục 7.2 trước khi tập dượt.
+Kết quả buổi chạy thử 8/11: chờ kết quả 8/11 ở #84. Kết quả này ghi ở issue #84, không ghi vào file này. Hiện #84 mới có kết quả tập dượt 7/11.
 
 ## 2. Nguyên tắc chọn câu
 
@@ -69,7 +69,7 @@ Kết quả của buổi chạy thử 8/11 chưa có trong repo (chỉ có kết
 | Q8 | "Bảy ngày gần đây dầu WTI có thông tin nào đáng kể không?" | WTI | Không có tin thì nói thẳng | Bắt buộc, có D2 | Câu 3b: đúng ngày 2/11 và 7/11 |
 | Q9 | "Cho mình xem vàng 3 phiên tới được dự báo ra sao, xong rồi bạn nói thẳng: có nên mua thêm không?" | Vàng | Tư vấn đầu tư lồng trong câu hỏi thông tin | Bắt buộc | HAIKU2-028, 029 đạt |
 | Q10 | "Mình đang giữ ít vàng, có nên đổi hết sang bạc lúc này không?" | Vàng | Chỉ xin tư vấn đầu tư | Bắt buộc, có D4 | HAIKU3A-007, 008 (2/11) |
-| Q11 | "Petrolimex sắp điều chỉnh giá xăng bán lẻ, theo bạn lần này tăng hay giảm?" | Vàng | Ngoài phạm vi | Tùy chọn, cần Khải đồng ý | HAIKU3A-005 (2/11) |
+| Q11 | "Petrolimex sắp điều chỉnh giá xăng bán lẻ, theo bạn lần này tăng hay giảm?" | Vàng | Ngoài phạm vi | Tùy chọn, mặc định không hỏi | HAIKU3A-005 (2/11) |
 
 Không có câu giải thích khái niệm: v2 gọi tool không cần thiết ở loại này (HAIKU3A-003). Hội đồng hỏi khái niệm thì người trình bày trả lời bằng lời (mục 7.4).
 
@@ -212,7 +212,9 @@ Lỗi chung của v2 có thể gặp ở mọi câu có dự báo (báo cáo v2,
 - **Vì sao chọn:** Q9 cho thấy chatbot tách phần thông tin khỏi lời khuyên; Q10 cho thấy khi chỉ xin lời khuyên thì chatbot từ chối ngắn. v2 đúng loại này (HAIKU3A-007, 008).
 - **Rủi ro:** benchmark loại A không có ngữ cảnh trang, còn trên web có `context.asset = gold`, nên model có thể gọi `get_forecast` vàng và bạc rồi trình bày số. Nếu vẫn không khuyên thì không vi phạm, người trình bày nói rõ. Có câu khuyên đổi hay giữ thì bỏ câu này, dùng D4.
 
-### Q11. Ngoài phạm vi (tùy chọn, cần Khải đồng ý)
+### Q11. Ngoài phạm vi (tùy chọn, mặc định không hỏi)
+
+**Mặc định không hỏi Q11.** Người trình bày chỉ hỏi khi đủ cả ba điều kiện: còn thời gian sau Q10, Khải đồng ý (mục 9) và tập dượt đạt cả hai lần.
 
 - **Context:** trang vàng (`asset: gold`). Không mở trang Brent hay WTI để model ít bị kéo sang dự báo dầu.
 - **Điểm cần thấy:** từ chối ngắn, nói giá xăng bán lẻ Việt Nam nằm ngoài phạm vi; không gọi tool; có thể mời hỏi dự báo Brent hay WTI.
@@ -269,6 +271,7 @@ Không sửa dữ liệu để tin hiện ra: không đổi `published_at`, khô
 | D6 | "Từ ngày <từ>/2026 đến <đến>/2026 có tin nào đáng chú ý liên quan đến bạc không? Ghi rõ nguồn giúp mình." | Bạc | Q6, Q7 | Tin 7/10 bị bỏ khỏi bộ tin. Chọn khoảng ngày đã qua chỉ chứa đúng một tin bạc mức 2 ở mọi mức tác động, kiểm bằng lệnh ở mục 5 (đổi ngày) |
 
 - D3, D4, D5 là nguyên văn câu 2, 5, 1 của kịch bản 8/11. D5 đã tập dượt 7/11 (chỉ thiếu "mốc thống kê 252 phiên").
+- Giữ D3, D4, D5 hay bỏ: chờ kết quả 8/11 ở #84. Câu nào sai ở buổi 8/11 thì bỏ khỏi dự phòng.
 - D2 là khoảng ngày bộ tin không có tin nào. Thực tế EIA vẫn ra WPSR giữa tháng 10 nhưng bộ tin không thu bài đó, nên người trình bày nói: "Trong bộ tin đã gắn nhãn của nhóm không có tin WTI nào trong khoảng này." Vì vậy D2 chỉ là dự phòng, Q8 vẫn là câu chính.
 
 ## 7. Cho người trình bày
@@ -320,7 +323,7 @@ Cùng nguyên tắc với 8/11: lỗi lặp lại ở cả hai lần hỏi thì 
 - Bấm "Xóa hội thoại" trước mỗi câu; đổi trang tài sản thì web tự mở hội thoại mới.
 - Tối đa 20 lượt mỗi người, 100 lượt mỗi ngày cho cả hệ thống, reset 00:00 giờ Việt Nam (contract). Kịch bản 11 câu, cộng 1 câu hỏi thử buổi sáng và vài lần hỏi lại, vẫn dưới 20.
 - Tài khoản trình bày không dùng để tập dượt. Hôm trình bày, cả team hạn chế hỏi thử để không chạm 100 lượt chung.
-- Thiếu thời gian thì bỏ theo thứ tự: Q1, Q7, Q11, Q5.
+- Q11 mặc định không hỏi (mục 4, Q11). Thiếu thời gian thì bỏ tiếp theo thứ tự: Q1, Q7, Q5.
 - Hội đồng muốn tự gõ câu ngoài kịch bản: người trình bày trả lời bằng lời, ghi lại câu để thử sau bằng tài khoản tập dượt (Khải, ghi chú ở PR #76). Sự cố `503`, `504`, `429` xử lý như mục 7 của kịch bản 8/11.
 
 ### 7.4. Câu hội đồng có thể hỏi
@@ -329,7 +332,7 @@ Các câu ở mục 8 của kịch bản 8/11 vẫn dùng được. Thêm các c
 
 | Câu hỏi | Ý trả lời |
 |---|---|
-| Sao chatbot chạy prompt v2, không phải bản mới? | v4 chạy chính thức ngày 11/11/2026 trên bộ câu do người chưa đọc prompt soạn, đã khóa SHA-256: bài B qua bước tự động 26/30, bài A 6/8 dưới ngưỡng 7/8. Theo điều kiện chốt trước, v4 không đạt nên Lambda giữ v2. Không sửa prompt rồi chạy lại trên cùng bộ câu |
+| Sao chatbot chạy prompt v2, không phải bản mới? | v4 chạy chính thức ngày 11/11/2026 trên bộ câu do người chưa đọc prompt soạn, đã khóa SHA-256. Kết quả cuối sau chấm tay: bài A 5/8 (ngưỡng 7/8), bài B 17/30 (ngưỡng 25/30), vi phạm chính sách 0 (PR #120). Cả hai bài không đạt nên Lambda giữ v2. Không sửa prompt rồi chạy lại trên cùng bộ câu |
 | Benchmark của bản đang chạy là bao nhiêu? | v2 bài B ngày 30/10: 14/30 câu đạt (ngưỡng 25), 0 vi phạm chính sách, 0 trên 3 câu injection bị làm theo. Lỗi còn lại là diễn giải số, thiếu phần bắt buộc, tự thêm nhận định |
 | Sao chỉ hỏi những câu này? | Bộ câu cố định, chọn từ loại câu v2 đã làm đúng trong benchmark và tránh loại câu đã biết là yếu (mục 2). Không câu nào trùng bộ câu dùng để chấm |
 | Chatbot giải thích khái niệm được không (q10, q90, xác suất tăng)? | Có trả lời, nhưng v2 hay gọi tool không cần thiết ở loại câu này, nên nhóm không đưa vào phần hỏi trực tiếp. Người trình bày giải thích: khoảng 80% là từ q10 đến q90, nghĩa là vẫn có khả năng giá nằm ngoài khoảng; xác suất tăng là xác suất giá ở ngày dự báo cao hơn ngày cơ sở |
@@ -366,10 +369,10 @@ python -c "import json,sys; d=json.load(open(sys.argv[1],encoding='utf-8')); pri
 ## 9. Việc cần chốt (Khải)
 
 1. Duyệt bộ câu ở mục 3 và quy tắc bỏ câu ở mục 7.2.
-2. **Q11 (ngoài phạm vi):** có cho hỏi không. Ngày 2/11 cả loại bị bỏ vì HAIKU3A-006 (dự đoán trong ngày). Đề xuất: chỉ hỏi Q11 nếu Khải đồng ý tách câu xăng bán lẻ (HAIKU3A-005, đúng) khỏi câu dự đoán trong ngày, và tập dượt đạt cả hai lần.
+2. **Q11 (ngoài phạm vi): tùy chọn, mặc định không hỏi.** Ngày 2/11 cả loại bị bỏ vì HAIKU3A-006 (dự đoán trong ngày). Chỉ hỏi Q11 khi còn thời gian, Khải đồng ý tách câu xăng bán lẻ (HAIKU3A-005, đúng) khỏi câu dự đoán trong ngày, và tập dượt đạt cả hai lần.
 3. Ngày tập dượt: đề xuất 23–24/11/2026, sau đóng băng tính năng và sau lần deploy `CpawsApi` cuối, để bộ tin và prompt trên Lambda giống hôm trình bày.
 4. Người giữ máy và tài khoản: tài khoản tập dượt và tài khoản trình bày tách riêng, như 8/11.
-5. Ghi kết quả buổi chạy thử 8/11 vào repo (hiện chỉ có kết quả tập dượt 7/11 ở issue #84), để biết câu nào của 8/11 cần bỏ khỏi dự phòng D3, D4, D5.
+5. Kết quả buổi chạy thử 8/11: chờ kết quả 8/11 ở #84 (Phước ghi). Có kết quả rồi mới chốt giữ hay bỏ D3, D4, D5.
 
 ## 10. Kết quả kiểm trùng câu hỏi
 
