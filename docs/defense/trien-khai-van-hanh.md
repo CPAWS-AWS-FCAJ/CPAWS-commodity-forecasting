@@ -1,6 +1,6 @@
 # Triển khai và vận hành CPAWS
 
-> Bản nháp chương Triển khai và vận hành cho báo cáo cuối kỳ (trình bày trước hội đồng thực tập FCAJ-AWS), cập nhật ngày 06/11/2026. Trạng thái triển khai là tại ngày viết; cấu hình lấy từ code trong `infra/`, số đo lấy từ log CloudWatch của các lượt chạy thật. Phần nào là kế hoạch thì ghi rõ.
+> Bản nháp chương Triển khai và vận hành cho báo cáo cuối kỳ (trình bày trước hội đồng thực tập FCAJ-AWS), cập nhật ngày 06/11/2026, bổ sung ngày 13/11/2026 (Rolling Accuracy, web). Trạng thái triển khai là tại ngày viết; cấu hình lấy từ code trong `infra/`, số đo lấy từ log CloudWatch của các lượt chạy thật. Phần nào là kế hoạch thì ghi rõ.
 
 ## 1. Mục tiêu và phạm vi
 
@@ -19,11 +19,11 @@ Phạm vi chương: các stack, luồng chạy hằng ngày, quy trình deploy, 
 
 | Stack | Tài nguyên chính | Cấu hình đáng chú ý |
 |---|---|---|
-| `CpawsData` | S3 `cpaws-dev-lake`; ECR `cpaws-dev-ingest`, `cpaws-dev-predict`; Lambda `cpaws-dev-ingest`, `cpaws-dev-predict`; EventBridge Scheduler; metric filter cho shadow | Bucket bật versioning, phiên bản cũ giữ 30 ngày, `RETAIN`, chặn public, bắt buộc SSL. ECR giữ 5 image mới nhất. Ingest: container, 1.024 MB, 300 giây, retry bất đồng bộ 1 lần. Predict: container x86_64, 1.024 MB, 120 giây, retry 0. Không Lambda nào chạy trong VPC (không cần NAT Gateway) |
-| `CpawsServing` | DynamoDB `cpaws-dev-forecasts`, `cpaws-dev-news-labels`, `cpaws-dev-chat-usage` | On-demand. `forecasts` và `news-labels` là `RETAIN`. `chat-usage` chỉ lưu bộ đếm lượt hỏi nên là `DESTROY` |
+| `CpawsData` | S3 `cpaws-dev-lake`; ECR `cpaws-dev-ingest`, `cpaws-dev-predict`; Lambda `cpaws-dev-ingest`, `cpaws-dev-predict`, `cpaws-dev-accuracy-job`; EventBridge Scheduler (ingest 19:15, job accuracy 20:45); metric filter cho shadow | Bucket bật versioning, phiên bản cũ giữ 30 ngày, `RETAIN`, chặn public, bắt buộc SSL. ECR giữ 5 image mới nhất. Ingest: container, 1.024 MB, 300 giây, retry bất đồng bộ 1 lần. Predict: container x86_64, 1.024 MB, 120 giây, retry 0. Job accuracy: container từ image predict, 1.024 MB, 300 giây, retry 0 (mục 9). Không Lambda nào chạy trong VPC (không cần NAT Gateway) |
+| `CpawsServing` | DynamoDB `cpaws-dev-forecasts`, `cpaws-dev-news-labels`, `cpaws-dev-chat-usage`, `cpaws-dev-accuracy` | On-demand. `forecasts` và `news-labels` là `RETAIN`. `chat-usage` chỉ lưu bộ đếm lượt hỏi nên là `DESTROY` |
 | `CpawsAuth` | Cognito User Pool `cpaws-dev-users`, app client cho SPA | Không cho tự đăng ký; tài khoản do nhóm tạo. `RETAIN` |
-| `CpawsApi` | REST API stage `dev`; Lambda `cpaws-dev-forecasts-api` (256 MB, 10 giây) và `cpaws-dev-chat-api` (512 MB, 28 giây) | Cognito authorizer cho mọi route trừ `/health`. Throttling 10 request/giây, burst 20. CORS chỉ một origin (mục 7). Tin demo đóng gói trong Lambda chat ([ADR-0013](../adr/0013-manual-news-labels-until-defense.md)) |
-| `CpawsOps` | SNS `cpaws-dev-alarms`, 5 CloudWatch alarm | Email nhận cảnh báo truyền lúc deploy, không ghi vào repo (mục 6) |
+| `CpawsApi` | REST API stage `dev`; Lambda `cpaws-dev-forecasts-api` (256 MB, 10 giây) và `cpaws-dev-chat-api` (512 MB, 28 giây), `cpaws-dev-accuracy-api` (chỉ đọc bảng `cpaws-dev-accuracy`) | Cognito authorizer cho mọi route trừ `/health`. Throttling 10 request/giây, burst 20. CORS chỉ một origin (mục 7). Tin demo đóng gói trong Lambda chat ([ADR-0013](../adr/0013-manual-news-labels-until-defense.md)) |
+| `CpawsOps` | SNS `cpaws-dev-alarms`, 6 CloudWatch alarm | Email nhận cảnh báo truyền lúc deploy, không ghi vào repo (mục 6) |
 
 Phụ thuộc giữa các stack: `CpawsApi` dùng bảng của `CpawsServing` và User Pool của `CpawsAuth`, nên **`CpawsServing` phải deploy trước `CpawsApi`**. `CpawsOps` tham chiếu Lambda theo tên chứ không theo output của stack khác, nên deploy được độc lập. Log group của mọi Lambda giữ 1 tháng.
 
@@ -98,13 +98,14 @@ Ba điểm làm cho rollback an toàn:
 
 ## 6. Giám sát và cảnh báo
 
-Năm alarm ở `CpawsOps` cùng một quy tắc: **≥ 1 trong 5 phút**, chu kỳ không có dữ liệu thì coi là bình thường. Khi báo, alarm gửi email qua SNS `cpaws-dev-alarms` (người nhận phải bấm Confirm sau lần deploy đầu).
+Sáu alarm ở `CpawsOps` cùng một quy tắc: **≥ 1 trong 5 phút**, chu kỳ không có dữ liệu thì coi là bình thường. Khi báo, alarm gửi email qua SNS `cpaws-dev-alarms` (người nhận phải bấm Confirm sau lần deploy đầu).
 
 | Alarm | Metric | Khi nào báo |
 |---|---|---|
 | `cpaws-dev-ingest-errors` | `AWS/Lambda Errors` của ingest | Một nguồn chính lỗi (`IngestSourceFailed`) hoặc Lambda crash |
 | `cpaws-dev-predict-errors` | `AWS/Lambda Errors` của predict | Có tài sản bị bỏ qua (`PredictFailed`) hoặc Lambda crash |
 | `cpaws-dev-predict-shadow-errors` | Metric filter trên log predict | `PREDICT_SHADOW_FAILED` hoặc `PREDICT_SHADOW_CONFIG_INVALID`. Champion vẫn phát hành bình thường, nên metric `Errors` không thấy lỗi này |
+| `cpaws-dev-accuracy-job-errors` | `AWS/Lambda Errors` của job accuracy | Có tài sản `FAILED` (`AccuracyFailed`), timeout hoặc crash. Lượt dry-run và trạng thái chưa đủ dữ liệu không tính là lỗi |
 | `cpaws-dev-chat-api-errors` | `AWS/Lambda Errors` của chat | Timeout hoặc crash |
 | `cpaws-dev-chat-api-internal-errors` | Metric filter trên log chat | Handler bắt lỗi không lường trước và trả `500`. Lỗi 4xx, 429 và lỗi Bedrock có mã riêng là hành vi đã thiết kế, nên không báo |
 
@@ -124,6 +125,9 @@ Vì zip upload tay không gắn với commit, bản đang chạy được ghi l�
 | 07/11 | `09dd1d4` | `false` (#91 chưa merge) | `false` |
 | 07/11 (lần 2) | `c94849a` | `true` | `false` |
 | 08/11 | `2e7d3fa` | `true` | `false` |
+| 13/11 | `26399d0` | `true` | `true` |
+
+Bản 13/11 (Amplify Deployment 5, 13:27) bật `VITE_ACCURACY_API` vì route `/accuracy/{asset}` đã deploy từ 10/11 (mục 9), và lần đầu đưa khối quy đổi khoảng dự báo ra số tiền ([#117](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/117), ADR-0005) lên web. Kiểm tra trên domain: cả 4 tài sản gọi `/accuracy/{asset}` trả 200, khối "Độ tin cậy" hiện "Đang thu thập (9/20)", khối quy đổi hiện dưới 7 thẻ kỳ hạn, console không có lỗi CORS. Muốn quay lại thì build lại với `VITE_ACCURACY_API=false` và upload, không cần deploy API.
 
 **CORS:** `CpawsApi` nhận **một** origin qua `-c allowed_origin`, mặc định `http://localhost:5173`. Giá trị này được dùng ở ba chỗ: preflight `OPTIONS` của API Gateway, header của Lambda `forecasts-api` và `chat-api` (biến `ALLOWED_ORIGIN`), và `GatewayResponse` 4xx/5xx (để trình duyệt vẫn đọc được mã lỗi 401, 429, 504).
 
@@ -142,16 +146,36 @@ Vì chỉ có một origin, tại mỗi thời điểm chỉ Amplify **hoặc** 
 - **CI không deploy (không có CD).** GitHub không giữ quyền AWS. Repo public nên mọi thay đổi được quét Account ID, email và key (pre-commit: gitleaks, detect-aws-credentials).
 - Nhánh `developer` cần ít nhất 1 approve để merge; nhóm dùng merge commit.
 
-## 9. Đang triển khai: Rolling Accuracy
+## 9. Rolling Accuracy
 
-Bảng `cpaws-dev-accuracy` và API `/accuracy/{asset}` (PR [#87](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/87)), cùng job `rolling_8w` (PR [#89](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/89)), **chưa deploy** tại ngày viết. Thứ tự dự kiến:
+Khối "Độ tin cậy" trên web lấy số đo `rolling_8w` đã tính sẵn trong bảng `cpaws-dev-accuracy`, không tính lúc người dùng mở trang. Phương pháp đánh giá ở [chương phương pháp đánh giá](phuong-phap-danh-gia.md), Phụ lục A; hợp đồng dữ liệu ở [`walk-forward-contract.md`](../eval/walk-forward-contract.md), mục 7.
 
-1. `CpawsServing` (tạo bảng).
-2. `CpawsData` và `CpawsOps` (job và alarm của job).
-3. Chạy thử dry-run cho 4 tài sản và ghi lại thời gian, bộ nhớ.
-4. Nhóm quyết định, rồi mới mở PR bật lịch.
+Các bước đã triển khai:
 
-Route `/accuracy` không deploy cùng lần deploy `CpawsApi` ngày 07/11. Phương pháp đánh giá ở [chương phương pháp đánh giá](phuong-phap-danh-gia.md), Phụ lục A.
+| Ngày | Thay đổi | Stack / nơi |
+|---|---|---|
+| 10/11 | Bảng `cpaws-dev-accuracy` ([#87](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/87)) | `CpawsServing` |
+| 10/11 | Route `GET /accuracy/{asset}` (cần Cognito), Lambda `cpaws-dev-accuracy-api` chỉ đọc bảng (#87) | `CpawsApi` (từ `f1ff01f`) |
+| 11/11 | Lambda `cpaws-dev-accuracy-job` (image `e31c928`) và lịch ở trạng thái **tắt** ([#89](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/89)) | `CpawsData` |
+| 11/11 | Alarm `cpaws-dev-accuracy-job-errors` (mục 6) | `CpawsOps` |
+| 11/11 | Dry-run 4 tài sản, gọi tay | — |
+| 12/11 | Bật lịch ([#118](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/118), `eb09713`); `cdk diff` chỉ đổi `State` của schedule | `CpawsData` |
+| 13/11 | Web bật `VITE_ACCURACY_API` (mục 7) | Amplify |
+
+**Lịch và luồng.** Schedule `cpaws-dev-accuracy-daily`, `cron(45 13 ? * TUE-SAT *)` UTC, tức **20:45 giờ Việt Nam, thứ Ba đến thứ Bảy**, 90 phút sau lượt ingest → predict 19:15. Job đọc bảng `cpaws-dev-forecasts` (chỉ `Query`), snapshot giá `clean/prices/` và kết quả shadow S1a trên S3. Job ghi kết quả vào `cpaws-dev-accuracy` (ghi có điều kiện) và báo cáo so sánh S1a vào `eval/shadow_eval/` (không ghi đè). Tài sản nào lỗi thì job báo `Errors`, alarm `cpaws-dev-accuracy-job-errors` gửi email. Nếu lịch không chạy thì không có số liệu và alarm coi là bình thường (mục 10).
+
+**Các lượt đã chạy:**
+
+| Lượt | Chế độ | Duration | Max Memory | Kết quả |
+|---|---|---:|---:|---|
+| 11/11 20:58 | Dry-run, gọi tay | 23,7 s | 290 / 1.024 MB | 4 tài sản không lỗi; `base_price_revision_mismatch` 0/63 |
+| 12/11 20:45 | Theo lịch | 30,3 s (Init 1,3 s) | 297 / 1.024 MB | 4 tài sản `COMPLETED`, đã công bố (`promoted`); `n_base_dates` 9; alarm OK |
+
+Job có ghi cảnh báo `prob_up_mismatch` (xác suất tăng đã lưu lệch với giá trị tính lại từ các phân vị). Đo ngày 12/11 trên 63 cặp mỗi tài sản, độ lệch lớn nhất dưới 1e-5, do phân vị và xác suất được làm tròn 6 chữ số khi ghi DynamoDB. Nhóm giữ ngưỡng và không sửa code job trước 22/11.
+
+**Hiển thị.** Khi số ngày cơ sở đã đánh giá chưa đạt `min_display_base_dates` (20), API trả `data_status = collecting` và web hiện "Đang thu thập (n/20)" thay cho số đo. Ngày 12/11 cả 4 tài sản ở mức 9/20. Mỗi lượt chạy thêm khoảng một ngày cơ sở, nên dự kiến đủ 20 vào khoảng cuối tháng 11. Có thể kiểm `/accuracy` mà không cần token Cognito bằng cách gọi trực tiếp Lambda `cpaws-dev-accuracy-api` (Phụ lục A.3).
+
+**Rollback.** Tắt lịch bằng `-c accuracy_schedule=off` (Phụ lục A.2): chỉ đổi `State`; Lambda, IAM và dữ liệu đã ghi giữ nguyên. Ẩn khối trên web bằng cách build lại với `VITE_ACCURACY_API=false` (mục 7).
 
 ## 10. Giới hạn
 
@@ -164,7 +188,7 @@ Route `/accuracy` không deploy cùng lần deploy `CpawsApi` ngày 07/11. Phư�
 
 ## 11. Tóm tắt
 
-CPAWS chạy serverless trên 5 stack CDK, không có tài nguyên tính tiền theo giờ. Lượt chạy hằng ngày lúc 19:15 (thứ Ba–thứ Bảy) đi theo chuỗi Scheduler → ingest → predict. Predict ghi có điều kiện nên chạy lại an toàn. Shadow S1a tách khỏi champion và có alarm riêng. Rollback cho shadow, image, CORS và cờ web đều chỉ cần một lệnh deploy hoặc một lần upload, không phải build lại image. Ràng buộc trong CDK (`MODEL_VERSION` khớp `MODEL_VERSIONS`) giữ cho image cũ vẫn chạy đúng champion. Năm alarm gửi email qua SNS. Phần còn yếu là vận hành tay: deploy từ một máy, CORS chỉ một origin, Amplify thủ công, và chưa có cảnh báo khi lượt chạy không diễn ra.
+CPAWS chạy serverless trên 5 stack CDK, không có tài nguyên tính tiền theo giờ. Lượt chạy hằng ngày lúc 19:15 (thứ Ba–thứ Bảy) đi theo chuỗi Scheduler → ingest → predict; job đánh giá `rolling_8w` chạy lúc 20:45 cùng các ngày. Predict ghi có điều kiện nên chạy lại an toàn. Shadow S1a tách khỏi champion và có alarm riêng. Rollback cho shadow, image, CORS và cờ web đều chỉ cần một lệnh deploy hoặc một lần upload, không phải build lại image. Ràng buộc trong CDK (`MODEL_VERSION` khớp `MODEL_VERSIONS`) giữ cho image cũ vẫn chạy đúng champion. Sáu alarm gửi email qua SNS. Phần còn yếu là vận hành tay: deploy từ một máy, CORS chỉ một origin, Amplify thủ công, và chưa có cảnh báo khi lượt chạy không diễn ra.
 
 ---
 
@@ -202,6 +226,16 @@ aws cloudwatch describe-alarms --profile cpaws-dev --query "MetricAlarms[].[Alar
 ```
 
 Log `PREDICT_DONE` có giá phiên gần nhất và xác suất tăng, nên không dán nguyên dòng log vào repo public hay PR.
+
+Lượt job accuracy 20:45 (mục 9):
+
+```
+aws logs tail /aws/lambda/cpaws-dev-accuracy-job --since 1h --format short --profile cpaws-dev \
+  --filter-pattern "?REPORT ?ACCURACY_DONE ?ACCURACY_FAILED ?ACCURACY_NOT_READY ?WARNING ?ERROR ?Traceback"
+aws scheduler get-schedule --name cpaws-dev-accuracy-daily --profile cpaws-dev --query "[State,ScheduleExpression]" --output text
+```
+
+Kiểm `/accuracy` không cần token: gọi trực tiếp Lambda `cpaws-dev-accuracy-api` với payload `{"pathParameters":{"asset":"gold"}}` (ghi payload ra file rồi truyền `--payload fileb://…`), đọc `statusCode`, `data_status`, `overall.coverage_80.n_base_dates` / `min_display_base_dates` và `run_id`. Log `ACCURACY_DONE` và body của `/accuracy` không chứa giá.
 
 ## A.4. Cập nhật web
 
