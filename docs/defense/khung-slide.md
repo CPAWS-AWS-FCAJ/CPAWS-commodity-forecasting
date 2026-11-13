@@ -25,7 +25,7 @@
 | 2 | Vấn đề | Khải | 3 khó khăn của người dùng; 4 tài sản; không tư vấn đầu tư | — | Mở đầu, Bối cảnh | Gộp 2 + 3 |
 | 3 | Sản phẩm làm được gì | Khải | Khoảng dự báo 1–7 phiên, xác suất tăng, USD/VND, độ tin cậy, chatbot | 1 ảnh trang dự báo (chế độ cơ bản) | Mở đầu, Bài toán | |
 | 4 | Mục tiêu và mức đạt | Khải | Bảng 5 mục tiêu: đạt / đạt một phần / đang thu thập | Bảng rút gọn | Mở đầu, Mục tiêu | — |
-| 5 | Kiến trúc tổng thể | Tiến | Scheduler → ingest → predict → DynamoDB → API → web; chatbot Bedrock; 5 stack CDK | Sơ đồ kiến trúc hiện trạng (bản cập nhật sau #89) | Ch.4 mục 2–3 | — |
+| 5 | Kiến trúc tổng thể | Tiến | Scheduler → ingest → predict → DynamoDB → API → web; chatbot Bedrock; các stack CDK tại ngày chốt (13/11 là 5 stack) | Sơ đồ kiến trúc hiện trạng 13/11 (#125) | Ch.4 mục 2–3 | — |
 | 6 | Vì sao dự báo return, không dự báo giá | Khải | Ví dụ "chính xác 99% ảo"; 7 phân vị; quy đổi ra khoảng giá | 1 hình minh họa phân vị (không dùng số thật) | Ch.1 mục 1.1 | Gộp 6 + 7 |
 | 7 | Dữ liệu | Khải | Nguồn yfinance, lịch giao dịch, chia 2014–2018 / 2019 / 2020→nay, ngày chuyển hợp đồng dầu | Bảng chia tập | Ch.1 mục 1.2 | |
 | 8 | Các mô hình đã thử | Khải | Mốc 252 phiên; DLinear, K3, K3b, K4 (13 cấu hình) đều không vượt mốc trên validation 2019 | Bảng 1.4 (pinball skill trung bình) | Ch.1 mục 1.4 | — |
