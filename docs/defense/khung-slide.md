@@ -2,8 +2,9 @@
 
 > Bản nháp ngày 13/11/2026. Điều phối: Khải. Mục đích: chia việc làm slide trước 15/11 để mỗi người soạn song song từ chương của mình.
 >
-> - Thời lượng giả định **15–20 phút trình bày + hỏi đáp**, khoảng 18 slide. `[CHỜ XÁC NHẬN: thời lượng hội đồng FCAJ-AWS quy định]`; nếu ngắn hơn thì gộp theo cột "Gộp khi thiếu giờ".
+> - Thời lượng giả định **15–20 phút trình bày + hỏi đáp**, khoảng 20 slide. `[CHỜ XÁC NHẬN: thời lượng hội đồng FCAJ-AWS quy định]`; nếu ngắn hơn thì gộp theo cột "Gộp khi thiếu giờ".
 > - Nội dung slide lấy từ chương đã merge trong `docs/defense/`. Slide không đưa số mới chưa có trong báo cáo.
+> - **Định dạng:** mỗi phần một file Marp trong `docs/defense/slides-<phần>.md`, theo mẫu `slides-chatbot.md` (PR #127): front matter giống nhau, mỗi slide có ghi chú người nói và dòng nguồn. Review qua PR như tài liệu; cuối cùng ghép một file và xuất PDF/PPTX bằng `npx @marp-team/marp-cli`.
 
 ## Lịch
 
@@ -33,11 +34,11 @@
 | 11 | Champion / challenger | Long | S1a chạy song song từ 04/11; quy tắc đổi champion (cận dưới CI 95% > 0, có ADR) | Sơ đồ champion/challenger | Ch.1 mục 1.5, Ch.2 mục 3 | |
 | 12 | Kết quả test2020 | Long | Kết quả một lượt chạy chính thức, kèm giới hạn; không đổi champion | `[CHỜ SỐ LIỆU: test2020, chỉ sau lần chạy chính thức]` | Ch.2 mục 6 | — |
 | 13 | Độ tin cậy trên dữ liệu chạy thật | Long + Tiến | Job `rolling_8w` hằng ngày; web "Đang thu thập (n/20)" hoặc số đo nếu đã đủ 20 | Ảnh khối "Độ tin cậy" chụp ngày 22/11 | Ch.2 Phụ lục A, Ch.4 mục 9 | Gộp vào 11 |
-| 14 | Chatbot: thiết kế | Phước | Luồng `POST /chat`, tool `get_forecast` / `get_news`, số chỉ lấy từ tool, không tư vấn | Sơ đồ luồng chat | Ch.3 mục 2, 5, 6 | Gộp 14 + 15 |
-| 15 | Chatbot: đánh giá | Phước | Benchmark v2 và v4 chưa đạt, 0 vi phạm chính sách, vì sao giữ v2 | Bảng kết quả v4 (A 5/8, B 17/30) | Ch.3 mục 7 | |
-| 16 | Demo trực tiếp | Phước + Tiến | Đăng nhập → trang vàng → đổi VND → hỏi chatbot 2–3 câu theo kịch bản | Web thật; video dự phòng nếu mạng lỗi | `docs/demo/qa-chatbot-final-2026-11-11.md` | Rút còn 1 câu chatbot |
-| 17 | Vận hành, bảo mật, chi phí | Tuấn + Tiến | Chạy tự động, alarm, rollback; Cognito, IAM, bảo vệ artifact test; chi phí thực tế so với credit | Bảng chi phí theo dịch vụ | Ch.4, Ch.5 | — |
-| 18 | Kết luận và hướng phát triển | Khải | Đạt được gì; giới hạn (chỉ dùng giá, chuỗi đại diện, rủi ro nguồn Yahoo); bước tiếp: tín hiệu ngoài giá, retrain khi có mô hình vượt mốc | — | Ch.1 mục 1.7, Kết luận | — |
+| 14–15 | Chatbot: luồng `POST /chat`; tool, nguồn tin và kiểm link | Phước | **Đã có** ở `slides-chatbot.md` slide 1–2 (#127) | Sơ đồ khối luồng chat; câu trả lời mẫu khoanh phần trích nguồn | Ch.3 mục 2, 4, 5, 6 | Gộp còn 1 slide |
+| 16–17 | Chatbot: kết quả đánh giá; vì sao giữ v2, giới hạn | Phước | **Đã có** ở `slides-chatbot.md` slide 3–4 (#127): v2 14/30, router 26/30, v4 B 17/30, A 5/8, 0 vi phạm chính sách | Bảng 4 lần đo | Ch.3 mục 3.2, 7, 8 | Gộp còn 1 slide |
+| 18 | Demo trực tiếp | Phước + Tiến | Đăng nhập → trang vàng → đổi VND → hỏi chatbot 2–3 câu theo kịch bản | Web thật; video dự phòng nếu mạng lỗi | `docs/demo/qa-chatbot-final-2026-11-11.md` | Rút còn 1 câu chatbot |
+| 19 | Vận hành, bảo mật, chi phí | Tuấn + Tiến | Chạy tự động, alarm, rollback; Cognito, IAM, bảo vệ artifact test; chi phí thực tế so với credit | Bảng chi phí theo dịch vụ | Ch.4, Ch.5 | — |
+| 20 | Kết luận và hướng phát triển | Khải | Đạt được gì; giới hạn (chỉ dùng giá, chuỗi đại diện, rủi ro nguồn Yahoo, chưa có biểu đồ lịch sử giá); bước tiếp: tín hiệu ngoài giá, retrain khi có mô hình vượt mốc | — | Ch.1 mục 1.7, Kết luận | — |
 
 Slide dự phòng cho hỏi đáp (không trình bày, mở khi được hỏi): so với proposal (Ch.1 mục 1.6), router chatbot không làm (Ch.3 mục 3), Guardrails không bật (Ch.3, Ch.5), rủi ro Yahoo (Ch.5 mục 6).
 
@@ -49,4 +50,4 @@ Slide dự phòng cho hỏi đáp (không trình bày, mở khi được hỏi):
 - **Vàng, bạc:** luôn ghi "quy đổi từ quỹ GLD/SLV (chuỗi đại diện), không phải giá giao ngay".
 - **Ảnh màn hình:** chụp sau đăng nhập; che Account ID (chỉ để 4 số cuối), email và token. Ghi "Mốc thống kê 252 phiên" như trên web.
 - **Không tư vấn đầu tư:** không slide nào nói nên mua hay bán.
-- **Giao diện:** một template chung do Khải gửi; mỗi slide một ý chính, chữ tối thiểu cỡ 18.
+- **Giao diện:** front matter Marp chung theo `slides-chatbot.md`; mỗi slide một ý chính, chữ tối thiểu cỡ 18.
