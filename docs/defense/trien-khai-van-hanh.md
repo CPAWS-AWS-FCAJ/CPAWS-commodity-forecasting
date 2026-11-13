@@ -173,7 +173,7 @@ Các bước đã triển khai:
 
 Job có ghi cảnh báo `prob_up_mismatch` (xác suất tăng đã lưu lệch với giá trị tính lại từ các phân vị). Đo ngày 12/11 trên 63 cặp mỗi tài sản, độ lệch lớn nhất dưới 1e-5, do phân vị và xác suất được làm tròn 6 chữ số khi ghi DynamoDB. Nhóm giữ ngưỡng và không sửa code job trước 22/11.
 
-**Hiển thị.** Khi số ngày cơ sở đã đánh giá chưa đạt `min_display_base_dates` (20), API trả `data_status = collecting` và web hiện "Đang thu thập (n/20)" thay cho số đo. Ngày 12/11 cả 4 tài sản ở mức 9/20. Mỗi lượt chạy thêm khoảng một ngày cơ sở, nên dự kiến đủ 20 vào khoảng cuối tháng 11. Có thể kiểm `/accuracy` mà không cần token Cognito bằng cách gọi trực tiếp Lambda `cpaws-dev-accuracy-api` (Phụ lục A.3).
+**Hiển thị.** Khi số ngày cơ sở đã đánh giá chưa đạt `min_display_base_dates` (20), API trả `data_status = collecting` và web hiện "Đang thu thập (n/20)" thay cho số đo. Ngày 12/11 cả 4 tài sản ở mức 9/20. Mỗi lượt chạy thêm khoảng một ngày cơ sở, nên dự kiến đủ 20 vào khoảng cuối tháng 11. Kiểm nhanh mà không qua đăng nhập web: gọi trực tiếp Lambda `cpaws-dev-accuracy-api` bằng quyền IAM của nhóm (không đi qua API Gateway); route `GET /accuracy/{asset}` trên API vẫn cần token Cognito (Phụ lục A.3).
 
 **Rollback.** Tắt lịch bằng `-c accuracy_schedule=off` (Phụ lục A.2): chỉ đổi `State`; Lambda, IAM và dữ liệu đã ghi giữ nguyên. Ẩn khối trên web bằng cách build lại với `VITE_ACCURACY_API=false` (mục 7).
 
@@ -235,7 +235,7 @@ aws logs tail /aws/lambda/cpaws-dev-accuracy-job --since 1h --format short --pro
 aws scheduler get-schedule --name cpaws-dev-accuracy-daily --profile cpaws-dev --query "[State,ScheduleExpression]" --output text
 ```
 
-Kiểm `/accuracy` không cần token: gọi trực tiếp Lambda `cpaws-dev-accuracy-api` với payload `{"pathParameters":{"asset":"gold"}}` (ghi payload ra file rồi truyền `--payload fileb://…`), đọc `statusCode`, `data_status`, `overall.coverage_80.n_base_dates` / `min_display_base_dates` và `run_id`. Log `ACCURACY_DONE` và body của `/accuracy` không chứa giá.
+Kiểm nhanh mà không qua đăng nhập web: gọi trực tiếp Lambda `cpaws-dev-accuracy-api` bằng quyền IAM của nhóm (không đi qua API Gateway; route `GET /accuracy/{asset}` trên API vẫn cần token Cognito), với payload `{"pathParameters":{"asset":"gold"}}` (ghi payload ra file rồi truyền `--payload fileb://…`), đọc `statusCode`, `data_status`, `overall.coverage_80.n_base_dates` / `min_display_base_dates` và `run_id`. Log `ACCURACY_DONE` và body của `/accuracy` không chứa giá.
 
 ## A.4. Cập nhật web
 
