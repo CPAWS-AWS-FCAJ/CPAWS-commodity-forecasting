@@ -1,6 +1,6 @@
 # Chatbot hỏi đáp dự báo CPAWS
 
-> Bản nháp chương Chatbot cho báo cáo cuối kỳ (trình bày trước hội đồng thực tập FCAJ-AWS), cập nhật ngày 12/11/2026. Trạng thái triển khai và số liệu là tại ngày viết; mọi con số lấy từ tài liệu và kết quả trong repo, hoặc từ issue/PR có dẫn link, chỗ nào là suy luận thì ghi rõ.
+> Bản nháp chương Chatbot cho báo cáo cuối kỳ (trình bày trước hội đồng thực tập FCAJ-AWS), cập nhật ngày 13/11/2026. Trạng thái triển khai và số liệu là tại ngày viết; mọi con số lấy từ tài liệu và kết quả trong repo, hoặc từ issue/PR có dẫn link, chỗ nào là suy luận thì ghi rõ.
 
 ## 1. Mục tiêu và phạm vi
 
@@ -31,7 +31,7 @@ Một request đi qua các bước sau (code: [`handler.py`](../../infra/lambda/
 
 Mã lỗi trả theo dạng chung `{"error", "message"}`; `message` của lỗi 5xx không chứa chi tiết nội bộ. Bảng mã lỗi và cơ chế đếm lượt ở [Phụ lục A](#phụ-lục-a--chi-tiết-hợp-đồng-post-chat).
 
-Hạ tầng (PR [#63](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/63)) đã deploy ngày 02/11/2026, `/chat` chạy Haiku với prompt v2 ([kịch bản demo](../demo/demo-chatbot-2026-11-08.md), mục 1). Web gọi `/chat` qua `ChatPanel` (PR [#80](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/80)). Lần deploy `CpawsApi` gần nhất được ghi lại là ngày 07/11 từ commit `09dd1d4`: đổi origin sang domain Amplify và đưa bộ tin demo mới (PR [#92](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/92)) lên Lambda chat ([chương triển khai và vận hành](trien-khai-van-hanh.md), mục 7). Prompt trên Lambda vẫn là `chatbot-haiku-v2`; prompt v4 không đạt lần chạy chính thức nên không thay (mục 7.4).
+Hạ tầng (PR [#63](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/63)) đã deploy ngày 02/11/2026, `/chat` chạy Haiku với prompt v2 ([kịch bản demo](../demo/demo-chatbot-2026-11-08.md), mục 1). Web gọi `/chat` qua `ChatPanel` (PR [#80](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/80)). Ngày 07/11, `CpawsApi` được deploy từ commit `09dd1d4`: đổi origin sang domain Amplify và đưa bộ tin demo mới (PR [#92](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/92)) lên Lambda chat ([chương triển khai và vận hành](trien-khai-van-hanh.md), mục 7). Các lần deploy sau đó: 10/11 từ `f1ff01f` (có log link lạ, mục 6.2) và 13/11 từ `b616185`, chỉ để đưa bộ tin của PR [#123](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/123) lên Lambda chat; `cdk diff` của lần 13/11 chỉ đổi gói code của Lambda chat (comment của Tiến trên #123, 13/11). Prompt trên Lambda vẫn là `chatbot-haiku-v2`; prompt v4 không đạt lần chạy chính thức nên không thay (mục 7.4).
 
 ## 3. Chọn nhánh và router theo luật
 
@@ -123,7 +123,7 @@ Prompt có thể bị model bỏ qua, nên một số quy tắc được thực 
 - **Ghi log link lạ trong câu trả lời** (PR [#104](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/104)). Mỗi câu trả lời có link không trùng link của tin `get_news` trong lượt được ghi một dòng log `citation_link_mismatch` gồm `request_id`, `prompt_version`, số link lạ và các link đó; không ghi câu hỏi hay câu trả lời. Lớp này không sửa câu trả lời, chỉ để đếm và tra lại. Hàm kiểm link nằm ở [`citations.py`](../../src/chatbot/citations.py), dùng chung cho Lambda và benchmark. Log có thể chứa URL người dùng tự dán vào câu hỏi; log group giữ 1 tháng (PR [#107](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/107)). Log chỉ ở mức WARNING, chưa có metric filter hay alarm ([chương triển khai và vận hành](trien-khai-van-hanh.md), mục 6).
   - *Nguồn gốc:* ở buổi tập dượt 07/11, một câu trả lời về tin chép sai link `federalreserve.gov` (`pressrelease` thay cho `pressreleases`). Link hỏng, và vì không trùng link của tool nên tin đó bị loại khỏi `citations`. Prompt v4 đã thêm quy tắc chép nguyên văn link; #104 thêm lớp kiểm ở code.
   - *Benchmark:* từ PR [#109](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/109), câu có link lạ bị tính trượt kiểm tra tự động, và `citations.py` nằm trong phần code tool bị khóa SHA-256. Soát lại 396 câu trả lời của các lần chạy trước: 0 câu có link lạ.
-  - *Trạng thái deploy (suy ra):* chương triển khai chưa ghi lần deploy `CpawsApi` nào sau khi #104 merge (09/11), và #104 ghi rõ phải tới lần deploy tiếp theo mới có log này. Vì vậy tại ngày viết, log này có thể chưa chạy trên Lambda.
+  - *Trạng thái deploy:* log này chạy trên Lambda từ lần deploy `CpawsApi` ngày 10/11 (commit `f1ff01f`), lần deploy đầu tiên sau khi #104 merge (comment của Tiến trên PR [#123](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/123), 13/11).
 - **`answer` hiển thị dạng văn bản thuần**: web không render Markdown hay HTML, không tự biến URL thành link.
 - **`disclaimer` và `forecasts_used` luôn có trong response**, để web hiện câu disclaimer và nhãn "dữ liệu mẫu" kể cả khi câu trả lời quên.
 - **`history` do client gửi không phải nguồn số liệu**: muốn nêu số, model vẫn phải gọi `get_forecast` trong lượt hiện tại.
@@ -240,7 +240,7 @@ Cùng đợt, 8 câu loại bài A (chào hỏi, khái niệm, ngoài phạm vi,
 **Hệ thống**
 
 - Router không đạt bộ giữ riêng, nên mọi câu đi Haiku: chi phí và độ trễ cao hơn cần thiết với câu đơn giản.
-- Guardrails còn `DRAFT`; lớp chống prompt injection hiện chỉ gồm prompt, kiểm soát `citations` phía server và log link lạ (#104). Log này chỉ ghi, không chặn, chưa có alarm, và có thể chưa lên Lambda (mục 6.2).
+- Guardrails còn `DRAFT`; lớp chống prompt injection hiện chỉ gồm prompt, kiểm soát `citations` phía server và log link lạ (#104). Log này đã chạy trên Lambda từ 10/11 nhưng chỉ ghi, không chặn và chưa có alarm (mục 6.2).
 - Tin tức phụ thuộc một người gắn nhãn tay, 2–3 bài mỗi tuần, có độ trễ; ngoài khoảng đó `get_news` trả rỗng và chatbot nói không tìm thấy tin đáng kể.
 - Mặc định khoảng ngày của `get_news` lệch giữa prompt ("7 ngày đến ngày cơ sở") và code ("7 ngày đến hôm nay theo giờ Việt Nam"); đã ghi ở mục 6 issue #84.
 - Không streaming: người dùng chờ cả câu, trung vị khoảng 4 giây trên benchmark.
