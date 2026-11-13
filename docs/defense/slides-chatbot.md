@@ -54,7 +54,7 @@ Gợi ý hình: sơ đồ khối như trên, hoặc phần chat trong sơ đồ 
 - **`get_news`:** tin Fed/EIA **gắn nhãn tay** tới khi bảo vệ (ADR-0013): gắn nhãn tự động bằng Nova chỉ đạt direction 52,4%, dưới ngưỡng 80%
 - **`citations`:** server chỉ giữ tin do `get_news` trả trong lượt **và** có link xuất hiện trong câu trả lời; web chỉ tạo link từ `citations`
 - **Kiểm link lạ (#104, #109):** link trong câu trả lời không thuộc tin của tool được ghi log `citation_link_mismatch`; benchmark tính câu đó là trượt
-- Trạng thái: log lên Lambda từ lần deploy `CpawsApi` tối 13/11, **chưa xác nhận**; chỉ ghi log, chưa có alarm
+- Trạng thái: log chạy trên Lambda từ lần deploy `CpawsApi` ngày 10/11 (`f1ff01f`); chỉ ghi log, chưa có alarm
 
 <!--
 Ghi chú người nói: Lớp kiểm link có từ một lỗi thật ở buổi tập dượt 7/11: model chép sai một ký tự trong link thông cáo, link hỏng và tin bị loại khỏi trích nguồn. Sau đó nhóm thêm lớp kiểm ở code, dùng chung cho Lambda và benchmark; soát lại 396 câu trả lời cũ không thấy link lạ nào.
