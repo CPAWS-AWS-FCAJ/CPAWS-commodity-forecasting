@@ -137,6 +137,11 @@ Bản 13/11 (Amplify Deployment 5, 13:27) bật `VITE_ACCURACY_API` vì route `/
 | Từ 07/11 | Domain Amplify nhánh `dev` | Deploy `CpawsApi` từ `09dd1d4`; lần deploy này cũng đưa bộ tin demo mới (#92) lên Lambda chat. Kiểm tra trên Amplify: preflight trả đúng origin, trang dự báo không lỗi CORS, `POST /chat` trả 200 và `get_news` trả tin |
 | Dự phòng | `http://localhost:5173` | Nếu tập dượt trên Amplify còn lỗi lúc 19:00 ngày 07/11, deploy lại origin localhost (khoảng 3 phút) và chạy thử bằng localhost |
 
+Sau 07/11, `CpawsApi` được deploy lại hai lần, origin vẫn là domain Amplify:
+
+- **10/11**, từ `f1ff01f`: thêm route `/accuracy/{asset}` (mục 9); lần này cũng đưa log `citation_link_mismatch` (PR [#104](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/104)) lên Lambda chat.
+- **13/11 15:57**, từ `b616185`: chỉ đổi gói code Lambda chat để đưa bộ tin STEO 10/11 và WPSR 12/11 (PR [#123](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/123)) lên; `cdk diff` chỉ có `Code.S3Key` của `ChatApiHandler`. Kiểm tra trên Amplify: `POST /chat` trả 200; hỏi tin WTI từ 10/11 với `min_impact = 1` ra đúng hai tin EIA mới, link đúng; hỏi mặc định (mức 2) thì chatbot trả lời không có tin đáng kể, đúng như ghi chú ở [`demo-news.md`](../api/demo-news.md).
+
 Vì chỉ có một origin, tại mỗi thời điểm chỉ Amplify **hoặc** localhost gọi được API. Hỗ trợ nhiều origin để sau 08/11.
 
 ## 8. CI và kiểm soát thay đổi
@@ -184,6 +189,7 @@ Job có ghi cảnh báo `prob_up_mismatch` (xác suất tăng đã lưu lệch v
 - **CORS một origin**, nên localhost và Amplify không dùng được cùng lúc.
 - **Amplify deploy zip thủ công.** Không có lịch sử build gắn với commit, nên commit nào đang chạy phải ghi lại bằng tay.
 - **ECR giữ 5 image**, nên image rollback có thể bị xóa nếu không theo dõi (mục 5).
+- **Chưa có biểu đồ lịch sử giá.** Trang tài sản chỉ vẽ phần dự báo và ghi "Chưa có lịch sử giá". Muốn vẽ lịch sử phải thêm endpoint: sửa `docs/api/contract.md`, predict ghi thêm tệp lịch sử ngắn, thêm route và quyền đọc S3 trong `CpawsApi`, hai lần deploy. Hiển thị chuỗi giá lấy từ Yahoo cũng làm tăng rủi ro điều khoản ([ADR-0005](../adr/0005-price-data-sources.md)). Nhóm chốt ngày 13/11 bỏ khỏi phạm vi trước bảo vệ; đây là hướng phát triển sau dự án.
 - Guardrails của chatbot chưa gắn vào Lambda, và Haiku gọi qua global inference profile ([chương chatbot](chatbot.md), mục 8).
 
 ## 11. Tóm tắt
