@@ -4,17 +4,19 @@ Phương án dự phòng cho buổi chạy thử chatbot nội bộ 8/11/2026, d
 
 - **File:** `gold.json`, `silver.json`, `brent.json`, `wti.json` trong [`infra/lambda/chat_api/news/`](../../infra/lambda/chat_api/news/). Mỗi file có dạng `{"asset": "...", "items": [...]}`, mỗi tin đúng 7 trường của contract.
 - **Nguồn:** chỉ lấy thông cáo thật trên `federalreserve.gov` và `eia.gov`. Đã mở từng link và đối chiếu tiêu đề, ngày và nội dung.
-- **Ngày tra:** 29/10/2026; tra lại ngày 5/11/2026 (thêm WPSR 4/11).
+- **Ngày tra:** 29/10/2026; tra lại ngày 5/11/2026 (thêm WPSR 4/11), 11/11/2026 (thêm STEO 10/11) và 13/11/2026 (thêm WPSR 12/11).
 - **Gắn nhãn:** gắn tay theo bảng quy ước ở mục "Gắn nhãn" của [`labeling-v3-plan.md`](../experiments/labeling-v3/labeling-v3-plan.md) và các quy tắc của prompt [`news-labeling-v3.md`](../prompts/news-labeling-v3.md), giống nhãn tay trên production ([ADR-0013](../adr/0013-manual-news-labels-until-defense.md)). Chỉ theo nội dung thông cáo, không nhìn giá sau ngày công bố. Bản nháp ngày 29/10/2026; ngày 2/11/2026 sửa 2 nhãn cho đúng bảng quy ước (FOMC 28/10 và WPSR 21/10, Khải xác nhận cùng ngày).
 - **Tóm tắt:** tiếng Việt, tự viết, 1–2 câu, không chép đoạn văn gốc. Tiêu đề giữ nguyên tiếng Anh như trang gốc. Riêng WPSR có thêm tuần dữ liệu trong ngoặc, giống `candidates-fed-eia.csv`.
 - **Kiểm tra:** [`tests/test_demo_news.py`](../../tests/test_demo_news.py).
 
-## Các tin trong bộ (tra ngày 29/10/2026, sửa nhãn ngày 2/11/2026, thêm WPSR 4/11 ngày 5/11/2026)
+## Các tin trong bộ (tra ngày 29/10/2026, sửa nhãn ngày 2/11/2026, thêm WPSR 4/11 ngày 5/11/2026, thêm STEO 10/11 và WPSR 12/11 ngày 13/11/2026)
 
 Mỗi bài có mặt ở cả 4 file, chỉ khác nhãn. Ký hiệu trong bảng: `2/bearish` nghĩa là `impact_score` 2, `direction` bearish; `0` nghĩa là 0/uncertain.
 
 | `published_at` (UTC) | Bài | gold | silver | brent | wti |
 |---|---|---|---|---|---|
+| 2026-11-12T17:00:00Z | [WPSR, tuần kết thúc 6/11](https://www.eia.gov/petroleum/supply/weekly/archive/2026/2026_11_12/wpsr_2026_11_12.php) | 0 | 0 | 1/bearish | 1/bearish |
+| 2026-11-10T17:00:00Z | [Thông cáo STEO tháng 11](https://www.eia.gov/pressroom/releases/press594.php) | 0 | 0 | 1/bearish | 1/bearish |
 | 2026-11-04T15:30:00Z | [WPSR, tuần kết thúc 30/10](https://www.eia.gov/petroleum/supply/weekly/archive/2026/2026_11_04/wpsr_2026_11_04.php) | 0 | 0 | 1/bullish | 1/bullish |
 | 2026-10-28T18:00:00Z | [FOMC statement](https://www.federalreserve.gov/newsevents/pressreleases/monetary20261028a.htm) | 1/bearish | 1/bearish | 0 | 0 |
 | 2026-10-28T14:30:00Z | [WPSR, tuần kết thúc 23/10](https://www.eia.gov/petroleum/supply/weekly/archive/2026/2026_10_28/wpsr_2026_10_28.php) | 0 | 0 | 1/mixed | 1/mixed |
@@ -23,6 +25,8 @@ Mỗi bài có mặt ở cả 4 file, chỉ khác nhãn. Ký hiệu trong bảng
 
 Lý do gắn nhãn:
 
+- **WPSR 12/11.** Dầu thô tăng 4,7 triệu thùng, xăng tăng 1,8 triệu thùng, nhiên liệu chưng cất tăng 4,1 triệu thùng; tổng tồn kho thương mại tăng 11,4 triệu thùng. Cả ba loại cùng tăng nên gây áp lực giảm giá dầu: bearish. Mức là 1 theo bảng quy ước của plan ("tồn kho cùng chiều"), vì dầu thô thay đổi dưới 10 triệu thùng. Số liệu đã đối chiếu giữa trang WPSR, `summary.txt` và `table1.csv`.
+- **STEO 10/11.** Tiêu đề về tồn kho khí tự nhiên; phần dầu dự báo Brent trung bình 104 USD/thùng tháng 11, 99 USD tháng 12 và 86 USD năm 2027, nêu nguyên nhân là dầu từ Trung Đông về nhiều hơn và tồn kho toàn cầu phục hồi. Chấm 1/bearish, giống E11 (tiêu đề về khí, dầu là ý phụ, có nêu nguyên nhân); không chấm 2 như E10 vì dầu không phải nội dung chính và bài không so với dự báo tháng 10. Bài có ý ngược chiều (tồn kho dầu thô Mỹ tháng 10 thấp nhất cùng kỳ từ 2014, nâng dự báo giá xăng và diesel), nhưng con số dự báo Brent là kết luận ròng của EIA nên giữ bearish thay vì mixed. Brent và WTI cùng mức: quy ước "sự kiện Trung Đông thì WTI thấp hơn một bậc" được bù bởi ý sản lượng Mỹ đạt kỷ lục 14,3 triệu thùng/ngày và tồn kho Mỹ tăng năm 2027 (quy ước nguồn cung Mỹ cho WTI cao hơn một bậc).
 - **WPSR 4/11.** Dầu thô giảm 0,9 triệu thùng, xăng giảm 0,2 triệu thùng, nhiên liệu chưng cất giảm 3,6 triệu thùng; tổng tồn kho thương mại giảm 8,2 triệu thùng. Cả ba loại cùng giảm nên hỗ trợ giá dầu: bullish, giống E06 (dầu thô cũng chỉ giảm 0,9 triệu thùng). Mức là 1 theo bảng quy ước của plan, "tồn kho cùng chiều" chấm 1, chỉ chấm 2 khi dầu thô thay đổi trên 10 triệu thùng. Số liệu đã đối chiếu giữa trang WPSR, `summary.txt` và `table1.csv`.
 - **FOMC 28/10.** Fed giữ lãi suất 3,75–4,00%, phiếu 10–2. Cook và Hammack phản đối vì muốn tăng 0,25 điểm %. Giữ nguyên lãi suất thì hướng đi theo tín hiệu về lộ trình lãi suất (v3 mục 6.2). Ở đây tín hiệu nghiêng về tăng nên vàng và bạc là bearish. Mức là 1 theo bảng quy ước của plan: giữ nguyên lãi suất có phiếu phản đối một chiều thì chấm 1, chỉ chấm 2 khi có ba phiếu muốn tăng (như F13 ngày 29/7, phiếu 9–3). Kỳ này có hai phiếu. Bản 29/10 chấm 2, sửa ngày 2/11. Dầu để 0 vì thông cáo không nhắc tới cung cầu dầu.
 - **Biên bản FOMC 15–16/9.** Đa số thành viên cho rằng nhiều khả năng cần tăng thêm trước cuối năm, nên vàng và bạc là 2/bearish (giống F21). Biên bản có nhắc giá năng lượng nhưng chỉ coi đó là nguyên nhân gây lạm phát, không nêu yếu tố cung cầu dầu, nên dầu để 0 (giống ghi chú ở F27).
@@ -34,6 +38,8 @@ Về giờ đăng:
 
 - Giờ của thông cáo Fed lấy từ RSS của Fed (`pubDate`, GMT).
 - Trang WPSR không ghi giờ đăng của từng kỳ. Giờ ở đây là giờ phát hành theo lịch của EIA, 10:30 sáng giờ miền Đông Mỹ, quy sang UTC: `14:30:00Z` khi còn giờ mùa hè (EDT), `15:30:00Z` từ 1/11/2026 (EST).
+- Kỳ 12/11/2026 (tuần kết thúc 6/11) dời lịch vì Veterans Day: theo lịch của EIA phát hành thứ Năm 12/11 lúc 12:00 trưa giờ miền Đông, quy sang `17:00:00Z`.
+- Giờ của thông cáo STEO lấy từ RSS thông cáo báo chí của EIA (`https://www.eia.gov/rss/press_rss.xml`, `pubDate` 12:00 EST).
 - Kỳ 4/11/2026 lên trang trễ so với lịch: lúc 15:33Z và 16:10Z ngày 4/11 trang và file số liệu vẫn trả 404, đến 01:58Z ngày 5/11 mới có. Trang ghi "Release Date: November 4, 2026", nên `published_at` vẫn để giờ theo lịch.
 
 ## Lưu ý: khoảng ngày lúc demo
@@ -46,14 +52,14 @@ Câu hỏi không nêu ngày sẽ nhận kết quả rỗng, và chatbot sẽ n�
    - EIA: thêm WPSR 4/11 (tuần kết thúc 30/10), 1/bullish cho dầu. STEO tháng 11 ra ngày 10/11, sau buổi chạy thử nội bộ 8/11.
    - Fed: RSS không có FOMC statement hay biên bản mới. Biên bản kỳ họp 27–28/10 ra ngày 18/11, sau buổi chạy thử nội bộ 8/11. SLOOS (2/11) và bài phát biểu nằm ngoài phạm vi của ADR-0013 nên không thêm.
 2. **Câu hỏi demo nêu rõ khoảng ngày**, như câu 3 trong kịch bản demo (PR #77): "Vì sao vàng có thể biến động thời gian gần đây? Xem giúp mình các tin tức từ 7/10/2026 tới nay.". Khi đó model truyền `from_date` và lấy được biên bản FOMC đăng 7/10 (mức 2). Từ khi FOMC 28/10 hạ xuống mức 1 (ngày 2/11), vàng và bạc chỉ còn biên bản này đạt mức 2, nên câu hỏi "từ 28/10 tới nay" ở `min_impact = 2` không ra tin vàng, bạc nào. Sau khi Tiến deploy lại, hỏi đúng câu này trên AWS: `get_news` phải trả ít nhất 1 tin (Khải, 2/11).
-3. **WPSR thường chỉ đạt mức 1**, nên bị lọc ở `min_impact = 2` mặc định. Brent và WTI hiện không có tin nào đạt mức 2; nếu model truyền `min_impact = 1` thì khoảng mặc định ngày 8/11 ra WPSR 4/11. Giữ ngưỡng 2 (Tiến, Khải 2/11); kịch bản có một câu tin dầu để cho thấy chatbot nói "không có tin đáng kể". Không nâng điểm chỉ để tin hiện ra.
+3. **WPSR thường chỉ đạt mức 1**, nên bị lọc ở `min_impact = 2` mặc định. Brent và WTI hiện không có tin nào đạt mức 2; nếu model truyền `min_impact = 1` thì khoảng mặc định ngày 8/11 ra WPSR 4/11. Giữ ngưỡng 2 (Tiến, Khải 2/11); kịch bản có một câu tin dầu để cho thấy chatbot nói "không có tin đáng kể". Không nâng điểm chỉ để tin hiện ra. Ngày 13/11 bộ có thêm STEO 10/11 và WPSR 12/11, đều ở mức 1 cho dầu, nên với `min_impact = 2` khoảng mặc định vẫn trả rỗng; với `min_impact = 1` Brent và WTI ra hai tin này (1/bearish).
 4. Đề xuất code (chưa làm, cần sửa `src/chatbot/news.py` và contract): thêm biến môi trường số ngày mặc định, ví dụ `NEWS_DEFAULT_DAYS`, để nới khoảng ngày khi demo.
 
 ## Cách làm mới trước demo
 
 1. Tra thông cáo mới trên trang chính thức:
    - Fed: RSS `https://www.federalreserve.gov/feeds/press_all.xml` và `https://www.federalreserve.gov/feeds/speeches.xml`;
-   - EIA: thư mục lưu trữ WPSR `https://www.eia.gov/petroleum/supply/weekly/archive/2026/<YYYY_MM_DD>/wpsr_<YYYY_MM_DD>.php`; số liệu lấy từ `download/summary.txt` và `download/table1.csv` trong cùng thư mục.
+   - EIA: thông cáo báo chí (STEO và bài dự báo) qua RSS `https://www.eia.gov/rss/press_rss.xml`; lịch WPSR và các kỳ dời lịch ngày lễ ở `https://www.eia.gov/petroleum/supply/weekly/schedule.php`; thư mục lưu trữ WPSR `https://www.eia.gov/petroleum/supply/weekly/archive/2026/<YYYY_MM_DD>/wpsr_<YYYY_MM_DD>.php`; số liệu lấy từ `download/summary.txt` và `download/table1.csv` trong cùng thư mục.
 2. Mở từng link, đối chiếu tiêu đề, ngày và số liệu. Không thêm bài có link hoặc ngày chưa kiểm được.
 3. Thêm bài vào **cả 4 file** trong `infra/lambda/chat_api/news/`. Giữ nguyên `title`, `summary`, `link`, `source`, `published_at` giữa các file, chỉ đổi `impact_score` và `direction` theo từng tài sản (theo bảng quy ước của plan). Tóm tắt tối đa 300 ký tự (ADR-0013). Sắp tin mới trước.
 4. Mỗi file tối đa 10 tin (`MAX_ITEMS`). Khi đầy, bỏ tin cũ nhất.

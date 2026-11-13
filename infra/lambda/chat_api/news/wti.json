@@ -2,6 +2,24 @@
   "asset": "wti",
   "items": [
     {
+      "title": "Weekly Petroleum Status Report (week ending November 6, 2026)",
+      "summary": "Tuần kết thúc 6/11, tồn kho dầu thô thương mại Mỹ tăng 4,7 triệu thùng lên 414,4 triệu thùng, thấp hơn trung bình 5 năm 4%. Tồn kho xăng tăng 1,8 triệu thùng và nhiên liệu chưng cất tăng 4,1 triệu thùng; tổng tồn kho thương mại tăng 11,4 triệu thùng.",
+      "link": "https://www.eia.gov/petroleum/supply/weekly/archive/2026/2026_11_12/wpsr_2026_11_12.php",
+      "source": "EIA",
+      "published_at": "2026-11-12T17:00:00Z",
+      "impact_score": 1,
+      "direction": "bearish"
+    },
+    {
+      "title": "EIA raises November natural gas storage forecast after warm start to month",
+      "summary": "STEO tháng 11: EIA dự báo Brent trung bình 104 USD/thùng trong tháng 11, 99 USD trong tháng 12 và 86 USD năm 2027, khi dầu từ Trung Đông về nhiều hơn và tồn kho toàn cầu phục hồi. Tồn kho dầu thô thương mại Mỹ tháng 10 thấp nhất cùng kỳ từ 2014; EIA nâng dự báo giá xăng và diesel.",
+      "link": "https://www.eia.gov/pressroom/releases/press594.php",
+      "source": "EIA",
+      "published_at": "2026-11-10T17:00:00Z",
+      "impact_score": 1,
+      "direction": "bearish"
+    },
+    {
       "title": "Weekly Petroleum Status Report (week ending October 30, 2026)",
       "summary": "Tuần kết thúc 30/10, tồn kho dầu thô thương mại Mỹ giảm 0,9 triệu thùng xuống 409,8 triệu thùng, thấp hơn trung bình 5 năm 4%. Tồn kho xăng giảm 0,2 triệu thùng và nhiên liệu chưng cất giảm 3,6 triệu thùng; tổng tồn kho thương mại giảm 8,2 triệu thùng.",
       "link": "https://www.eia.gov/petroleum/supply/weekly/archive/2026/2026_11_04/wpsr_2026_11_04.php",
