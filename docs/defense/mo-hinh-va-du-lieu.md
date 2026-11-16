@@ -1,10 +1,10 @@
 # Chương 1. Mô hình và dữ liệu
 
-> Bản nháp ngày 11/11/2026. Chủ trì: Khải; review: Long. Cơ sở: `origin/developer` @ `c17cca9` (11/11/2026).
+> Bản nháp ngày 11/11/2026, cập nhật 16/11/2026 (lượt rolling thật đầu tiên và kết quả test2020 chính thức). Chủ trì: Khải; review: Long. Cơ sở: `origin/developer` @ `c17cca9` (11/11/2026); số test2020 lấy từ comment kết quả ở #88 và [Chương 2 §9](phuong-phap-danh-gia.md) (#131).
 >
 > - Chương này thay mục 2–3 của [tư liệu kiến trúc và mô hình](lua-chon-kien-truc-va-mo-hinh.md). Tư liệu đó là bản kế hoạch tháng 10, trước khi có kết quả thí nghiệm.
 > - Định nghĩa chỉ số, tập điểm chung, bootstrap, Holm và DM nằm ở [Chương 2: Phương pháp đánh giá](phuong-phap-danh-gia.md), không nhắc lại ở đây.
-> - Chương này **không có số của tập test 2020 → nay**. Long chạy tập này một lần trong tuần 16–22/11 theo [kế hoạch test2020](../experiments/test2020-plan.md). Chỗ để điền ghi `[CHỜ SỐ LIỆU]`.
+> - Tập test 2020 → nay đã chạy **đúng một lần** ngày 16/11/2026 theo [kế hoạch test2020](../experiments/test2020-plan.md) (Long thực hiện, audit artifact PASS 7/7). Chương này chỉ tóm tắt kết quả chính và quyết định; số đầy đủ, độ nhạy, DM và giới hạn nằm ở Chương 2 §9.
 
 ## Tóm tắt
 
@@ -12,6 +12,7 @@
 - Sản phẩm đang chạy **mốc thống kê 252 phiên** (`baseline-q252`) cho cả 4 tài sản. Mốc này lấy phân vị thực nghiệm của return đã hoàn tất trong 252 phiên gần nhất, không có tham số học.
 - Nhóm đã thử 4 họ mô hình chỉ dùng giá, tổng 13 cấu hình, trên validation 2019: DLinear, CEEMDAN + DLinear (K3), co giãn theo biến động (K3b) và GJR-GARCH + FHS (K4). Không mô hình nào vượt mốc theo tiêu chí chốt trước. Mỗi thí nghiệm có kế hoạch commit trước khi chạy.
 - Challenger S1a (co giãn khoảng theo biến động EWMA) chạy song song trong Lambda predict từ 04/11/2026. Người dùng không thấy S1a. Mọi lần đổi champion đều phải có ADR.
+- Trên tập test 2020 → nay (chạy một lần ngày 16/11), S1a có `pinball_skill` dương ở cả 4 tài sản và cải thiện có ý nghĩa thống kê ở bạc, WTI, Brent; vàng chưa đủ bằng chứng. Champion vẫn giữ `baseline-q252` tới hết kỳ (mục 1.5).
 - So với proposal, nhóm bỏ CEEMDAN + DLinear/LSTM làm mô hình chính và bỏ retrain bằng SageMaker AI. Lý do nằm ở kết quả K3, K3b, K4 và [ADR-0011](../adr/0011-weekly-champion-challenger-instead-of-retrain.md), xem mục 1.6.
 
 ## 1.1. Bài toán và đầu ra
@@ -220,13 +221,24 @@ Nhiều bài báo về CEEMDAN + LSTM (ví dụ ý tưởng của Cao, Li, Li 20
   - bảng Accuracy và `GET /accuracy/{asset}` đã deploy (PR #87);
   - job deploy ngày 11/11 với lịch tắt (PR #89), test bổ sung ở PR #115;
   - dry-run 4 tài sản ngày 11/11: không lỗi, không có giá cơ sở bị sửa lại (0/63 mỗi tài sản); cảnh báo `prob_up_mismatch` lệch tối đa 8,5 × 10⁻⁶, do làm tròn 6 chữ số khi ghi DynamoDB, không loại cặp nào (#89);
-  - lịch bật bằng PR #118, deploy 12/11; lượt chạy thật đầu tiên 20:45 ngày 12/11: `[CHỜ XÁC NHẬN: Tiến báo ở #89]`.
+  - lịch bật bằng PR #118, deploy 12/11; lượt chạy thật đầu tiên 20:45 ngày 12/11: 4/4 tài sản `COMPLETED`, alarm OK, thời lượng 30,3 giây (#89);
+  - mỗi tài sản có 9/20 ngày gốc hợp lệ nên API trả `collecting` và web hiện "Đang thu thập (9/20)"; Long đối chiếu STATE/META → API → web ngày 13/11 khớp `run_id` cả 4 tài sản (Chương 2 §4.1).
 
 ### Quy tắc đổi champion
 
 - **Điều kiện:** chỉ đổi khi cận dưới CI 95% của `pinball_skill` trung bình 7 h > 0 trên tập đánh giá đã chốt, và mọi lần đổi phải có ADR.
 - **Không đổi tự động:** vài tuần dữ liệu chạy thật (khoảng 40 ngày gốc mỗi tài sản sau 8 tuần) đủ để thấy khoảng 80% có phủ gần 80% hay không, nhưng không đủ để đổi champion.
-- **Tập test 2020 → nay:** so `baseline-q252` với S1a một lần, chỉ để báo cáo. Kết quả không đổi champion trước 22/11. Kết quả: `[CHỜ SỐ LIỆU: Long chạy 16–22/11, báo ở #88]`.
+- **Tập test 2020 → nay:** so S1a với `baseline-q252` đúng một lần ngày 16/11/2026, chỉ để báo cáo (runner `a71db84`, snapshot `dt=2026-10-31`, audit PASS). Kết quả chính (block 20, Holm trên 4 tài sản; chi tiết ở Chương 2 §9):
+
+  | Tài sản | `pinball_skill` trung bình 7 h | CI 95% | p sau Holm | Kết luận |
+  |---|---:|---|---:|---|
+  | Vàng | +0,11% | [−1,29%; +1,49%] | 0,42 | Chưa đủ bằng chứng |
+  | Bạc | +2,12% | [+0,17%; +4,10%] | 0,039 | Cải thiện có ý nghĩa; CI chứa 0 khi block 40 |
+  | WTI | +4,49% | [+2,02%; +6,73%] | 0,002 | Cải thiện có ý nghĩa |
+  | Brent | +4,21% | [+1,88%; +6,35%] | 0,002 | Cải thiện có ý nghĩa |
+
+  - Năm 2023 skill âm ở cả 4 tài sản; 18/42 kiểm định DM không tính được do phiên thiếu bên trong. Kết quả không phải backtest point-in-time đã xác minh.
+- **Quyết định sau test2020:** giữ `baseline-q252` cho cả 4 tài sản tới hết kỳ. Đổi sang S1a cho dầu (và có thể bạc) cần ADR mới, deploy lại predict và sửa nhãn trên web; việc này trùng giai đoạn đóng băng 22/11 nên ghi làm hướng phát triển.
 - **Dừng dò mô hình chỉ dùng giá đến hết dự án** (ADR-0010, ADR-0012). Thí nghiệm dùng tín hiệu ngoài giá nếu có sau này phải có kế hoạch riêng và ghi là lần dùng validation 2019 thứ 5.
 
 ## 1.6. So với proposal
@@ -244,7 +256,7 @@ Nhiều bài báo về CEEMDAN + LSTM (ví dụ ý tưởng của Cao, Li, Li 20
 
 ## 1.7. Giới hạn
 
-- **Một năm validation, nhìn nhiều lần:** 2019 yên hơn 2014–2018 và đã được dùng 4 lần với 13 cấu hình. Các điểm ước lượng tốt nhất lạc quan; vì mọi kết luận đều âm nên điều này không đổi quyết định. Tập test là bằng chứng ngoài mẫu duy nhất chưa bị nhìn.
+- **Một năm validation, nhìn nhiều lần:** 2019 yên hơn 2014–2018 và đã được dùng 4 lần với 13 cấu hình. Các điểm ước lượng tốt nhất lạc quan; vì mọi kết luận đều âm nên điều này không đổi quyết định. Tập test 2020 → nay đã dùng đúng một lần ngày 16/11 và không còn là tập chưa bị nhìn.
 - **Chỉ dùng giá:** mọi mô hình đã thử chỉ dùng chuỗi giá của chính tài sản.
 - **Chuỗi đại diện:** vàng và bạc dự báo trên GLD, SLV, không phải giá giao ngay. Dầu dùng hợp đồng gần nhất nên có bước nhảy ngày chuyển hợp đồng.
 - **Không phải dữ liệu tại đúng thời điểm (point-in-time):** bản clean là giá tải lại; backtest mô phỏng thời điểm công bố bằng quy tắc, không chứng minh được dữ liệu lịch sử đúng như lúc đó.
