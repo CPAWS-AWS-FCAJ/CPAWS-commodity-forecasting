@@ -52,6 +52,40 @@
 - Chỉ Tuấn có quyền IAM. Vì vậy `cdk bootstrap` (tạo IAM role) và mọi thay đổi policy do Tuấn làm.
 - Policy `CPAWS-Bedrock-Four-Models` chỉ cho gọi model qua đúng các inference profile đã duyệt ở `ap-southeast-1`. Hiện gắn trực tiếp vào user của Phước; nên chuyển sang group `cpaws-genai` để người khác trong nhóm chatbot dùng chung.
 
+### Quyền Bedrock tạm thời cho benchmark Haiku 4.5
+
+Ngày 11/11/2026, Tuấn cấp quyền Bedrock tạm thời cho IAM user `khai`
+để phục vụ official v4 benchmark.
+
+Policy `CPAWS-Khai-Temp-Bedrock-Haiku45-OfficialV4` có phạm vi:
+- Action duy nhất: `bedrock:InvokeModel`.
+- Cho phép gọi Claude Haiku 4.5 thông qua global inference profile
+  `global.anthropic.claude-haiku-4-5-20251001-v1:0`.
+- Giới hạn bằng các điều kiện `aws:RequestedRegion` và
+  `bedrock:InferenceProfileArn` tương ứng.
+- Không cấp quyền quản trị Bedrock hoặc thay đổi cấu hình Guardrails.
+
+CloudTrail ghi nhận vòng đời policy (giờ Việt Nam, UTC+7):
+- 14:42:00: Tuấn tạo policy.
+- 14:42:03: Tuấn gắn policy cho IAM user `khai`.
+- 15:25:20: Tuấn thu hồi policy khỏi `khai`.
+- 15:25:25: Lần xóa policy đầu tiên thất bại do policy còn nhiều version.
+- 15:26:06: Xóa policy thành công.
+
+Policy được gắn trong 43 phút 17 giây và tồn tại tổng cộng
+44 phút 06 giây từ lúc tạo đến lúc xóa thành công.
+
+CloudTrail xác nhận người thực hiện các thao tác là IAM user `tuan`.
+Sự kiện AttachUserPolicy ghi nhận MFA đã được xác thực.
+
+Policy đã bị xóa khỏi IAM; đây là quyền cấp tạm thời, không còn
+là quyền đang được gắn cho `khai`. Description của policy ghi mục đích
+là official v4 benchmark và dự kiến thu hồi sau 14/11/2026;
+thực tế quyền đã được thu hồi và policy đã bị xóa ngày 11/11/2026.
+
+Bằng chứng: CloudTrail management events ngày 11/11/2026,
+gồm CreatePolicy, AttachUserPolicy, DetachUserPolicy và DeletePolicy.
+
 ### Chi phí và cảnh báo
 
 | Mục | Giá trị |
