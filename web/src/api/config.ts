@@ -35,6 +35,12 @@ export const config = {
    */
   showMetalPrices: env.VITE_SHOW_METAL_PRICES === "true",
   authEnabled: env.VITE_AUTH_ENABLED === "true",
+  /**
+   * Hiện màn tự đăng ký (+ nhập mã xác minh email) trên màn đăng nhập Cognito. Mặc định TẮT.
+   * Chỉ bật khi User Pool đã cho tự đăng ký (CpawsAuth self sign-up + xác minh email); bật trước
+   * thì Cognito từ chối đăng ký. Tắt lại sau khi chấm xong.
+   */
+  allowSignUp: env.VITE_ALLOW_SIGNUP === "true",
   region: env.VITE_REGION ?? "ap-southeast-1",
   userPoolId: env.VITE_USER_POOL_ID ?? "",
   userPoolClientId: env.VITE_USER_POOL_CLIENT_ID ?? "",

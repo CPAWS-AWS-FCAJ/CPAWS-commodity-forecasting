@@ -4,6 +4,7 @@ import { signOut } from "aws-amplify/auth";
 import { useEffect } from "react";
 import type { ReactNode } from "react";
 import { UNAUTHORIZED_EVENT } from "../api/client";
+import { config } from "../api/config";
 import "./amplify";
 
 /** Chặn toàn bộ ứng dụng sau màn hình đăng nhập Cognito. API trả 401 → đăng xuất, về màn hình đăng nhập. */
@@ -16,8 +17,11 @@ export default function AuthGate({ children }: { children: ReactNode }) {
     return () => window.removeEventListener(UNAUTHORIZED_EVENT, onUnauthorized);
   }, []);
 
-  // hideSignUp: giả định tài khoản do Tuấn tạo trong User Pool (cần xác nhận).
+  // Mặc định ẩn đăng ký: tài khoản do Tuấn tạo trong User Pool. VITE_ALLOW_SIGNUP=true → hiện tab
+  // đăng ký; email bắt buộc để Cognito gửi mã xác minh (màn nhập mã có sẵn trong Authenticator).
   return (
-    <Authenticator hideSignUp>{() => <>{children}</>}</Authenticator>
+    <Authenticator hideSignUp={!config.allowSignUp} signUpAttributes={["email"]}>
+      {() => <>{children}</>}
+    </Authenticator>
   );
 }
