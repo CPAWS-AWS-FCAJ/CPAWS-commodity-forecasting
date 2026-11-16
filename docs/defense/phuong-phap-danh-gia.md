@@ -1,6 +1,6 @@
 # Phương pháp đánh giá mô hình dự báo CPAWS
 
-> Bản nháp chương phương pháp đánh giá cho báo cáo bảo vệ, cập nhật ngày 04/11/2026. Các kết quả ngoài mẫu của test2020 chỉ được bổ sung sau lần chạy chính thức theo giao thức đã khóa.
+> Bản cập nhật Chương 2 cho báo cáo cuối kỳ, ngày 14/11/2026 (kế thừa bản 04/11). Đã bổ sung bằng chứng rolling accuracy chạy thật ngày 12/11 và triển khai S1a shadow; **chưa có kết quả test2020 chính thức**. Phần kết quả ngoài mẫu được dành riêng để điền sau đúng một lượt chạy được phê duyệt và kiểm toán.
 
 ## 1. Mục tiêu và đối tượng đánh giá
 
@@ -62,11 +62,36 @@ q^{S1a}_{\tau,t,h}=q^{base}_{0.50,t,h}
 
 S1a giữ nguyên \(q_{0.50}\); trên cùng mẫu, MAE trung vị và sign accuracy phải bằng baseline, còn `prob_up` phải được tính lại từ phân vị mới. Chương này chỉ định nghĩa phép so sánh; kiến trúc mô hình và kết quả validation được trình bày ở mục riêng của báo cáo. [ADR-0010](../adr/0010-k3b-volatility-scaling-result.md); [ADR-0012](../adr/0012-k4-fhs-gjr-result.md).
 
+### 3.1. Trạng thái S1a shadow trong vận hành (cập nhật 14/11)
+
+Từ **04/11/2026**, luồng Lambda predict đã phát hành đồng thời champion `baseline-q252` vào DynamoDB `cpaws-dev-forecasts` và forecast **S1a shadow** (`s1a-l094`) ra `s3://cpaws-dev-lake/eval/shadow/s1a-l094/dt=<ngày chạy UTC>/<asset>.json`. Shadow dùng cùng thông tin đến ngày gốc, giữ trung vị, chỉ co giãn các phân vị ngoài trung vị; nhánh lỗi/cấu hình sai được cô lập, không làm hỏng forecast champion. Đây là **triển khai theo dõi song song**, không phải thay champion hoặc công bố S1a trên API. [Kế hoạch S1a shadow §§3–6, 14–15](../experiments/s1a-shadow-plan.md); [Triển khai và vận hành §3](trien-khai-van-hanh.md).
+
+Theo log vận hành ghi trong báo cáo triển khai, ba lượt predict đầu sau khi bật shadow ngày **04–06/11** đều ghi **4/4** artifact shadow, alarm OK; thời lượng lần lượt **3,29 s; 3,25 s; 3,27 s**. Giá trị lớn nhất 3,29 s cao hơn mốc 2,9 s khoảng 0,39 s, dưới ngưỡng tăng 2 giây của kế hoạch; nhóm giữ shadow hoạt động. Đây là bằng chứng deploy/độ ổn định ban đầu, **không phải bằng chứng S1a dự báo tốt hơn**. [Triển khai và vận hành §3](trien-khai-van-hanh.md).
+
+Rolling job đọc hai nguồn để tạo báo cáo **paired champion–S1a** trên cùng asset, ngày gốc, horizon, ngày đích và actual; báo cáo shadow lưu riêng dưới `eval/shadow_eval/`, không ghi đè kết quả champion ở DynamoDB và không đi qua `GET /accuracy/{asset}`. Số liệu paired shadow chưa được tổng hợp thành kết luận so sánh trong chương này; kết quả test2020 sẽ được trình bày riêng sau lần chạy chính thức. [Kế hoạch S1a shadow §§11, 14](../experiments/s1a-shadow-plan.md); [Triển khai và vận hành §9](trien-khai-van-hanh.md).
+
 ## 4. Rolling Accuracy: đánh giá dự báo đã phát hành
 
 `rolling_8w` theo dõi forecast champion đã phát hành thật trong **56 ngày lịch UTC theo `base_date`**, từ \(D-55\) đến \(D\). Chỉ cặp forecast–actual có eligibility, provenance và nhãn hợp lệ mới được chấm; không backfill forecast lịch sử để lấp cửa sổ. Rolling MVP lưu bốn metric nền (`coverage_80`, `width_80`, `sign_accuracy`, `up_rate`) trên bảy horizon, tổng cộng **28 METRIC rows**. Giá trị overall chỉ được phép hiển thị sau ít nhất **20 distinct base dates** hợp lệ theo quy tắc coverage. [Walk-forward Contract §7](../eval/walk-forward-contract.md).
 
-Rolling là cơ chế **giám sát hoạt động**, khác validation lịch sử và test2020 dùng để so sánh mô hình. Quy tắc chi tiết về phát hành, `input_snapshot_dt`, cutover, trạng thái hiển thị và lưu trữ nằm tại [Phụ lục A](#phụ-lục-a--rolling-accuracy-rolling_8w). 
+Rolling là cơ chế **giám sát hoạt động**, khác validation lịch sử và test2020 dùng để so sánh mô hình. Quy tắc chi tiết về phát hành, `input_snapshot_dt`, cutover, trạng thái hiển thị và lưu trữ nằm tại [Phụ lục A](#phụ-lục-a--rolling-accuracy-rolling_8w).
+
+### 4.1. Bằng chứng chạy thật đầu tiên và đối chiếu API (12–13/11/2026)
+
+Hạ tầng rolling được bật lịch ngày **12/11/2026** ([PR #118](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/118)); job `cpaws-dev-accuracy-daily` chạy theo lịch **13:45 UTC / 20:45 Việt Nam, thứ Ba–thứ Bảy**. Lượt đầu **12/11 lúc 20:45 Việt Nam** báo cáo bốn tài sản `COMPLETED` và đã promote pointer; thời lượng **30,3 s**, dùng tối đa **297/1.024 MB**, alarm OK. Đây là quan sát vận hành, không phải lần chạy test2020. [Triển khai và vận hành §9](trien-khai-van-hanh.md).
+
+Kiểm tra độc lập ngày **13/11** bằng DynamoDB strong-consistent `GetItem` trên `STATE`/`META`, sau đó đối chiếu API đã xác thực Cognito từ trang Amplify `/accuracy`, xác nhận:
+
+| Tài sản | `run_id` (lượt 12/11) | META | API / Web | `n_base_dates` | Cặp coverage hợp lệ / được phủ |
+|---|---|---|---|---:|---:|
+| Gold | `2026-11-12-fdcaccb87e4fef07aff2` | `COMPLETED` | HTTP 200 / `collecting` | 9/20 | 42 / 29 |
+| Silver | `2026-11-12-cdc59ba969e46dd7b776` | `COMPLETED` | HTTP 200 / `collecting` | 9/20 | 42 / 40 |
+| WTI | `2026-11-12-7d0f56754d73171166e1` | `COMPLETED` | HTTP 200 / `collecting` | 9/20 | 42 / 21 |
+| Brent | `2026-11-12-c2b627318e68e24737c5` | `COMPLETED` | HTTP 200 / `collecting` | 9/20 | 42 / 19 |
+
+Trong từng tài sản, `STATE.latest_run_id` khớp `META.run_id` và API `run_id`; `model_version=baseline-q252`, `evaluation_kind=rolling_8w`, `evaluated_at=2026-11-12T13:45:00Z`. Cả bốn response có `overall.coverage_80.n_base_dates=9`, `min_display_base_dates=20`, `display_status=insufficient_data`, `display_value=null`; UI hiển thị **“Đang thu thập (9/20)”** và chỉ công bố counts theo h. Tổng 42 cặp là số cặp qua bảy horizon (**9+8+7+6+5+4+3**), **không** phải 42 ngày cơ sở độc lập. Đây là đối chiếu chuỗi STATE → META → API → UI trên **lượt chạy 12/11**, không chứng minh các lượt tương lai hoặc độ chính xác dài hạn.
+
+Response cũng ghi `issuance_evidence_status=verified_eligible_rows`, `published_count=13`, `missing_count=0` cho mỗi tài sản; đồng thời ghi `schedule_evidence_status=not_audited_mvp`, vì vậy **chưa được coi là audit độc lập đầy đủ lịch phát hành**. Job có cảnh báo `prob_up_mismatch` do sai khác làm tròn (báo cáo vận hành ghi mức tối đa <1e-5); cảnh báo không tự đồng nghĩa forecast bị loại. [Triển khai và vận hành §9](trien-khai-van-hanh.md); [Walk-forward Contract §7](../eval/walk-forward-contract.md). 
 
 ## 5. Chỉ số đánh giá theo ADR-0008
 
@@ -160,7 +185,9 @@ Chỉ kết luận cải thiện ở asset có p sau **Holm trên bốn tài s�
 
 ### 6.3. Kiểm soát lần chạy chính thức
 
-Giao thức yêu cầu đóng băng **snapshot DT và SHA-256**, lineage, runner commit sạch, `config_hash`, seed và môi trường trước khi chạy. Runner phải kiểm tra provenance, tạo S3 conditional claim (`IfNoneMatch="*"`) **trước khi đọc dữ liệu test được bảo vệ**. Lần chạy lỗi ghi `failure.json` và dừng để nhóm quyết định; không tự chạy lại hoặc thay đổi seed/dữ liệu. Kết quả chỉ phục vụ báo cáo, không tự động đổi champion trước 22/11/2026; mọi quyết định sau đó cần ADR mới. [Test2020 Plan §§2, 5–8](../experiments/test2020-plan.md).
+Giao thức yêu cầu đóng băng **snapshot DT và SHA-256**, lineage, runner commit sạch, `config_hash`, seed và môi trường trước khi chạy. Snapshot đã chốt là `clean/prices/dt=2026-10-31/` với ba object và VersionId/SHA-256 lưu trong [Test2020 Plan §8.1](../experiments/test2020-plan.md). Theo bàn giao vận hành, runner được freeze tại commit `a71db84679e806f6ac6ce5d91204ead1ffa89459`, `config_hash=d8e3f59e65bdbb99b5cdec9b93bd0eb4c6be02104432ba1fc5604e6e653b3640`; các định danh này **phải được preflight đối chiếu lại** trước khi chạy, không được coi việc ghi trong báo cáo là chứng nhận chính thức.
+
+Runner phải kiểm tra provenance, tạo S3 conditional claim (`IfNoneMatch="*"`) **trước khi đọc dữ liệu test được bảo vệ**, sau đó đánh giá và audit artifact/hash. Lần chạy lỗi ghi `failure.json` và dừng để nhóm quyết định; không tự chạy lại hoặc thay đổi seed/dữ liệu. Lịch dự kiến tuần **16–22/11/2026**, chỉ thực hiện sau phê duyệt vận hành của Khải tại **#88**; ngày 15/11 chỉ kiểm tra đăng nhập AWS và preflight **không tạo claim, không chạy official**. Kết quả chỉ phục vụ báo cáo, không tự động đổi champion trước 22/11/2026; mọi quyết định sau đó cần ADR mới. [Test2020 Plan §§2, 5–8](../experiments/test2020-plan.md).
 
 ## 7. Giới hạn và tính hợp lệ
 
@@ -176,11 +203,25 @@ Kết luận về **lựa chọn mô hình** dựa trên validation và các ADR
 
 ### 7.3. Trạng thái triển khai có liên quan
 
-Kế hoạch test2020 theo [PR #75](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/75) đã được nhóm review và merge. Runner được phát triển trong [PR #85](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/85) và đang xử lý review về bytes của claim, đối chiếu `origin/developer` và protocol hash. Các bước xác nhận CI/merge, khóa DT/SHA-256, IAM và claim cần hoàn thành trước lần chạy dự kiến trong tuần **16–22/11/2026**. Chưa có kết quả test2020 chính thức để đưa vào kết luận ngoài mẫu.
+Kế hoạch test2020 theo [PR #75](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/75) đã được review và merge; snapshot `dt=2026-10-31` đã được ghi nhận tại kế hoạch và bằng chứng lineage. Runner theo [PR #85](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/85) cần được đối chiếu trạng thái commit/config/IAM ngay trước lượt chạy chính thức theo #88; **không suy rằng claim đã được tạo chỉ vì preflight thành công**. Ngày 12/11, Rolling Accuracy đã chạy thật cho cả bốn tài sản và đối chiếu STATE/META/API/Web ngày 13/11 đạt phạm vi kiểm tra mô tả tại §4.1. S1a shadow đã hoạt động trong luồng predict nhưng chưa thay champion. **Tại thời điểm cập nhật 14/11, chưa chạy official test2020 và chưa có kết quả ngoài mẫu để kết luận.**
 
 ## 8. Tóm tắt phương pháp
 
-CPAWS kết hợp **validation lịch sử** để chọn cấu hình, **test2020 ngoài mẫu** để kiểm chứng khả năng tổng quát hóa sau khi khóa lựa chọn, và **Rolling Accuracy** để theo dõi dự báo đã phát hành. Pinball skill trên common mask là thước đo chính cho so sánh mô hình; các chỉ số coverage, width, xác suất và hướng bổ sung các khía cạnh calibration và sai số. Kiểm soát thời điểm thông tin, audit counts, bootstrap/Holm và provenance giới hạn phạm vi kết luận vào những gì dữ liệu và giao thức thực sự hỗ trợ.
+CPAWS kết hợp **validation lịch sử** để chọn cấu hình, **test2020 ngoài mẫu** để kiểm chứng khả năng tổng quát hóa sau khi khóa lựa chọn, và **Rolling Accuracy** để theo dõi dự báo đã phát hành. Pinball skill trên common mask là thước đo chính cho so sánh mô hình; các chỉ số coverage, width, xác suất và hướng bổ sung các khía cạnh calibration và sai số. Tại mốc báo cáo này, rolling đã có bằng chứng chạy thật **9/20** ngày cơ sở trên cả bốn tài sản; S1a shadow phát hành độc lập, chưa thay champion; **kết quả test2020 vẫn để chờ**, không dùng rolling hoặc shadow để thay cho phép kiểm định ngoài mẫu. Kiểm soát thời điểm thông tin, audit counts, bootstrap/Holm và provenance giới hạn phạm vi kết luận vào những gì dữ liệu và giao thức thực sự hỗ trợ.
+
+## 9. Kết quả test2020 chính thức — dành chỗ, chưa có số liệu
+
+> **Chưa chạy tại ngày cập nhật 14/11/2026.** Không điền số skill, CI, p-value hay khẳng định thắng/thua khi chưa có artifact đã audit. Mục này được hoàn thiện bằng một PR tài liệu riêng **trong vòng 2 ngày sau lượt official** (chỉ khi approval tại #88 đã đủ).
+
+Sau `claim → evaluation → artifact/hash audit`, báo cáo phải ghi:
+
+1. **Định danh và tính toàn vẹn:** thời điểm thực thi, `run_id`, runner commit/config hash, snapshot DT/VersionId/SHA-256, seed, claim và SHA-256 từng artifact, kết quả audit; ghi rõ bất kỳ lỗi hoặc giới hạn audit nào.
+2. **Kích thước mẫu:** số cặp đưa vào/loại theo asset × h, lý do loại (endpoint, cutoff, nguồn, common mask, DM gap), tách `all` và `excl_roll` khi áp dụng.
+3. **Kết quả chính:** `pinball_skill` theo h và \(\widehat S(a)\) trung bình bảy h (không âm thầm bỏ h thiếu), bootstrap B=2.000/block 20, CI percentile 95% mô tả và p-value một phía căn giữa H0, Holm trên bốn tài sản; giữ `undefined` nếu không đủ điều kiện.
+4. **Chỉ số phụ và độ nhạy:** coverage/width, Brier, sign/MAE và bất biến trung vị S1a, DM theo h, phân đoạn thời gian, stress, `excl_roll`, sensitivity block 10/40; không dùng các phân tích phụ để chọn lại cấu hình.
+5. **Diễn giải giới hạn:** snapshot không bảo đảm PIT tuyệt đối, các horizon phụ thuộc nhau, dữ liệu dầu có endpoint bất thường; kết quả không làm thay champion trước 22/11/2026. Nếu không có lần chạy thành công, báo cáo đúng tình trạng và không tạo bảng kết quả giả.
+
+Nguồn chuẩn để điền số và kiểm audit: [Test2020 Plan](../experiments/test2020-plan.md) và các artifact chính thức dưới `s3://cpaws-dev-lake/eval/test2020/` **sau khi lượt chạy được phê duyệt và hoàn tất**; không dùng validation 2019 hay S1a shadow làm số thay thế.
 
 ---
 
@@ -190,7 +231,7 @@ Phụ lục này trình bày chi tiết nghiệp vụ Rolling API; phần chính
 
 ## A.1. Cửa sổ và lịch chạy
 
-Với ngày chạy UTC \(D\), cửa sổ theo `base_date` là **[D−55 ngày, D]**, gồm hai biên và có 56 ngày lịch, không phải 56 phiên. `evaluation_kind=rolling_8w`, `sample=all`; không rút ngắn cửa sổ theo bản ghi đầu tiên. Lịch đánh giá TUE–SAT lúc 13:45 UTC. Target cutoff được xác định riêng theo asset và thời điểm sẵn có của actual.
+Với ngày chạy UTC \(D\), cửa sổ theo `base_date` là **[D−55 ngày, D]**, gồm hai biên và có 56 ngày lịch, không phải 56 phiên. `evaluation_kind=rolling_8w`, `sample=all`; không rút ngắn cửa sổ theo bản ghi đầu tiên. Lịch `cpaws-dev-accuracy-daily` **đã bật từ 12/11**, đánh giá TUE–SAT lúc 13:45 UTC (20:45 Việt Nam), sau ingest/predict lúc 12:15 UTC. Target cutoff được xác định riêng theo asset và thời điểm sẵn có của actual. [Triển khai và vận hành §9](trien-khai-van-hanh.md).
 
 ## A.2. Điều kiện phát hành và provenance
 
@@ -220,9 +261,19 @@ Giá trị overall chỉ hiển thị sau **ít nhất 20 distinct base dates** 
 
 ## A.4. Lưu trữ và đối chiếu shadow
 
-Run lưu định danh snapshot, config, evidence và hash. Sau khi kiểm đủ 28 METRIC rows và META nhất quán mới cập nhật pointer `LATEST_COMPLETED`; retry không được ghi đè payload khác. Hash bảo vệ tính toàn vẹn artifact, không thay chứng cứ thời điểm phát hành. [Rolling Store](../../src/eval/rolling_store.py).
+Run lưu định danh snapshot, config, evidence và hash. Sau khi kiểm đủ 28 METRIC rows và META nhất quán mới cập nhật pointer tới run đã hoàn tất qua `STATE.latest_run_pk`/`STATE.latest_run_id` (khái niệm latest completed run); retry không được ghi đè payload khác. Hash bảo vệ tính toàn vẹn artifact, không thay chứng cứ thời điểm phát hành. Bằng chứng ngày 13/11 đã đối chiếu các trường `STATE`/`META` này với `run_id` của API cho cả bốn tài sản (§4.1). [Rolling Store](../../src/eval/rolling_store.py).
 
 Shadow S1a đối chiếu champion theo cùng asset, base_date, h, target_date, target series và actual. Artifact shadow thiếu không làm champion không hợp lệ; báo cáo paired lưu riêng và không thay pointer/API của champion. Nếu nhiều object cùng base_date, không được tùy chọn một bản theo tên file rồi coi là duy nhất. [Walk-forward Contract §7.6](../eval/walk-forward-contract.md).
+
+## A.5. Phạm vi kiểm chứng thực tế tại mốc 12/11
+
+Khi job đã `COMPLETED`, không đồng nghĩa với trạng thái hiển thị `ready`. Lượt 12/11 có 9 distinct base dates hợp lệ và 42 cặp đã chấm cho mỗi tài sản; API vì thế trả `collecting`, còn các thống kê overall để `display_value=null` dù có giá trị nội bộ. Các counts theo từng h (9, 8, 7, 6, 5, 4, 3) được hiển thị trên trang `/accuracy`, không dùng để công bố độ chính xác chính thức khi chưa đạt ngưỡng. Bằng chứng đối chiếu ghi ở §4.1; số liệu là ảnh chụp của **một lượt chạy**, không phải dữ liệu cố định của mọi ngày.
+
+**Giới hạn:** kiểm tra đã đối chiếu STATE/META/API/Web và các count được công bố; chưa tự chứng nhận toàn bộ hash/replay của 28 METRIC rows hoặc audit riêng lịch expected (`schedule_evidence_status=not_audited_mvp`). Quyền IAM của người kiểm tra không cho phép trực tiếp `lambda:InvokeFunction`, nên API được kiểm qua luồng Cognito/API Gateway từ web. Không cấp thêm IAM, không ghi dữ liệu hoặc chạy job lại để phục vụ việc đối chiếu.
+
+---
+
+---
 
 # Phụ lục B — Khác biệt giữa các thế hệ tài liệu
 
