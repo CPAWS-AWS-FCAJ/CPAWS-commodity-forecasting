@@ -105,7 +105,7 @@ Guardrails cần được quản lý bằng AWS CDK thay vì tạo thủ công r
 - Đưa Guardrail ID và version vào CDK output hoặc cấu hình triển khai.
 - Không hardcode Guardrail ID vào ADR hoặc logic nghiệp vụ.
 
-Guardrail hiện tại vẫn ở trạng thái `DRAFT`, do đó chưa được xem là cấu hình production đã hoàn tất.
+Guardrail hiện tại vẫn ở trạng thái `DRAFT`, do đó chưa được xem là cấu hình production đã hoàn tất. Guardrail chưa được bật hoặc gắn vào Lambda; vì vậy không được tính là lớp bảo vệ đang hoạt động trong MVP.
 
 ### 6. Knowledge Base
 

@@ -240,7 +240,7 @@ Cùng đợt, 8 câu loại bài A (chào hỏi, khái niệm, ngoài phạm vi,
 **Hệ thống**
 
 - Router không đạt bộ giữ riêng, nên mọi câu đi Haiku: chi phí và độ trễ cao hơn cần thiết với câu đơn giản.
-- Guardrails còn `DRAFT`; lớp chống prompt injection hiện chỉ gồm prompt, kiểm soát `citations` phía server và log link lạ (#104). Log này đã chạy trên Lambda từ 10/11 nhưng chỉ ghi, không chặn và chưa có alarm (mục 6.2).
+- Bedrock Guardrails vẫn ở trạng thái `DRAFT`, chưa bật hoặc gắn vào Lambda nên không phải lớp bảo vệ đang hoạt động. Lớp chống prompt injection hiện gồm prompt, kiểm soát `citations` phía server và log link lạ ([#104](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/104)). Log này chạy trên Lambda từ 10/11, chỉ ghi, không chặn và chưa có alarm (mục 6.2).
 - Tin tức phụ thuộc một người gắn nhãn tay, 2–3 bài mỗi tuần, có độ trễ; ngoài khoảng đó `get_news` trả rỗng và chatbot nói không tìm thấy tin đáng kể.
 - Mặc định khoảng ngày của `get_news` lệch giữa prompt ("7 ngày đến ngày cơ sở") và code ("7 ngày đến hôm nay theo giờ Việt Nam"); đã ghi ở mục 6 issue #84.
 - Không streaming: người dùng chờ cả câu, trung vị khoảng 4 giây trên benchmark.
