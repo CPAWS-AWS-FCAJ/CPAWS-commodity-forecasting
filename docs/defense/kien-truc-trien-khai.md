@@ -1,6 +1,6 @@
 # Chương 4. Kiến trúc, triển khai và vận hành
 
-> Bản nháp ngày 16/11/2026. Chủ trì: Tiến; review: Khải (pipeline), Tuấn (IAM/API), Long (rolling accuracy). Cơ sở: `origin/developer` @ `a6eef06` (16/11/2026).
+> Bản nháp ngày 16/11/2026, sửa 17/11/2026 theo review của Khải và Long trên PR #134. Chủ trì: Tiến; review: Khải (pipeline), Tuấn (IAM/API), Long (rolling accuracy). Cơ sở: `origin/developer` @ `a6eef06` (16/11/2026); kết quả test2020 theo #131.
 >
 > Chương này tóm tắt và sắp xếp lại theo đề cương 4.1–4.6 của [khung báo cáo cuối](khung-bao-cao-cuoi.md). Chi tiết cấu hình, lệnh vận hành và bảng các lần deploy nằm ở [tài liệu triển khai và vận hành](trien-khai-van-hanh.md) (gọi tắt **TKVH**), dùng làm nguồn và phụ lục. Trạng thái là tại ngày viết; phần nào là kế hoạch thì ghi rõ. Không đưa Account ID, ARN, domain, email hay số liệu giá vào chương này.
 
@@ -30,7 +30,7 @@ Cấu hình chi tiết từng stack và thứ tự phụ thuộc: TKVH §2.1. St
 
 | Proposal | Hiện trạng | Lý do / quyết định |
 |---|---|---|
-| Step Functions → SageMaker Training Job → Model Registry, retrain hằng tuần (bước 6–10) | Không có. Hai Lambda nối bằng Lambda destination; champion `baseline-q252` là mốc thống kê 252 phiên, không cần artifact mô hình; challenger S1a chạy shadow từ 04/11 | Các mô hình học sâu và CEEMDAN không vượt mốc trên validation 2019 ([ADR-0011](../adr/0011-weekly-champion-challenger-instead-of-retrain.md), [ADR-0012](../adr/0012-k4-fhs-gjr-result.md); Chương 1) |
+| Step Functions → SageMaker Training Job → Model Registry, retrain hằng tuần (bước 6–10) | Không có. Hai Lambda nối bằng Lambda destination; champion `baseline-q252` là mốc thống kê 252 phiên, không cần artifact mô hình; challenger S1a chạy shadow từ 04/11 | Các mô hình học sâu và CEEMDAN không vượt mốc trên validation 2019 ([ADR-0011](../adr/0011-weekly-champion-challenger-instead-of-retrain.md), [ADR-0012](../adr/0012-k4-fhs-gjr-result.md); Chương 1). Official test2020 (16/11, #131) cho S1a cải thiện có ý nghĩa thống kê ở bạc, WTI, Brent (không đủ bằng chứng với vàng), nhưng nhóm giữ `baseline-q252` cho cả 4 tài sản tới hết kỳ; đổi champion cần ADR mới (Chương 1, Chương 2 §9) |
 | Bedrock batch inference gắn nhãn tin + Knowledge Bases (S3 Vectors) (bước 4–5, 18) | Không có. Tin demo gắn nhãn tay, đóng gói JSON trong Lambda chat | Gắn nhãn tự động không đạt ngưỡng chất lượng ([ADR-0013](../adr/0013-manual-news-labels-until-defense.md); Chương 3) |
 | Nguồn: EIA, FRED, GPR, metals API, Guardian, NYT, RSS Việt Nam | Yahoo Finance (yfinance) cho giá và tỷ giá; EIA và NBP để đối chiếu | Phạm vi dữ liệu và điều khoản ([ADR-0003](../adr/0003-news-and-signal-sources.md), [ADR-0005](../adr/0005-price-data-sources.md)) |
 | Secrets Manager (API key) | SSM Parameter Store SecureString | Chỉ một key (EIA); CDK chỉ nhận tên parameter |
@@ -86,7 +86,9 @@ Khối "Độ tin cậy" trên web hiển thị số đo `rolling_8w` của **d�
 | 12/11 | Bật lịch `cron(45 13 ? * TUE-SAT *)` UTC, 20:45 giờ VN; `cdk diff` chỉ đổi `State` | [#118](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/118) |
 | 13/11 | Web bật khối "Độ tin cậy" (`VITE_ACCURACY_API=true`) | — |
 
-Lượt theo lịch đầu tiên (12/11, 20:45) thành công cho cả 4 tài sản (`COMPLETED`, đã công bố), 30,3 s, 297/1.024 MB, alarm OK; Long xác minh độc lập qua DynamoDB, API và web ([#89](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/89)). Khi số ngày cơ sở đã đánh giá chưa đủ 20, API trả `collecting` và web hiện "Đang thu thập (n/20)". Ngày 12/11 cả 4 tài sản ở mức 9/20; mỗi lượt thêm khoảng một ngày cơ sở, nên dự kiến đủ 20 vào khoảng cuối tháng 11. Số hiển thị tại ngày đóng băng: `[CHỜ SỐ LIỆU: chụp 22/11]`.
+Lượt theo lịch đầu tiên (12/11, 20:45) chạy xong cho cả 4 tài sản: run ở trạng thái `COMPLETED` và con trỏ kết quả đã cập nhật (`promoted`), 30,3 s, 297/1.024 MB, alarm OK; Long xác minh độc lập qua DynamoDB, API và web ([#89](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/89)). Run hoàn tất **không** có nghĩa là số đo đã được công bố: khi số ngày cơ sở hợp lệ (khác nhau) chưa đủ 20, API vẫn trả `collecting`, chưa công bố giá trị `overall`, và web hiện "Đang thu thập (n/20)". Ngày 12/11 cả 4 tài sản ở mức 9/20. Nếu mỗi lượt thêm được một ngày cơ sở hợp lệ thì có thể đủ 20 vào khoảng cuối tháng 11; đây chỉ là ước lượng có điều kiện, vì số ngày tăng còn phụ thuộc giá thực tế đã có, điều kiện hợp lệ và provenance của từng ngày. Số hiển thị tại ngày đóng băng: `[CHỜ SỐ LIỆU: chụp 22/11]`.
+
+`GET /accuracy/{asset}` chỉ phục vụ số đo của champion `baseline-q252`. Đánh giá cặp champion–S1a của shadow được job lưu riêng dưới `eval/shadow_eval/` trên S3, không ghi đè số đo champion và không đi qua API (Chương 2 §3.1).
 
 ## 4.5. Bằng chứng chạy thật
 
@@ -123,7 +125,7 @@ Web nằm trong `web/`: React + TypeScript + Vite + Tailwind, gọi API bằng T
 
 **Cờ build đang dùng** (bản Amplify 13/11 từ `26399d0`): `VITE_AUTH_ENABLED=true`, `VITE_SHOW_METAL_PRICES=true`, `VITE_ACCURACY_API=true`.
 
-**Tự đăng ký cho người chấm (kế hoạch, chưa triển khai).** Web đã có cờ `VITE_ALLOW_SIGNUP` (mặc định tắt; PR #132) để hiện màn đăng ký và nhập mã xác minh email của Amplify `Authenticator`. Chỉ bật sau khi `CpawsAuth` cho tự đăng ký kèm xác minh email (PR của Tuấn, sửa ADR-0005/0006). Nếu không kịp trước 22/11, người chấm dùng một tài khoản riêng do Tuấn tạo. `[CẬP NHẬT sau khi deploy hoặc bỏ]`
+**Tự đăng ký cho người chấm (kế hoạch, chưa triển khai).** Web đã có cờ `VITE_ALLOW_SIGNUP` (mặc định tắt; [#132](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/132), merge 16/11) để hiện màn đăng ký và nhập mã xác minh email của Amplify `Authenticator`. Chỉ bật sau khi `CpawsAuth` cho tự đăng ký kèm xác minh email, theo **ADR-0014 (mới) và một dòng bổ sung ở ADR-0005** (Tuấn; ADR-0006 không sửa). Cờ web chỉ ẩn/hiện giao diện, không chặn được ai: client ID là giá trị công khai, nên thứ chặn thật là cấu hình User Pool. Mốc tắt: trong 1 ngày sau khi mentor báo chấm xong, chậm nhất 10/12/2026 — tắt self sign-up trong `CpawsAuth` trước, rồi build web với cờ tắt, rồi disable/xóa các user tự tạo. Nếu không kịp trước 22/11, người chấm dùng một tài khoản riêng do Tuấn tạo. `[CẬP NHẬT sau khi deploy hoặc bỏ]`
 
 ## 4.7. Giới hạn và hướng phát triển
 
