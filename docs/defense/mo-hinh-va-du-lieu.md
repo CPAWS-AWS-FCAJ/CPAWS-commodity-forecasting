@@ -122,7 +122,7 @@ Mỗi chuỗi dùng **một nguồn cho cả lịch sử lẫn cập nhật hằ
 ### Vì sao `baseline-q252` là champion
 
 - **Rất khó vượt** với dữ liệu chỉ có giá ở kỳ hạn 1–7 phiên. Chiều của return ngắn hạn gần như không dự đoán được, nên giá trị chính của một dự báo phân vị nằm ở **độ rộng** khoảng. Mốc 252 phiên nắm đúng độ rộng phân phối gần đây.
-- **Hệ quả cần nói rõ khi trình bày:** trung vị của mốc là trung vị return 252 phiên qua. Chiều "nghiêng tăng/nghiêng giảm" trên web phản ánh xu hướng 252 phiên đã qua, không phải dự đoán từ thông tin mới. Vì vậy web và chatbot ghi "Mốc thống kê 252 phiên", không gọi là mô hình dự báo.
+- **Hệ quả cần nói rõ trong báo cáo:** trung vị của mốc là trung vị return 252 phiên qua. Chiều "nghiêng tăng/nghiêng giảm" trên web phản ánh xu hướng 252 phiên đã qua, không phải dự đoán từ thông tin mới. Vì vậy web và chatbot ghi "Mốc thống kê 252 phiên", không gọi là mô hình dự báo.
 
 ### Đang chạy trong sản phẩm
 
@@ -252,7 +252,7 @@ Nhiều bài báo về CEEMDAN + LSTM (ví dụ ý tưởng của Cao, Li, Li 20
 | Transformer (PatchTST, Informer) | Không làm | Tư liệu kiến trúc đã xếp ở mức "chỉ khi dư thời gian" vì dễ học thuộc với vài nghìn điểm; các mô hình đơn giản hơn đã không vượt mốc | [Tư liệu kiến trúc](lua-chon-kien-truc-va-mo-hinh.md) mục 2 |
 | Đánh giá bằng MASE | `mae_ratio_vs_naive` (không gọi là MASE), chỉ số phụ; chỉ số chính `pinball_skill` | Thống nhất theo phân vị và mốc mạnh | ADR-0008 |
 
-Điểm nên nói rõ khi trình bày: các thay đổi trên là kết quả của thí nghiệm có kế hoạch chốt trước, không phải thiếu tính năng. Ba kết quả âm có kiểm soát (K3, K3b, K4) cho thấy với dữ liệu chỉ có giá ở kỳ hạn 1–7 phiên, mốc phân vị 252 phiên rất khó vượt.
+Điểm nên nói rõ trong báo cáo: các thay đổi trên là kết quả của thí nghiệm có kế hoạch chốt trước, không phải thiếu tính năng. Ba kết quả âm có kiểm soát (K3, K3b, K4) cho thấy với dữ liệu chỉ có giá ở kỳ hạn 1–7 phiên, mốc phân vị 252 phiên rất khó vượt.
 
 ## 1.7. Giới hạn
 

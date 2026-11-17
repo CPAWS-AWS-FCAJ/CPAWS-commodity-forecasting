@@ -96,7 +96,7 @@ Ba nguyên tắc chi phối các quyết định trong báo cáo:
 | [Chương 1. Mô hình và dữ liệu](mo-hinh-va-du-lieu.md) | Target, nguồn dữ liệu, mốc 252 phiên, các mô hình đã thử, champion/challenger, so với proposal | Khải |
 | [Chương 2. Phương pháp và kết quả đánh giá](phuong-phap-danh-gia.md) | Chia tập theo thời gian, chỉ số pinball skill và hiệu chỉnh, thống kê, rolling accuracy, kết quả test2020 | Long |
 | [Chương 3. Chatbot](chatbot.md) | Luồng `POST /chat`, model Bedrock, tool, lớp chống tư vấn đầu tư, kết quả benchmark | Phước |
-| [Chương 4. Triển khai và vận hành](trien-khai-van-hanh.md) | Các stack CDK tại ngày chốt, luồng chạy hằng ngày, deploy, rollback, giám sát, web | Tiến |
+| [Chương 4. Kiến trúc, triển khai và vận hành](kien-truc-trien-khai.md) | Kiến trúc hiện trạng và so với proposal, các stack CDK, luồng chạy hằng ngày, giám sát, web; chi tiết lệnh và lịch sử deploy ở [tài liệu triển khai và vận hành](trien-khai-van-hanh.md) | Tiến |
 | [Chương 5. Bảo mật và chi phí](security-and-cost.md) | Quyền truy cập, bảo vệ dữ liệu và artifact, chi phí, rủi ro nguồn dữ liệu | Tuấn |
 | Kết luận và phụ lục | Phạm vi hoàn thành, giới hạn, hướng phát triển | Khải biên tập, Long ghép bản cuối |
 

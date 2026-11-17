@@ -105,13 +105,13 @@ Có thể giữ **5 chương nội dung chính** theo yêu cầu nhóm, thêm M�
 | **15/11** | **Khóa khung báo cáo**: mục lục, người viết, hạn, danh sách bằng chứng cần bổ sung | Khải điều phối; Long cập nhật file | Xác nhận phân công |
 | **16–19/11** | Nộp bản nháp Ch.1/3/4/5 từ bằng chứng hiện có; Ch.2 nộp phần phương pháp trước | **Khải (Ch.1)**, **Long (Ch.2)**, Phước, Tiến, Tuấn | Official v4 **đã có số cuối** ở [#120](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/120) (A 5/8; B 17/30; chung KHÔNG ĐẠT); `chatbot.md` đang cập nhật ở [#121](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/121) (chưa merge); kiến trúc/API cần trạng thái mới |
 | **Trước 20/11** | Phước hoàn tất cập nhật kết quả official v4 vào `docs/defense/chatbot.md` qua [#121](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/121), theo số cuối ở [#120](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/120) | Phước; Khải review | PR #121 đang chờ review/merge; không cần chấm hoặc benchmark lại |
-| **Trước 25/11** | Chuẩn bị kịch bản hỏi đáp chatbot phục vụ bảo vệ | Phước; Khải review | Chương 3 và kết quả cuối v4 đã chốt |
+| **Trước 25/11** | Chọn câu hỏi chatbot cho video demo (đã chọn D3, Q6, D4 từ #119) | Phước; Khải review | Chương 3 và kết quả cuối v4 đã chốt |
 | **16–22/11** | Official test2020 một lượt **theo approval #88 và runbook**, audit artifact/hash; lịch chốt 16/11 (09:00–12:00 VN), dự phòng 17/11 | Long; Khải review | IAM chốt, preflight/pip và điều kiện approval #88 |
 | **Trong 2 ngày sau official run** | Long thêm kết quả và giới hạn vào `docs/defense/phuong-phap-danh-gia.md`, PR riêng | Long; Khải review | Artifact test2020 đã kiểm chứng |
 | **23–25/11** | **Long ghép bản cuối**; Khải biên tập/duyệt tính nhất quán; các chủ trì xử lý review, đối chiếu phiên bản/deploy/số đo, chuẩn hóa sơ đồ và nguồn | Long (ghép); Khải (biên tập/duyệt) | Bản nháp các chương, kết quả chính thức nếu có |
 | **26/11** | Rà soát cuối: tính nhất quán metric, kiến trúc, số liệu chi phí, bảo mật và hạn chế | Cả nhóm; Khải quyết định chốt | Bản ghép hoàn chỉnh |
-| **27/11** | **Bản ghép báo cáo cuối** và đầu vào cho slide/bảo vệ | **Long ghép bản cuối**; Khải duyệt | Hoàn thành review và bổ sung evidence |
-| **23–29/11** | Xây dựng, đồng bộ và review slide bảo vệ theo nội dung báo cáo đã chốt | Cả nhóm, Khải điều phối | Chương đã review, bằng chứng và hình minh họa |
+| **27/11** | **Bản ghép báo cáo cuối** và đầu vào cho mục Project trên trang workshop của từng thành viên | **Long ghép bản cuối**; Khải duyệt | Hoàn thành review và bổ sung evidence |
+| **23–29/11** | Quay video demo theo danh sách cảnh (không slide); mỗi thành viên hoàn thiện trang workshop và nộp portal | Khải quay video; cả nhóm | Chương đã review, bằng chứng và hình minh họa |
 
 ## 5. Quy định biên soạn và nghiệm thu
 

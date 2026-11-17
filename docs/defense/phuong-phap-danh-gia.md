@@ -197,7 +197,7 @@ Ba tệp snapshot có SHA-256 tương ứng: `prices.parquet` = `49dfc745881a38a
 
 Bảy artifact chính thức là `claim.json`, `started.json`, `env.txt`, `pairs.parquet`, `summary.json`, `summary.md`, `checksums.json`, được lưu tại `s3://cpaws-dev-lake/eval/test2020/`. Kiểm tra không phát hiện `failure.json`; các artifact hiện diện ở cả local và S3, với checksum trùng khớp. **Kiểm toán toàn vẹn artifact không đồng nghĩa với xác minh đầy đủ point-in-time vintage** của nguồn dữ liệu lịch sử. Chi tiết kết quả và giới hạn được trình bày ở §9.
 
-Kết quả official **chỉ dùng cho reporting/defense**; champion hiện hành vẫn là `baseline-q252`. Mọi quyết định promote challenger cần ADR mới, không tự động suy ra từ p-value test2020.
+Kết quả official **chỉ dùng cho báo cáo**; champion hiện hành vẫn là `baseline-q252`. Mọi quyết định promote challenger cần ADR mới, không tự động suy ra từ p-value test2020.
 
 ## 7. Giới hạn và tính hợp lệ
 

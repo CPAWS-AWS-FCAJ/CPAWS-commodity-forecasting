@@ -1,6 +1,6 @@
 # Triển khai và vận hành CPAWS
 
-> Bản nháp chương Triển khai và vận hành cho báo cáo cuối kỳ (trình bày trước hội đồng thực tập FCAJ-AWS), cập nhật ngày 06/11/2026, bổ sung ngày 13/11/2026 (Rolling Accuracy, web). Trạng thái triển khai là tại ngày viết; cấu hình lấy từ code trong `infra/`, số đo lấy từ log CloudWatch của các lượt chạy thật. Phần nào là kế hoạch thì ghi rõ.
+> Bản nháp chương Triển khai và vận hành cho báo cáo cuối kỳ (nộp cùng workshop lên portal FCAJ; mentor xác nhận 13/11 không có buổi trình bày), cập nhật ngày 06/11/2026, bổ sung ngày 13/11/2026 (Rolling Accuracy, web). Trạng thái triển khai là tại ngày viết; cấu hình lấy từ code trong `infra/`, số đo lấy từ log CloudWatch của các lượt chạy thật. Phần nào là kế hoạch thì ghi rõ.
 
 ## 1. Mục tiêu và phạm vi
 

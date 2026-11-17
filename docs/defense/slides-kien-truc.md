@@ -16,7 +16,7 @@ style: |
 ---
 
 <!--
-Slide phần Kiến trúc (slide #5 trong docs/defense/khung-slide.md), dùng làm hình và lời thoại phần kiến trúc trong video demo
+Slide phần Kiến trúc. Không dùng để trình bày: không có buổi trình bày, video demo quay không slide (chốt 17/11). Giữ làm tư liệu
 (mentor xác nhận 13/11 không có buổi trình bày).
 Nội dung lấy từ docs/defense/kien-truc-trien-khai.md (Chương 4) và trien-khai-van-hanh.md trên developer. Mỗi slide ghi nguồn ở dòng cuối.
 Không đưa Account ID, ARN, ID token, domain hay email vào slide.
