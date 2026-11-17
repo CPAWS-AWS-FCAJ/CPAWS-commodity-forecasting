@@ -21,11 +21,11 @@ Phạm vi chương: các stack, luồng chạy hằng ngày, quy trình deploy, 
 |---|---|---|
 | `CpawsData` | S3 `cpaws-dev-lake`; ECR `cpaws-dev-ingest`, `cpaws-dev-predict`; Lambda `cpaws-dev-ingest`, `cpaws-dev-predict`, `cpaws-dev-accuracy-job`; EventBridge Scheduler (ingest 19:15, job accuracy 20:45); metric filter cho shadow | Bucket bật versioning, phiên bản cũ giữ 30 ngày, `RETAIN`, chặn public, bắt buộc SSL. ECR giữ 5 image mới nhất. Ingest: container, 1.024 MB, 300 giây, retry bất đồng bộ 1 lần. Predict: container x86_64, 1.024 MB, 120 giây, retry 0. Job accuracy: container từ image predict, 1.024 MB, 300 giây, retry 0 (mục 9). Không Lambda nào chạy trong VPC (không cần NAT Gateway) |
 | `CpawsServing` | DynamoDB `cpaws-dev-forecasts`, `cpaws-dev-news-labels`, `cpaws-dev-chat-usage`, `cpaws-dev-accuracy` | On-demand. `forecasts` và `news-labels` là `RETAIN`. `chat-usage` chỉ lưu bộ đếm lượt hỏi nên là `DESTROY` |
-| `CpawsAuth` | Cognito User Pool `cpaws-dev-users`, app client cho SPA | Không cho tự đăng ký; tài khoản do nhóm tạo. `RETAIN` |
+| `CpawsAuth` | Cognito User Pool `cpaws-dev-users`, app client cho SPA | Dự kiến mở tự đăng ký tạm thời trong thời gian chấm theo ADR-0014, yêu cầu xác minh email; cấu hình hiện tại vẫn tắt và phải đóng lại sau khi chấm. Tài khoản grader được tạo riêng và bàn giao qua kênh riêng. `RETAIN` |
 | `CpawsApi` | REST API stage `dev`; Lambda `cpaws-dev-forecasts-api` (256 MB, 10 giây) và `cpaws-dev-chat-api` (512 MB, 28 giây), `cpaws-dev-accuracy-api` (chỉ đọc bảng `cpaws-dev-accuracy`) | Cognito authorizer cho mọi route trừ `/health`. Throttling 10 request/giây, burst 20. CORS chỉ một origin (mục 7). Tin demo đóng gói trong Lambda chat ([ADR-0013](../adr/0013-manual-news-labels-until-defense.md)) |
 | `CpawsOps` | SNS `cpaws-dev-alarms`, 6 CloudWatch alarm | Email nhận cảnh báo truyền lúc deploy, không ghi vào repo (mục 6) |
 
-Phụ thuộc giữa các stack: `CpawsApi` dùng bảng của `CpawsServing` và User Pool của `CpawsAuth`, nên **`CpawsServing` phải deploy trước `CpawsApi`**. `CpawsOps` tham chiếu Lambda theo tên chứ không theo output của stack khác, nên deploy được độc lập. Log group của mọi Lambda giữ 1 tháng.
+Phụ thuộc giữa các stack: `CpawsApi` dùng bảng của `CpawsServing` và User Pool của `CpawsAuth`, nên **`CpawsServing` phải deploy trước `CpawsApi`**. `CpawsOps` tham chiếu Lambda theo tên chứ không theo output của stack khác, nên deploy được độc lập. Log group của mọi Lambda giữ 1 tháng. Khi mở tự đăng ký phục vụ chấm, deploy `CpawsAuth` trước, sau đó build web với `VITE_ALLOW_SIGNUP=true` theo ADR-0014.
 
 ### 2.2. Tài nguyên ngoài CDK
 
