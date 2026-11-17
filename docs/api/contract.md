@@ -672,10 +672,10 @@ Web phân biệt hai loại `429` theo thân lỗi:
 - Thân có `"error": "rate_limited"` (hết lượt trong ngày, do Lambda trả): hiện `message` kèm giờ reset quy đổi từ `reset_at` sang giờ Việt Nam.
 - Còn lại (throttling của stage, thân mặc định của API Gateway): hiện "Bạn đã hỏi quá nhiều, thử lại sau." như ghi chú trong `web/src/components/ChatPanel.tsx`.
 
-**Giới hạn lượt hỏi theo người dùng (đề xuất)**
+**Giới hạn lượt hỏi theo người dùng (đã triển khai: #55, #63; deploy 02/11)**
 
 - **Mặc định 20 lượt mỗi người mỗi ngày**, đặt bằng biến môi trường của Lambda để đổi không cần sửa code. Căn cứ: lần chạy dev 26/10 (prompt và tool v2) tốn 0,35 USD cho 30 câu Haiku, tức khoảng 0,012 USD mỗi câu `complex` (dữ liệu giả lập, chưa có Guardrails, theo đơn giá tham chiếu ở ADR-0004; lần 23/10 với prompt v1 là 0,297 USD). 20 câu đều là `complex` thì khoảng 0,24 USD/người/ngày.
-- **Giới hạn chung toàn hệ thống (đề xuất thêm): 100 lượt mỗi ngày.** User pool tắt tự đăng ký (`self_sign_up_enabled=False`) nên số người dùng có giới hạn, nhưng tổng chi phí vẫn tăng theo số tài khoản. 100 câu `complex` khoảng 1,2 USD/ngày, trường hợp xấu nhất khoảng 36 USD/tháng, vẫn dưới Budgets 50 USD/tháng của cả dự án nhưng chiếm phần lớn; bản 25/10 đề xuất 150 lượt (khoảng 54 USD/tháng nếu dùng hết mỗi ngày, vượt Budgets). Vượt giới hạn chung cũng trả `429 rate_limited`, `message` khác. Giới hạn này cũng đặt bằng biến môi trường của Lambda, riêng với giới hạn theo người dùng.
+- **Giới hạn chung toàn hệ thống: 100 lượt mỗi ngày (đã triển khai: #55, #63; deploy 02/11).** Trong thời gian chấm, User Pool tạm mở tự đăng ký theo ADR-0014; vì vậy người ngoài cũng có thể đăng ký và sử dụng quota chung. 100 câu `complex` khoảng 1,2 USD/ngày, trường hợp xấu nhất khoảng 36 USD/tháng. Quota được chia sẻ giữa tất cả người dùng; khi hết hạn mức, API trả `429 rate_limited` với `message` tương ứng. Giới hạn này được cấu hình riêng bằng biến môi trường của Lambda.
 - **Ngày tính theo giờ Việt Nam (UTC+7)**, reset lúc 00:00.
 - **Lượt được tính** khi request đã qua kiểm tra hợp lệ và sắp gọi model, cả nhánh `simple` lẫn `complex`. Lỗi 400 và 429 không tính. Lỗi 5xx sau khi đã tính lượt thì không hoàn lại, để tránh retry liên tục làm tốn tiền Bedrock.
 - **Người dùng** xác định bằng claim `sub` của Cognito ID token (`requestContext.authorizer.claims.sub`), không dùng email.

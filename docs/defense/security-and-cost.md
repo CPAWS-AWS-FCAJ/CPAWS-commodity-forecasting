@@ -68,7 +68,7 @@ Không đưa API key, mật khẩu, mã MFA, access token hoặc thông tin đă
 
 ### 3.3. API và người dùng
 
-- Cognito User Pool quản lý tài khoản người dùng; không cho phép tự đăng ký.
+- Cognito User Pool quản lý tài khoản bằng xác thực Cognito. Theo ADR-0014, nhóm dự kiến mở tự đăng ký tạm thời trong thời gian chấm, yêu cầu xác minh email và đóng lại sau khi chấm. Tại thời điểm cập nhật tài liệu, cấu hình thực tế vẫn tắt tự đăng ký. `VITE_ALLOW_SIGNUP` chỉ điều khiển giao diện, không phải biện pháp bảo mật.
 - API Gateway dùng Cognito authorizer cho các route nghiệp vụ, ngoại trừ `/health`.
 - API có throttling 10 request/giây, burst 20.
 - CORS giới hạn một origin web được cấu hình.

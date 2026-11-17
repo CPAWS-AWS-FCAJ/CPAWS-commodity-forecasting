@@ -56,7 +56,7 @@ Proposal còn đặt mục tiêu thử nghiệm với 10–15 người dùng th�
 
 - 4 tài sản ở trên, kỳ hạn 1–7 phiên giao dịch, dự báo theo lô mỗi ngày.
 - Một môi trường `dev` trên AWS, region `ap-southeast-1`, hạ tầng viết bằng AWS CDK.
-- Web cần đăng nhập Cognito (không tự đăng ký); không có tính năng tải dữ liệu giá.
+- Web yêu cầu đăng nhập Cognito; trong thời gian chấm, nhóm dự kiến mở tự đăng ký có xác minh email theo ADR-0014 rồi đóng lại sau khi chấm. Web không có tính năng tải dữ liệu giá.
 
 **Ngoài phạm vi** (proposal mục 4.4, giữ nguyên):
 
