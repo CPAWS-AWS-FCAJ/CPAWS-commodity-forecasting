@@ -1,4 +1,4 @@
-﻿"""Tests for the CPAWS Cognito authentication stack."""
+"""Tests for the CPAWS Cognito authentication stack."""
 
 import sys
 from pathlib import Path

@@ -1,4 +1,4 @@
-﻿"""CDK stack for CPAWS Cognito authentication."""
+"""CDK stack for CPAWS Cognito authentication."""
 
 from typing import Any
 
