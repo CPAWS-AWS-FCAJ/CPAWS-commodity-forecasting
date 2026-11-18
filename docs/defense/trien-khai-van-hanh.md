@@ -189,7 +189,7 @@ Job có ghi cảnh báo `prob_up_mismatch` (xác suất tăng đã lưu lệch v
 - **CORS một origin**, nên localhost và Amplify không dùng được cùng lúc.
 - **Amplify deploy zip thủ công.** Không có lịch sử build gắn với commit, nên commit nào đang chạy phải ghi lại bằng tay.
 - **ECR giữ 5 image**, nên image rollback có thể bị xóa nếu không theo dõi (mục 5).
-- **Chưa có biểu đồ lịch sử giá.** Trang tài sản chỉ vẽ phần dự báo và ghi "Chưa có lịch sử giá". Muốn vẽ lịch sử phải thêm endpoint: sửa `docs/api/contract.md`, predict ghi thêm tệp lịch sử ngắn, thêm route và quyền đọc S3 trong `CpawsApi`, hai lần deploy. Hiển thị chuỗi giá lấy từ Yahoo cũng làm tăng rủi ro điều khoản ([ADR-0005](../adr/0005-price-data-sources.md)). Nhóm chốt ngày 13/11 bỏ khỏi phạm vi trước bảo vệ; đây là hướng phát triển sau dự án.
+- **Chưa có biểu đồ lịch sử giá.** Trang tài sản chỉ vẽ phần dự báo và ghi "Chưa có lịch sử giá". Muốn vẽ lịch sử phải thêm endpoint: sửa `docs/api/contract.md`, predict ghi thêm tệp lịch sử ngắn, thêm route và quyền đọc S3 trong `CpawsApi`, hai lần deploy. Hiển thị chuỗi giá lấy từ Yahoo cũng làm tăng rủi ro điều khoản ([ADR-0005](../adr/0005-price-data-sources.md)). Nhóm chốt ngày 13/11 bỏ khỏi phạm vi dự án; đây là hướng phát triển sau dự án.
 - Guardrails của chatbot chưa gắn vào Lambda, và Haiku gọi qua global inference profile ([chương chatbot](chatbot.md), mục 8).
 
 ## 11. Tóm tắt

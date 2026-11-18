@@ -2,7 +2,7 @@
 
 > Tài liệu cũ (đầu ra K8), giữ để tra cứu; không có buổi trình bày. Nội dung hiện hành nằm ở Chương 1 (`mo-hinh-va-du-lieu.md`) và Chương 4 (`kien-truc-trien-khai.md`).
 
-Bản nháp ban đầu (đầu ra K8). Điền số liệu thật vào cột "Bằng chứng" sau khi có kết quả đánh giá tuần 10. Chi phí và giá dịch vụ cần kiểm tra lại bằng AWS Pricing Calculator trước khi trình bày.
+Bản nháp ban đầu (đầu ra K8). Điền số liệu thật vào cột "Bằng chứng" sau khi có kết quả đánh giá tuần 10. Chi phí và giá dịch vụ cần kiểm tra lại bằng AWS Pricing Calculator trước khi nộp báo cáo.
 
 ## 1. Kiến trúc hệ thống
 

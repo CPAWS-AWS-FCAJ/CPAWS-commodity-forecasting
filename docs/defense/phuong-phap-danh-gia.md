@@ -1,6 +1,6 @@
 # Phương pháp đánh giá mô hình dự báo CPAWS
 
-> Bản cập nhật Chương 2 ngày **16/11/2026**, kế thừa bản đã được duyệt ở PR #130 (mốc 14/11). Giữ nguyên bằng chứng Rolling Accuracy và S1a shadow tại thời điểm kiểm tra; bổ sung kết quả **official test2020 thực hiện một lần ngày 16/11/2026**, đã kiểm toán artifact cục bộ và S3. Kết quả dùng cho báo cáo và bảo vệ, **không thay đổi champion**.
+> Bản cập nhật Chương 2 ngày **16/11/2026**, kế thừa bản đã được duyệt ở PR #130 (mốc 14/11). Giữ nguyên bằng chứng Rolling Accuracy và S1a shadow tại thời điểm kiểm tra; bổ sung kết quả **official test2020 thực hiện một lần ngày 16/11/2026**, đã kiểm toán artifact cục bộ và S3. Kết quả chỉ dùng cho báo cáo cuối kỳ, **không thay đổi champion**.
 
 ## 1. Mục tiêu và đối tượng đánh giá
 
@@ -223,7 +223,7 @@ CPAWS kết hợp **validation lịch sử** để chọn cấu hình, **test202
 
 ## 9. Kết quả test2020 chính thức — official run 16/11/2026
 
-> **Nguồn bằng chứng:** `s3://cpaws-dev-lake/eval/test2020/` (đã audit local/S3, 7/7 artifact khớp SHA-256); thông tin phê duyệt và báo cáo kết quả ở [PR #88](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/88). Đây là **một lượt chạy official duy nhất**. Kết quả dùng để báo cáo/bảo vệ; không tự động thay đổi champion và **không phải verified point-in-time backtest** vì historical vintage/revisions chưa được xác minh đầy đủ.
+> **Nguồn bằng chứng:** `s3://cpaws-dev-lake/eval/test2020/` (đã audit local/S3, 7/7 artifact khớp SHA-256); thông tin phê duyệt và báo cáo kết quả ở [PR #88](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/88). Đây là **một lượt chạy official duy nhất**. Kết quả chỉ dùng cho báo cáo cuối kỳ; không tự động thay đổi champion và **không phải verified point-in-time backtest** vì historical vintage/revisions chưa được xác minh đầy đủ.
 
 ### 9.1. Provenance và bằng chứng toàn vẹn
 
@@ -295,7 +295,7 @@ Năm 2020 có skill dương trên bốn tài sản, đặc biệt WTI/Brent; ng�
 
 Common mask được xác định riêng theo **asset × horizon × sample**. Một origin thiếu một horizon có thể vẫn hợp lệ ở horizon khác, nhưng primary S(a) yêu cầu đủ bảy horizon ở cấp tổng hợp. Các số đếm theo từng loại loại trừ (`endpoint`, `cutoff`, dữ liệu thiếu, provenance, roll, gap…) và các chỉ số phụ (`coverage_80`, `width_80`, Brier, `sign_accuracy`, `mae_ratio_vs_naive`) phải tham chiếu **các record gốc trong `summary.json`/`pairs.parquet`**; phần tóm tắt này không bịa thêm bảng counts hoặc xác nhận invariants chưa được trích xuất riêng.
 
-Kết quả không loại bỏ các giới hạn về **historical vintage/revisions chưa xác minh đầy đủ**, horizon phụ thuộc, lỗi endpoint/roll dầu và DM gaps; dữ liệu không đủ để gọi là verified PIT backtest hoặc để suy rộng thắng lợi trên tất cả thời kỳ. Kết quả này **chỉ phục vụ reporting/defense**; champion tiếp tục là **`baseline-q252`**, S1a vẫn là challenger/shadow. Mọi thay đổi champion sau đó cần **ADR mới**; không chạy lại official để tối ưu theo test.
+Kết quả không loại bỏ các giới hạn về **historical vintage/revisions chưa xác minh đầy đủ**, horizon phụ thuộc, lỗi endpoint/roll dầu và DM gaps; dữ liệu không đủ để gọi là verified PIT backtest hoặc để suy rộng thắng lợi trên tất cả thời kỳ. Kết quả này **chỉ phục vụ báo cáo cuối kỳ (reporting-only)**; champion tiếp tục là **`baseline-q252`**, S1a vẫn là challenger/shadow. Mọi thay đổi champion sau đó cần **ADR mới**; không chạy lại official để tối ưu theo test.
 
 **Bằng chứng gốc để đối chiếu:** [Test2020 Plan](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/blob/developer/docs/experiments/test2020-plan.md), [PR #88](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/88), `s3://cpaws-dev-lake/eval/test2020/` (`claim.json`, `summary.json`, `summary.md`, `pairs.parquet`, `checksums.json`).
 
@@ -355,7 +355,7 @@ Bảng dưới đây lưu dấu vết quyết định để tránh diễn giải
 
 | **Nội dung từ tài liệu cũ**                               | **Quy tắc sử dụng trong chương này**                                                                          |
 | --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| Bản mô tả bảo vệ cũ lấy MASE/sai số mức giá làm trọng tâm | Dùng `pinball_skill` trên log return theo ADR-0008; MASE không phải chỉ số chính                              |
+| Bản mô tả ban đầu (K8) lấy MASE/sai số mức giá làm trọng tâm | Dùng `pinball_skill` trên log return theo ADR-0008; MASE không phải chỉ số chính                              |
 | Tài liệu kiến trúc cũ mô tả hạ tầng retrain               | ADR-0011/0012 chốt so sánh champion/challenger trong phạm vi MVP; không suy ra SageMaker retraining đang chạy |
 | Accuracy Schema có đoạn Rolling dạng đề xuất              | Walk-forward Contract §7 v4.6 xác định cửa sổ, provenance, 28 rows và display gate                            |
 | DM calendar gaps đã có chính sách mới trong schema        | Chưa coi amplitude-modulated là implementation hiện hành; tiếp tục báo giới hạn DM gap                        |
