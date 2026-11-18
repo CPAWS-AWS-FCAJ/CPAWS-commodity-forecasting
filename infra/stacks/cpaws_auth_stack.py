@@ -1,9 +1,10 @@
-"""CDK stack for CPAWS Cognito authentication."""
+﻿"""CDK stack for CPAWS Cognito authentication."""
 
 from typing import Any
 
 from aws_cdk import (
     CfnOutput,
+    Duration,
     RemovalPolicy,
     Stack,
 )
@@ -30,7 +31,19 @@ class CpawsAuthStack(Stack):
             self,
             "ForecastsUserPool",
             user_pool_name=f"cpaws-{env_name}-users",
-            self_sign_up_enabled=False,
+            self_sign_up_enabled=True,
+            auto_verify=cognito.AutoVerifiedAttrs(email=True),
+            password_policy=cognito.PasswordPolicy(
+                min_length=8,
+                require_uppercase=True,
+                require_lowercase=True,
+                require_digits=True,
+                require_symbols=True,
+                temp_password_validity=Duration.days(7),
+            ),
+            user_verification=cognito.UserVerificationConfig(
+                email_style=cognito.VerificationEmailStyle.CODE,
+            ),
             removal_policy=RemovalPolicy.RETAIN,
         )
 
