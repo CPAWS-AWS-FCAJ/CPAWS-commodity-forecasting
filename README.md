@@ -12,11 +12,12 @@ CPAWS là ứng dụng web dự báo **khoảng giá** vàng, bạc, dầu Brent
 
 - **Dự báo phân phối, không dự báo một con số.** Với mỗi tài sản và mỗi kỳ hạn h = 1–7 phiên, hệ thống dự báo 7 phân vị của log return. Web hiển thị khoảng 80% (q10–q90), trung vị và xác suất tăng, quy đổi ra khoảng giá theo USD và VND.
 - **Đo độ tin cậy trên dữ liệu chạy thật.** Job `rolling_8w` so các dự báo đã phát hành với giá thật trong 8 tuần gần nhất, tính độ bao phủ và độ rộng của khoảng 80%.
-- **Chatbot có trích nguồn.** Con số chỉ lấy từ tool `get_forecast` (đọc DynamoDB). Tin tức lấy từ thông cáo Fed/EIA đã gắn nhãn và luôn kèm link nguồn. Có giới hạn lượt hỏi theo người và theo ngày.
+- **Chatbot có trích nguồn.** Con số chỉ lấy từ tool `get_forecast` (đọc DynamoDB). Tin trích dẫn lấy từ thông cáo Fed/EIA gắn nhãn tay, có link nguồn; server chỉ giữ link của tin do tool `get_news` trả về trong lượt hỏi. Giới hạn 20 lượt/người/ngày và 100 lượt/ngày cho cả hệ thống.
+  - `/chat` dùng prompt `chatbot-haiku-v2`. Benchmark chưa đạt ngưỡng (v2: 14/30; v4: bộ B 17/30, bộ A 5/8), 0 vi phạm chính sách; chi tiết ở [Chương 3](docs/defense/chatbot.md).
 - **Mô hình đang phát hành là `baseline-q252`**: phân vị thực nghiệm của return trong 252 phiên gần nhất, chỉ dùng dữ liệu đã có tại thời điểm dự báo.
-  - Nhóm đã thử DLinear, CEEMDAN và các mô hình theo biến động. Chưa mô hình nào vượt mốc này theo tiêu chí chốt trước ([ADR-0008](docs/adr/0008-target-quantiles-evaluation.md)): cận dưới CI 95% của `pinball_skill` phải lớn hơn 0.
+  - Nhóm đã thử DLinear, CEEMDAN và các mô hình theo biến động. Trong validation 2019, chưa challenger nào đáp ứng đủ tiêu chí thay champion ([ADR-0008](docs/adr/0008-target-quantiles-evaluation.md)): cận dưới CI 95% của `pinball_skill` phải lớn hơn 0. Vì vậy nhóm giữ `baseline-q252`.
   - Ứng viên S1a (co giãn khoảng theo biến động) chạy song song (shadow) từ 04/11/2026, không hiển thị cho người dùng.
-  - Tập test 2020 → nay chạy đúng một lần ngày 16/11/2026; kết quả ở [Chương 2](docs/defense/phuong-phap-danh-gia.md).
+  - Tập test 2020 → nay chạy đúng một lần ngày 16/11/2026: S1a cải thiện `pinball_skill` có ý nghĩa thống kê (sau hiệu chỉnh Holm) trên bạc (+2,12%), WTI (+4,49%) và Brent (+4,21%); vàng chưa đủ bằng chứng. Kết quả chỉ dùng cho báo cáo, không tự động thay champion; chi tiết ở [Chương 2](docs/defense/phuong-phap-danh-gia.md).
 
 ## Kiến trúc
 
@@ -24,7 +25,7 @@ CPAWS là ứng dụng web dự báo **khoảng giá** vàng, bạc, dầu Brent
 
 *Sơ đồ hiện trạng do nhóm vẽ bằng draw.io ([file nguồn](docs/architecture/CPAWS-architecture-current.drawio)).*
 
-- **Luồng hằng ngày** (19:15 giờ Việt Nam, thứ Ba–thứ Bảy): EventBridge Scheduler gọi Lambda `ingest` (container image), Lambda này ghi snapshot giá lên S3. Ingest chạy xong, Lambda Destinations gọi Lambda `predict` (NumPy). Predict ghi dự báo vào DynamoDB đúng một lần, không ghi đè.
+- **Luồng hằng ngày** (19:15 giờ Việt Nam, thứ Ba–thứ Bảy): EventBridge Scheduler gọi Lambda `ingest` (container image), Lambda này ghi snapshot giá lên S3. Ingest chạy xong (kể cả khi một nguồn lỗi), Lambda Destinations (OnSuccess và OnFailure) gọi Lambda `predict` (container image, NumPy); predict bỏ qua tài sản thiếu phiên mới nhất và báo alarm. Predict ghi dự báo vào DynamoDB đúng một lần, không ghi đè.
 - **Đo độ tin cậy** (20:45): Lambda `accuracy-job` ghi kết quả vào DynamoDB `cpaws-dev-accuracy`.
 - **Phục vụ người dùng:** web React trên Amplify Hosting đăng nhập bằng Cognito, rồi gọi REST API Gateway (Cognito authorizer). API gồm các Lambda `forecasts-api`, `accuracy-api` và `chat-api`; `chat-api` gọi Claude Haiku 4.5 qua Bedrock Converse.
 - **Vận hành:**
