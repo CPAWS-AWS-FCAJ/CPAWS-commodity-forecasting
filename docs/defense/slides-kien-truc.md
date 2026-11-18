@@ -16,8 +16,7 @@ style: |
 ---
 
 <!--
-Slide phần Kiến trúc (slide #5 trong docs/defense/khung-slide.md), dùng làm hình và lời thoại phần kiến trúc trong video demo
-(mentor xác nhận 13/11 không có buổi trình bày).
+Slide phần Kiến trúc. Không dùng để trình bày: mentor xác nhận 13/11 không có buổi trình bày, video demo quay không slide (chốt 17/11). Giữ làm tư liệu.
 Nội dung lấy từ docs/defense/kien-truc-trien-khai.md (Chương 4) và trien-khai-van-hanh.md trên developer. Mỗi slide ghi nguồn ở dòng cuối.
 Không đưa Account ID, ARN, ID token, domain hay email vào slide.
 Xuất PDF: npx @marp-team/marp-cli docs/defense/slides-kien-truc.md --pdf --allow-local-files
@@ -55,7 +54,7 @@ Slide tiếp theo giải thích vì sao kiến trúc khác proposal (không có 
 
 <!--
 Ghi chú người nói: Khung của proposal vẫn giữ: Scheduler, Lambda, S3, DynamoDB, API Gateway, Cognito, Amplify, Bedrock. Những khối bỏ đi đều có ADR. Lý do chính là kết quả mô hình: khi mô hình phức tạp không thắng mốc thống kê, dựng pipeline retrain trên SageMaker chỉ thêm chi phí và rủi ro.
-Dùng trong video nếu còn thời lượng; có thể bỏ nếu video cần ngắn.
+Giữ làm tư liệu; nội dung đầy đủ ở Chương 4 §4.1.
 -->
 
 <p class="small">Nguồn: Chương 4 §4.1; ADR-0011, ADR-0012, ADR-0013</p>

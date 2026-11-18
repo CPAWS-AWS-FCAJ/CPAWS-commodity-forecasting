@@ -13,7 +13,7 @@ style: |
 ---
 
 <!--
-Slide chương Chatbot cho buổi trình bày cuối kỳ (hội đồng thực tập FCAJ-AWS).
+Slide chương Chatbot. Không dùng để trình bày: mentor xác nhận 13/11 không có buổi trình bày, video demo quay không slide (chốt 17/11). Giữ làm tư liệu.
 Nội dung lấy từ docs/defense/chatbot.md trên developer (PR #121). Mỗi slide ghi nguồn ở dòng cuối.
 Không đưa Account ID, ARN, ID token, tên bảng thật, domain hay email vào slide.
 Xuất PDF: npx @marp-team/marp-cli docs/defense/slides-chatbot.md --pdf
@@ -51,7 +51,7 @@ Gợi ý hình: sơ đồ khối như trên, hoặc phần chat trong sơ đồ 
 # Tool, nguồn tin và kiểm link
 
 - **`get_forecast` v2:** chỉ trả q10/q50/q90 theo %, xác suất tăng và độ rộng khoảng 80% tính sẵn; vàng, bạc không trả mức giá. Model không phải tự tính
-- **`get_news`:** tin Fed/EIA **gắn nhãn tay** tới khi bảo vệ (ADR-0013): gắn nhãn tự động bằng Nova chỉ đạt direction 52,4%, dưới ngưỡng 80%
+- **`get_news`:** tin Fed/EIA **gắn nhãn tay** tới hết dự án (ADR-0013): gắn nhãn tự động bằng Nova chỉ đạt direction 52,4%, dưới ngưỡng 80%
 - **`citations`:** server chỉ giữ tin do `get_news` trả trong lượt **và** có link xuất hiện trong câu trả lời; web chỉ tạo link từ `citations`
 - **Kiểm link lạ (#104, #109):** link trong câu trả lời không thuộc tin của tool được ghi log `citation_link_mismatch`; benchmark tính câu đó là trượt
 - Trạng thái: log chạy trên Lambda từ lần deploy `CpawsApi` ngày 10/11 (`f1ff01f`); chỉ ghi log, chưa có alarm

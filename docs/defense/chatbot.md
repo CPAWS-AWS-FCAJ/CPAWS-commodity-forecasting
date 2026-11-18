@@ -1,6 +1,6 @@
 # Chatbot hỏi đáp dự báo CPAWS
 
-> Bản nháp chương Chatbot cho báo cáo cuối kỳ (trình bày trước hội đồng thực tập FCAJ-AWS), cập nhật ngày 13/11/2026. Trạng thái triển khai và số liệu là tại ngày viết; mọi con số lấy từ tài liệu và kết quả trong repo, hoặc từ issue/PR có dẫn link, chỗ nào là suy luận thì ghi rõ.
+> Bản nháp chương Chatbot cho báo cáo cuối kỳ (nộp cùng workshop lên portal FCAJ; mentor xác nhận 13/11 không có buổi trình bày), cập nhật ngày 13/11/2026. Trạng thái triển khai và số liệu là tại ngày viết; mọi con số lấy từ tài liệu và kết quả trong repo, hoặc từ issue/PR có dẫn link, chỗ nào là suy luận thì ghi rõ.
 
 ## 1. Mục tiêu và phạm vi
 
@@ -55,7 +55,7 @@ Luật khóa ngày 04/11/2026 ở commit `984d3fe`. Cùng ngày Khải chạy b�
 | Câu cần Haiku bị đưa sang Nova | 0 | ≤ 1 | ✅ |
 | Câu đơn giản bị đưa sang Haiku | 4 (RH-003, 004, 007, 012) | — | |
 
-**Router không đạt.** Cả 4 câu sai đều là câu đơn giản bị đưa sang Haiku, tức chỉ tốn thêm chi phí, không có câu nào bị mất số liệu. Quyết định: **không đưa router vào `/chat`, mọi câu đi Haiku**; không sửa luật rồi chấm lại trên bộ đã xem. Bộ câu giữ riêng ([`tests/router/heldout_v1.jsonl`](../../tests/router/heldout_v1.jsonl)), output nguyên văn của lần chạy ([`eval_output.txt`](../experiments/results/router-heldout-2026-11-04/eval_output.txt)) và phân tích 4 câu sai ở [đề xuất router](../experiments/chatbot-router-proposal.md), mục 6.1 (PR [#100](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/100)). Tùy chọn làm lại router (đề xuất router, mục 6.2) **không thực hiện**: Khải chốt ngày 10/11/2026 (PR [#111](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/111)), nên router dừng ở kết quả này tới khi bảo vệ.
+**Router không đạt.** Cả 4 câu sai đều là câu đơn giản bị đưa sang Haiku, tức chỉ tốn thêm chi phí, không có câu nào bị mất số liệu. Quyết định: **không đưa router vào `/chat`, mọi câu đi Haiku**; không sửa luật rồi chấm lại trên bộ đã xem. Bộ câu giữ riêng ([`tests/router/heldout_v1.jsonl`](../../tests/router/heldout_v1.jsonl)), output nguyên văn của lần chạy ([`eval_output.txt`](../experiments/results/router-heldout-2026-11-04/eval_output.txt)) và phân tích 4 câu sai ở [đề xuất router](../experiments/chatbot-router-proposal.md), mục 6.1 (PR [#100](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/100)). Tùy chọn làm lại router (đề xuất router, mục 6.2) **không thực hiện**: Khải chốt ngày 10/11/2026 (PR [#111](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/111)), nên router dừng ở kết quả này tới hết dự án.
 
 Đây là một **kết quả âm có kiểm soát**: luật khóa trước, ngưỡng chốt trước, người viết luật không thấy bộ kiểm trước khi khóa, chạy một lần, và quyết định thiết kế đi theo kết quả. Kết quả bộ giữ riêng cũng cho thấy độ chính xác 100% trên bộ phát triển là quá lạc quan.
 
@@ -100,7 +100,7 @@ Theo ADR-0005 sửa ngày 04/11/2026 (PR [#91](https://github.com/CPAWS-AWS-FCAJ
 
 Tool đọc tin đã gắn nhãn theo schema 7 trường (`title`, `summary`, `link`, `source`, `published_at`, `impact_score` 0–3, `direction`), từ bảng `NewsLabels` hoặc từ file JSON, chọn bằng biến môi trường và **không tự chuyển nguồn**. Mặc định lấy 7 ngày, `min_impact` 2, sắp theo mức tác động rồi theo thời gian, tối đa 10 tin; tin thiếu link hợp lệ bị bỏ vì chatbot phải trích nguồn có link. Nguồn tin lỗi thì tool trả `news_unavailable`; câu trả lời vẫn có phần dự báo, request không thành `500` ([contract](../api/contract.md), mục "Nguồn dữ liệu của tool `get_news`").
 
-**Nhãn tin làm tay tới khi bảo vệ.** Bước gắn nhãn tự động bằng Nova 2 Lite trượt hai lần kiểm: labeling-v3 trên 49 thông cáo Fed/EIA thật chỉ đạt direction 52,4% (ngưỡng ≥ 80%) và evidence duyệt tay 2/10 (ngưỡng ≥ 8/10). Nhóm chọn gắn nhãn tay 2–3 thông cáo Fed/EIA mỗi tuần theo quy ước v3 đã duyệt, collector không gọi Bedrock ([ADR-0013](../adr/0013-manual-news-labels-until-defense.md)). Tại ngày viết, Lambda đọc bộ tin demo dạng JSON đóng gói cùng asset (`NEWS_DIR`), chưa đọc bảng `NewsLabels` ([demo-news](../api/demo-news.md)); bộ tin này được làm mới ở PR [#92](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/92) và lên Lambda trong lần deploy 07/11. Bộ này chỉ gồm thông cáo thật trên `federalreserve.gov` và `eia.gov`, không đổi ngày đăng để tin lọt vào khoảng mặc định.
+**Nhãn tin làm tay tới hết dự án.** Bước gắn nhãn tự động bằng Nova 2 Lite trượt hai lần kiểm: labeling-v3 trên 49 thông cáo Fed/EIA thật chỉ đạt direction 52,4% (ngưỡng ≥ 80%) và evidence duyệt tay 2/10 (ngưỡng ≥ 8/10). Nhóm chọn gắn nhãn tay 2–3 thông cáo Fed/EIA mỗi tuần theo quy ước v3 đã duyệt, collector không gọi Bedrock ([ADR-0013](../adr/0013-manual-news-labels-until-defense.md)). Tại ngày viết, Lambda đọc bộ tin demo dạng JSON đóng gói cùng asset (`NEWS_DIR`), chưa đọc bảng `NewsLabels` ([demo-news](../api/demo-news.md)); bộ tin này được làm mới ở PR [#92](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/92) và lên Lambda trong lần deploy 07/11. Bộ này chỉ gồm thông cáo thật trên `federalreserve.gov` và `eia.gov`, không đổi ngày đăng để tin lọt vào khoảng mặc định.
 
 ## 6. Quy tắc không tư vấn và an toàn nội dung
 
@@ -328,7 +328,7 @@ Nguồn: [báo cáo 23/10](../experiments/bedrock-model-test-2026-10.md) mục 1
 |---|---|
 | [Tư liệu kiến trúc](lua-chon-kien-truc-va-mo-hinh.md): "Nova Lite (mặc định), Claude Haiku 4.5 (giải thích sâu)"; Knowledge Bases | Mọi câu đi Haiku 4.5 vì router không đạt; không dùng Knowledge Base trong MVP |
 | ADR-0004 mục 1: router theo luật chọn Nova hoặc Haiku | Thiết kế vẫn đúng; router chưa đưa vào Lambda theo kết quả bộ giữ riêng |
-| ADR-0004 mục 2, ADR-0003 mục 4: Nova 2 Lite gắn nhãn tin | Tạm dừng tới khi bảo vệ; nhãn tay theo ADR-0013 |
+| ADR-0004 mục 2, ADR-0003 mục 4: Nova 2 Lite gắn nhãn tin | Tạm dừng tới hết dự án; nhãn tay theo ADR-0013 |
 | Header file `chatbot-haiku-v2.md`: "Bản nháp, chờ Khải duyệt", "ConverseStream" | Prompt đã được duyệt và khóa SHA-256 29/10 (contract); Lambda gọi Converse, benchmark gọi ConverseStream |
 | Header file `chatbot-haiku-v4.md`: "chờ Khải duyệt", "Chưa dùng trên Lambda" | Prompt đã khóa `a10949a3…` và chạy chính thức 11/11, không đạt; Lambda giữ v2 (mục 7.4) |
 | Contract và comment trong `news.py`: mặc định 7 ngày "khớp prompt" | Code tính đến hôm nay theo giờ Việt Nam, prompt ghi đến ngày cơ sở; ghi ở issue #84 mục 6 |

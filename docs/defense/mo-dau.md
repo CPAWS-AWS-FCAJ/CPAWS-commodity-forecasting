@@ -46,7 +46,7 @@ Bảng dưới đối chiếu 5 mục tiêu của proposal với trạng thái n
 | 2. Hiển thị chế độ cơ bản và nâng cao; giá theo USD và VND | **Đạt.** Web có hai chế độ và chuyển USD/VND; từ 13/11 có thêm khối quy đổi khoảng dự báo ra số tiền. Phần giải thích theo thành phần CEEMDAN đã bỏ vì không mô hình CEEMDAN nào vào sản phẩm | 1, 4 |
 | 3. Chatbot tiếng Việt giải thích dự báo, trích tin tức, từ chối câu ngoài phạm vi | **Đạt một phần.** `POST /chat` chạy trên web với prompt v2, lấy số qua tool `get_forecast` và tin qua `get_news`. Benchmark chính thức của prompt v2 (30/10) và v4 (11/11) đều chưa đạt ngưỡng nhóm đặt ra; không có vi phạm chính sách ở lần chấm tay v4 | 3 |
 | 4. Công khai độ chính xác lịch sử trên giao diện | **Đang thu thập.** Job `rolling_8w` chạy hằng ngày từ 12/11; web hiện "Đang thu thập (n/20)" cho tới khi đủ 20 ngày cơ sở, dự kiến cuối tháng 11 | 2, 4 |
-| 5. Hệ thống tự vận hành: thu thập, gắn nhãn tin, huấn luyện lại, dự báo | **Đạt một phần.** Thu thập, dự báo và đo độ tin cậy chạy tự động. Huấn luyện lại thay bằng cửa sổ trượt và champion/challenger ([ADR-0011](../adr/0011-weekly-champion-challenger-instead-of-retrain.md)). Gắn nhãn tin vẫn làm tay tới buổi trình bày ([ADR-0013](../adr/0013-manual-news-labels-until-defense.md)) | 1, 3, 4 |
+| 5. Hệ thống tự vận hành: thu thập, gắn nhãn tin, huấn luyện lại, dự báo | **Đạt một phần.** Thu thập, dự báo và đo độ tin cậy chạy tự động. Huấn luyện lại thay bằng cửa sổ trượt và champion/challenger ([ADR-0011](../adr/0011-weekly-champion-challenger-instead-of-retrain.md)). Gắn nhãn tin vẫn làm tay tới hết dự án ([ADR-0013](../adr/0013-manual-news-labels-until-defense.md)) | 1, 3, 4 |
 
 Proposal còn đặt mục tiêu thử nghiệm với 10–15 người dùng thật: buổi dùng thử dự kiến 15–17/11/2026, kết quả `[CHỜ SỐ LIỆU: tổng hợp phản hồi của Tuấn]`.
 
@@ -96,7 +96,7 @@ Ba nguyên tắc chi phối các quyết định trong báo cáo:
 | [Chương 1. Mô hình và dữ liệu](mo-hinh-va-du-lieu.md) | Target, nguồn dữ liệu, mốc 252 phiên, các mô hình đã thử, champion/challenger, so với proposal | Khải |
 | [Chương 2. Phương pháp và kết quả đánh giá](phuong-phap-danh-gia.md) | Chia tập theo thời gian, chỉ số pinball skill và hiệu chỉnh, thống kê, rolling accuracy, kết quả test2020 | Long |
 | [Chương 3. Chatbot](chatbot.md) | Luồng `POST /chat`, model Bedrock, tool, lớp chống tư vấn đầu tư, kết quả benchmark | Phước |
-| [Chương 4. Triển khai và vận hành](trien-khai-van-hanh.md) | Các stack CDK tại ngày chốt, luồng chạy hằng ngày, deploy, rollback, giám sát, web | Tiến |
+| [Chương 4. Kiến trúc, triển khai và vận hành](kien-truc-trien-khai.md) | Kiến trúc hiện trạng và so với proposal, các stack CDK, luồng chạy hằng ngày, giám sát, web; chi tiết lệnh và lịch sử deploy ở [tài liệu triển khai và vận hành](trien-khai-van-hanh.md) | Tiến |
 | [Chương 5. Bảo mật và chi phí](security-and-cost.md) | Quyền truy cập, bảo vệ dữ liệu và artifact, chi phí, rủi ro nguồn dữ liệu | Tuấn |
 | Kết luận và phụ lục | Phạm vi hoàn thành, giới hạn, hướng phát triển | Khải biên tập, Long ghép bản cuối |
 

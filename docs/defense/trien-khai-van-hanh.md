@@ -1,6 +1,6 @@
 # Triển khai và vận hành CPAWS
 
-> Bản nháp chương Triển khai và vận hành cho báo cáo cuối kỳ (trình bày trước hội đồng thực tập FCAJ-AWS), cập nhật ngày 06/11/2026, bổ sung ngày 13/11/2026 (Rolling Accuracy, web). Trạng thái triển khai là tại ngày viết; cấu hình lấy từ code trong `infra/`, số đo lấy từ log CloudWatch của các lượt chạy thật. Phần nào là kế hoạch thì ghi rõ.
+> Bản nháp chương Triển khai và vận hành cho báo cáo cuối kỳ (nộp cùng workshop lên portal FCAJ; mentor xác nhận 13/11 không có buổi trình bày), cập nhật ngày 06/11/2026, bổ sung ngày 13/11/2026 (Rolling Accuracy, web). Trạng thái triển khai là tại ngày viết; cấu hình lấy từ code trong `infra/`, số đo lấy từ log CloudWatch của các lượt chạy thật. Phần nào là kế hoạch thì ghi rõ.
 
 ## 1. Mục tiêu và phạm vi
 
@@ -189,7 +189,7 @@ Job có ghi cảnh báo `prob_up_mismatch` (xác suất tăng đã lưu lệch v
 - **CORS một origin**, nên localhost và Amplify không dùng được cùng lúc.
 - **Amplify deploy zip thủ công.** Không có lịch sử build gắn với commit, nên commit nào đang chạy phải ghi lại bằng tay.
 - **ECR giữ 5 image**, nên image rollback có thể bị xóa nếu không theo dõi (mục 5).
-- **Chưa có biểu đồ lịch sử giá.** Trang tài sản chỉ vẽ phần dự báo và ghi "Chưa có lịch sử giá". Muốn vẽ lịch sử phải thêm endpoint: sửa `docs/api/contract.md`, predict ghi thêm tệp lịch sử ngắn, thêm route và quyền đọc S3 trong `CpawsApi`, hai lần deploy. Hiển thị chuỗi giá lấy từ Yahoo cũng làm tăng rủi ro điều khoản ([ADR-0005](../adr/0005-price-data-sources.md)). Nhóm chốt ngày 13/11 bỏ khỏi phạm vi trước bảo vệ; đây là hướng phát triển sau dự án.
+- **Chưa có biểu đồ lịch sử giá.** Trang tài sản chỉ vẽ phần dự báo và ghi "Chưa có lịch sử giá". Muốn vẽ lịch sử phải thêm endpoint: sửa `docs/api/contract.md`, predict ghi thêm tệp lịch sử ngắn, thêm route và quyền đọc S3 trong `CpawsApi`, hai lần deploy. Hiển thị chuỗi giá lấy từ Yahoo cũng làm tăng rủi ro điều khoản ([ADR-0005](../adr/0005-price-data-sources.md)). Nhóm chốt ngày 13/11 bỏ khỏi phạm vi dự án; đây là hướng phát triển sau dự án.
 - Guardrails của chatbot chưa gắn vào Lambda, và Haiku gọi qua global inference profile ([chương chatbot](chatbot.md), mục 8).
 
 ## 11. Tóm tắt
