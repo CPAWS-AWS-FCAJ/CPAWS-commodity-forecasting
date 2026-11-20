@@ -26,6 +26,7 @@ HANDLER = ROOT / "infra" / "lambda" / "chat_api" / "handler.py"
 PUBLISHED_AT = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 DIRECTIONS = {"bullish", "bearish", "mixed", "uncertain"}
 SOURCES = {"Federal Reserve": "www.federalreserve.gov", "EIA": "www.eia.gov"}
+MINUTES_1028 = "https://www.federalreserve.gov/monetarypolicy/fomcminutes20261028.htm"
 WPSR_1104 = (
     "https://www.eia.gov/petroleum/supply/weekly/archive/2026/2026_11_04/wpsr_2026_11_04.php"
 )
@@ -138,4 +139,14 @@ def test_demo_day_default_range(asset):
     assert N.get_news({"asset": asset, "to_date": "2026-11-08"}, repo)["items"] == []
     res = N.get_news({"asset": asset, "to_date": "2026-11-08", "min_impact": 1}, repo)
     expected = {"brent": [(WPSR_1104, "bullish")], "wti": [(WPSR_1104, "bullish")]}
+    assert [(it["link"], it["direction"]) for it in res["items"]] == expected.get(asset, [])
+
+
+@pytest.mark.parametrize("asset", N.ASSETS)
+def test_default_range_after_minutes_1118(asset):
+    # 20/11: biên bản FOMC 27–28/10 (đăng 18/11) là 2/bearish cho vàng, bạc nên lọt min_impact mặc định;
+    # WPSR 18/11 chỉ mức 1 cho dầu
+    repo = N.JsonFileNewsRepository(NEWS_DIR)
+    res = N.get_news({"asset": asset, "to_date": "2026-11-20"}, repo)
+    expected = {"gold": [(MINUTES_1028, "bearish")], "silver": [(MINUTES_1028, "bearish")]}
     assert [(it["link"], it["direction"]) for it in res["items"]] == expected.get(asset, [])

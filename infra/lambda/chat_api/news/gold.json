@@ -2,6 +2,24 @@
   "asset": "gold",
   "items": [
     {
+      "title": "Minutes of the Federal Open Market Committee, October 27-28, 2026",
+      "summary": "Biên bản kỳ họp 27–28/10 cho thấy đa số ủng hộ giữ lãi suất ở 3,75–4,00%, hai thành viên muốn tăng 0,25 điểm %. Gần như mọi thành viên cho rằng nhiều khả năng cần tăng lãi suất thêm; vài người nói có thể cân nhắc tăng hơn 0,25 điểm % ở kỳ tới nếu số liệu lạm phát xấu.",
+      "link": "https://www.federalreserve.gov/monetarypolicy/fomcminutes20261028.htm",
+      "source": "Federal Reserve",
+      "published_at": "2026-11-18T19:00:00Z",
+      "impact_score": 2,
+      "direction": "bearish"
+    },
+    {
+      "title": "Weekly Petroleum Status Report (week ending November 13, 2026)",
+      "summary": "Tuần kết thúc 13/11, tồn kho dầu thô thương mại Mỹ tăng 3,4 triệu thùng lên 417,8 triệu thùng, thấp hơn trung bình 5 năm 3%. Tồn kho xăng tăng 5,2 triệu thùng và nhiên liệu chưng cất tăng 1,6 triệu thùng; tổng tồn kho thương mại tăng 9,2 triệu thùng.",
+      "link": "https://www.eia.gov/petroleum/supply/weekly/archive/2026/2026_11_18/wpsr_2026_11_18.php",
+      "source": "EIA",
+      "published_at": "2026-11-18T15:30:00Z",
+      "impact_score": 0,
+      "direction": "uncertain"
+    },
+    {
       "title": "Weekly Petroleum Status Report (week ending November 6, 2026)",
       "summary": "Tuần kết thúc 6/11, tồn kho dầu thô thương mại Mỹ tăng 4,7 triệu thùng lên 414,4 triệu thùng, thấp hơn trung bình 5 năm 4%. Tồn kho xăng tăng 1,8 triệu thùng và nhiên liệu chưng cất tăng 4,1 triệu thùng; tổng tồn kho thương mại tăng 11,4 triệu thùng.",
       "link": "https://www.eia.gov/petroleum/supply/weekly/archive/2026/2026_11_12/wpsr_2026_11_12.php",
