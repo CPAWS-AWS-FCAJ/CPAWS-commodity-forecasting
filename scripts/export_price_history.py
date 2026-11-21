@@ -17,7 +17,8 @@ Chạy (từ gốc repo):
   python -m scripts.export_price_history --source local --lake-dir data/lake --dest local
   python -m scripts.export_price_history --source s3 --dest s3     # bucket config.lake_bucket()
   python -m scripts.export_price_history --source s3 --dest s3 --sessions 520 --as-of 2026-11-20
-Mã thoát: 0 = mọi tài sản đã ghi; 1 = có tài sản không có điểm nào (không ghi file đó).
+Mã thoát: 0 = mọi tài sản đã ghi; 1 = có tài sản không có điểm nào (không ghi file đó);
+2 = `--dest s3` khi đặt LAKE_PREFIX (Lambda đọc ở gốc bucket nên dừng, không ghi gì).
 """
 
 from __future__ import annotations
@@ -256,10 +257,15 @@ def main(argv: list[str] | None = None) -> int:
     if args.dest == "s3":
         dest_st = st if isinstance(st, storage.S3Storage) else predict.make_storage("s3")
         if dest_st.root:
-            log.warning(
-                "LAKE_PREFIX=%r: Lambda reads PRICE_HISTORY_PREFIX at the bucket root",
+            # Lambda đọc PRICE_HISTORY_PREFIX ở gốc bucket; ghi dưới LAKE_PREFIX thì API không bao giờ
+            # thấy file → dừng trước khi ghi bất cứ thứ gì.
+            log.error(
+                "EXPORT_PREFIX_MISMATCH LAKE_PREFIX=%r: Lambda reads %s at the bucket root; "
+                "unset LAKE_PREFIX to export to S3",
                 dest_st.root,
+                SERVING_PREFIX,
             )
+            return 2
     results = export(
         st,
         sessions=args.sessions,

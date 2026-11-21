@@ -5,6 +5,7 @@ Dữ liệu giả nhỏ (phiên 2019, không đụng dữ liệu 2020 → nay), 
 
 import importlib.util
 import json
+import logging
 import sys
 import zlib
 from datetime import UTC, datetime
@@ -319,6 +320,36 @@ def test_cli_s3_to_s3_writes_json_objects(aws, capsys):
         assert doc["asset"] == asset and len(doc["points"]) == 12
     summary = json.loads(capsys.readouterr().out)
     assert summary["wti"]["written_to"] == f"s3://{BUCKET}/serving/price-history/wti.json"
+
+
+@pytest.mark.parametrize("source", ["s3", "local"])
+def test_cli_s3_dest_with_lake_prefix_fails_fast_and_writes_nothing(
+    aws, tmp_path, monkeypatch, caplog, source
+):
+    """LAKE_PREFIX khác rỗng: Lambda đọc ở gốc bucket nên script dừng (mã 2), không ghi object nào."""
+    if source == "s3":
+        _write_lake(predict.make_storage("s3"), _prices())
+        args = ["--source", "s3"]
+    else:
+        _lake(tmp_path)
+        args = ["--source", "local", "--lake-dir", str(tmp_path / "lake")]
+    monkeypatch.setenv("LAKE_PREFIX", "team-a/")
+    caplog.set_level(logging.ERROR)
+    assert eph.main([*args, "--dest", "s3", "--sessions", "4"]) == 2
+    assert "EXPORT_PREFIX_MISMATCH" in caplog.text
+    listed = aws.list_objects_v2(Bucket=BUCKET)
+    keys = [o["Key"] for o in listed.get("Contents", [])]
+    assert not [k for k in keys if "price-history" in k]
+
+
+def test_cli_local_dest_ignores_lake_prefix(tmp_path, monkeypatch):
+    """--dest local không phụ thuộc LAKE_PREFIX: vẫn ghi đủ 4 file."""
+    _lake(tmp_path)
+    monkeypatch.setenv("LAKE_PREFIX", "team-a/")
+    out = tmp_path / "out"
+    args = ["--source", "local", "--lake-dir", str(tmp_path / "lake"), "--dest", "local"]
+    assert eph.main([*args, "--out-dir", str(out), "--sessions", "4"]) == 0
+    assert sorted(f.name for f in out.iterdir()) == sorted(f"{a}.json" for a in eph.EXPORT_ASSETS)
 
 
 def test_s3_export_overwrites_and_reads_local_lake(aws, tmp_path):
