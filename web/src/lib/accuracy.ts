@@ -36,9 +36,9 @@ export const ACCURACY_METRIC_TEXT = {
   },
   sign: {
     name: "Đúng chiều tăng/giảm · tỷ lệ phiên tăng thực tế",
-    hint: "Đọc hai số cùng nhau: đoán luôn “tăng” cũng đúng bằng tỷ lệ phiên tăng.",
+    hint: "Đọc cùng tỷ lệ phiên tăng thực tế; hai tỷ lệ có thể dùng mẫu quan sát khác nhau.",
     meaning:
-      "Tỷ lệ lần mức giữa (trung vị) dự báo cùng chiều với giá thực tế, luôn đọc cạnh tỷ lệ phiên tăng thực tế cùng giai đoạn: nếu giá tăng ở 60% số phiên, đoán luôn “tăng” cũng đúng 60%.",
+      "Tỷ lệ lần mức giữa (trung vị) dự báo cùng chiều với giá thực tế. Đọc tỷ lệ dự báo đúng chiều cùng tỷ lệ phiên tăng thực tế để có thêm bối cảnh. Hai tỷ lệ có thể dùng mẫu quan sát khác nhau, nên không xem chênh lệch giữa chúng là mức cải thiện chính xác của mô hình.",
   },
 } as const;
 
