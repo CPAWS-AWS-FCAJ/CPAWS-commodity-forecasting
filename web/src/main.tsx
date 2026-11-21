@@ -6,6 +6,7 @@ import { ApiError } from "./api/client";
 import App from "./App";
 import "./index.css";
 import { SettingsProvider } from "./lib/settings";
+import { ThemeProvider } from "./lib/theme";
 
 // Dữ liệu chỉ đổi mỗi ngày: cache 10 phút. Không thử lại với lỗi 4xx (sai mã, chưa đăng nhập, quá giới hạn).
 const queryClient = new QueryClient({
@@ -21,6 +22,7 @@ const queryClient = new QueryClient({
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
+    <ThemeProvider>
     <QueryClientProvider client={queryClient}>
       <SettingsProvider>
         <BrowserRouter>
@@ -28,5 +30,6 @@ createRoot(document.getElementById("root")!).render(
         </BrowserRouter>
       </SettingsProvider>
     </QueryClientProvider>
+    </ThemeProvider>
   </StrictMode>,
 );

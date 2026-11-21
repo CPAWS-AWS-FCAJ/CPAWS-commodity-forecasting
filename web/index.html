@@ -6,6 +6,17 @@
     <meta name="description" content="CPAWS: dự báo khoảng giá và xác suất tăng của vàng, bạc, dầu Brent và WTI trong 1–7 ngày tới." />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>CPAWS – Dự báo giá vàng, bạc, dầu</title>
+    <script>
+      // Áp giao diện sáng/tối trước khi React chạy để không nháy màu (cùng quy tắc src/lib/theme.tsx).
+      try {
+        var t = localStorage.getItem("cpaws.theme");
+        if (t !== "light" && t !== "dark") {
+          t = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        }
+        if (t === "dark") document.documentElement.classList.add("dark");
+        document.documentElement.style.colorScheme = t;
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>
