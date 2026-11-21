@@ -2,7 +2,7 @@ const TONES = {
   // Cảnh báo: dữ liệu mẫu, dữ liệu cũ, đáo hạn hợp đồng
   warn: "bg-warn-bg text-warn-fg",
   // Thông tin trung tính: không phải lỗi, chỉ cho biết nguồn dự báo
-  info: "border border-line bg-white text-muted",
+  info: "border border-line bg-surface text-muted",
 } as const;
 
 function Badge({

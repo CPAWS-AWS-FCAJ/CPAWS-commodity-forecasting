@@ -8,9 +8,9 @@ interface SegmentedProps<T extends string> {
   onChange: (value: T) => void;
 }
 
-function Segmented<T extends string>({ label, value, options, onChange }: SegmentedProps<T>) {
+export function Segmented<T extends string>({ label, value, options, onChange }: SegmentedProps<T>) {
   return (
-    <div role="group" aria-label={label} className="inline-flex rounded-md border border-line bg-white p-0.5">
+    <div role="group" aria-label={label} className="inline-flex rounded-md border border-line bg-surface p-0.5">
       {options.map((option) => {
         const active = option.value === value;
         return (
@@ -19,8 +19,8 @@ function Segmented<T extends string>({ label, value, options, onChange }: Segmen
             type="button"
             aria-pressed={active}
             onClick={() => onChange(option.value)}
-            className={`rounded px-3 py-1.5 text-sm ${
-              active ? "bg-price text-white" : "text-price hover:bg-canvas"
+            className={`rounded px-3 py-1.5 text-sm transition-colors duration-150 ${
+              active ? "bg-price text-on-price" : "text-price hover:bg-surface-muted"
             }`}
           >
             {option.text}
