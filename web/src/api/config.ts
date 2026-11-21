@@ -14,11 +14,6 @@ export const config = {
   apiUrl: (env.VITE_API_URL ?? "").replace(/\/+$/, ""),
   useSample,
   /**
-   * Lịch sử giá: contract và API hiện CHƯA có GET /history/{asset} (Khải review PR #20), nên chỉ
-   * dùng dữ liệu mẫu. Khi contract có endpoint thì đổi thành `true` (hoặc theo cờ riêng).
-   */
-  historyAvailable: useSample,
-  /**
    * Chế độ mẫu: fixture GET /accuracy dùng để xem giao diện (tests/fixtures/accuracy/, synthetic).
    * Mặc định "collecting" vì chưa giả định `ready` trước 22/11.
    */

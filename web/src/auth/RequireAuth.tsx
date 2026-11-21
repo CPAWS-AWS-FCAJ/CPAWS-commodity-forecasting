@@ -1,16 +1,20 @@
-import { lazy, Suspense } from "react";
 import type { ReactNode } from "react";
-import { config } from "../api/config";
+import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { LoadingBlock } from "../components/StateViews";
+import { useAuth } from "./AuthContext";
+import { signInPath } from "./redirect";
 
-// aws-amplify chỉ được tải khi bật đăng nhập (VITE_AUTH_ENABLED=true).
-const AuthGate = lazy(() => import("./AuthGate"));
-
-export function RequireAuth({ children }: { children: ReactNode }) {
-  if (!config.authEnabled) return <>{children}</>;
-  return (
-    <Suspense fallback={<LoadingBlock label="Đang tải màn hình đăng nhập…" />}>
-      <AuthGate>{children}</AuthGate>
-    </Suspense>
-  );
+/**
+ * Chặn trang cần dữ liệu giá (ADR-0005: giá chỉ hiện sau đăng nhập). Chưa đăng nhập → chuyển tới
+ * /dang-nhap?next=<đường dẫn đang mở>. Tắt đăng nhập (dữ liệu mẫu) thì luôn cho vào.
+ * Dùng làm route bao (`<Route element={<RequireAuth />}>`) hoặc bọc `children`.
+ */
+export function RequireAuth({ children }: { children?: ReactNode }) {
+  const { status } = useAuth();
+  const location = useLocation();
+  if (status === "loading") return <LoadingBlock label="Đang kiểm tra đăng nhập…" />;
+  if (status !== "authenticated") {
+    return <Navigate to={signInPath(`${location.pathname}${location.search}`)} replace />;
+  }
+  return children ? <>{children}</> : <Outlet />;
 }
