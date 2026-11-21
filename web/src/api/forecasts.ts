@@ -4,8 +4,8 @@ import type {
   AccuracyResponse,
   AssetId,
   ForecastDetail,
+  ForecastDetailWithHistory,
   ForecastListResponse,
-  HistoryResponse,
 } from "./types";
 import { isAssetId } from "./types";
 import { assertAccuracyStatuses } from "../lib/accuracy";
@@ -34,8 +34,28 @@ export async function getAccuracy(asset: AssetId, signal?: AbortSignal): Promise
   return response;
 }
 
-/** Lịch sử ~90 phiên cho biểu đồ quạt. Endpoint tạm giả định, xem ghi chú ở types.ts. */
-export async function getHistory(asset: AssetId, signal?: AbortSignal): Promise<HistoryResponse> {
-  if (config.useSample) return (await loadSample()).sampleHistory(asset);
-  return apiGet<HistoryResponse>(`/history/${asset}?days=90`, signal);
+/**
+ * Số phiên giá cuối xin kèm dự báo (tối đa của API là 520, khoảng 2 năm giao dịch). Dùng chung cho
+ * trang Tổng quan giá và biểu đồ "Giá thực tế và dự báo" ở trang sản phẩm, nên hai trang dùng chung cache.
+ */
+export const PRICE_HISTORY_SESSIONS = 520;
+
+/** Tên cũ, giữ để không vỡ chỗ đang import. */
+export const OVERVIEW_HISTORY_SESSIONS = PRICE_HISTORY_SESSIONS;
+
+/**
+ * Chi tiết dự báo mới nhất kèm `price_history` (contract: tham số `history`). API có thể trả ít hơn
+ * `sessions` điểm khi lịch sử chưa đủ dài.
+ */
+export async function getForecastWithHistory(
+  asset: AssetId,
+  sessions: number = PRICE_HISTORY_SESSIONS,
+  signal?: AbortSignal,
+): Promise<ForecastDetailWithHistory> {
+  if (!isAssetId(asset)) throw new ApiError(400, "invalid_asset", "Mã tài sản không hợp lệ.");
+  if (config.useSample) return (await loadSample()).sampleDetailWithHistory(asset, sessions);
+  const detail = await apiGet<ForecastDetailWithHistory>(`/forecasts/${asset}?history=${sessions}`, signal);
+  // API bản cũ (chưa có tham số history) bỏ qua query và không trả price_history: coi như chưa có điểm
+  // nào để trang vẫn hiện dự báo thay vì lỗi.
+  return Array.isArray(detail.price_history) ? detail : { ...detail, price_history: [] };
 }

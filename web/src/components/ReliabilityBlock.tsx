@@ -2,8 +2,9 @@ import { ApiError } from "../api/client";
 import { config } from "../api/config";
 import { useAccuracy } from "../api/hooks";
 import type { AccuracyResponse, AssetId } from "../api/types";
-import { formatHorizonCount, reliabilityState } from "../lib/accuracy";
+import { ACCURACY_METRIC_TEXT, formatHorizonCount, reliabilityState } from "../lib/accuracy";
 import { formatDate } from "../lib/format";
+import { GUIDE_ANCHORS, HowToRead } from "./HowToRead";
 import { ErrorBlock, LoadingBlock } from "./StateViews";
 import { SampleBadge } from "./StatusBadges";
 
@@ -13,7 +14,12 @@ interface Props {
   title?: string;
   /** Hiện bảng số đếm X/Y theo từng h (trang Độ chính xác, chế độ nâng cao). */
   showHorizons?: boolean;
+  /** Dòng "Cách đọc" dưới tiêu đề; trang Độ chính xác tắt vì đã giải thích một lần ở đầu trang. */
+  explain?: boolean;
 }
+
+/** Tiêu đề mặc định trên trang sản phẩm. */
+export const RELIABILITY_TITLE = "Độ tin cậy: dự báo 8 tuần qua sát giá thật đến đâu";
 
 const UNAVAILABLE = "Tạm thời chưa lấy được độ tin cậy";
 
@@ -23,15 +29,26 @@ export function isAccuracyUnavailable(error: unknown): boolean {
 }
 
 /** Khối "Độ tin cậy" (rolling_8w) của champion hiện hành: chỉ đọc display_value/display_status. */
-export function ReliabilityBlock({ asset, title = "Độ tin cậy 8 tuần gần nhất", showHorizons = false }: Props) {
+export function ReliabilityBlock({
+  asset,
+  title = RELIABILITY_TITLE,
+  showHorizons = false,
+  explain = true,
+}: Props) {
   const accuracy = useAccuracy(asset);
 
   return (
-    <section aria-label={title} className="rounded-lg border border-line bg-white p-5">
+    <section aria-label={title} className="rounded-lg border border-line bg-surface p-5">
       <div className="flex flex-wrap items-center gap-2">
         <h2 className="text-lg font-semibold">{title}</h2>
         {config.useSample ? <SampleBadge /> : null}
       </div>
+      {explain ? (
+        <HowToRead anchor={GUIDE_ANCHORS.reliability} topic="độ tin cậy 8 tuần">
+          hệ thống đối chiếu các dự báo đã chạy thật trong 8 tuần gần nhất với giá thực tế sau đó. Số chính là tỷ lệ
+          lần giá thực tế nằm trong khoảng 80%: càng gần 80% thì khoảng dự báo càng đúng mức.
+        </HowToRead>
+      ) : null}
       <div className="mt-3">
         {/* VITE_ACCURACY_API=false (route /accuracy chưa deploy): cùng chữ với not_ready, không gọi API */}
         {config.accuracyApiEnabled ? null : <p className="text-sm text-muted">Chưa có kết quả đánh giá</p>}
@@ -69,18 +86,16 @@ function ReliabilityContent({ data, showHorizons }: { data: AccuracyResponse; sh
       {state.kind === "ready" ? (
         <dl className="grid gap-3 sm:grid-cols-3">
           <Metric
-            name="Giá thực tế nằm trong khoảng 80%"
+            name={ACCURACY_METRIC_TEXT.coverage.name}
             value={state.coverage}
-            hint="Khoảng dự báo 80% đạt yêu cầu khi tỷ lệ này gần 80%."
+            hint={ACCURACY_METRIC_TEXT.coverage.hint}
           />
-          <Metric name="Độ rộng khoảng 80% (% giá)" value={state.widthPct} hint="Trung bình q90 − q10, tính theo % giá." />
-          <div>
-            <dt className="text-muted">Đúng chiều tăng/giảm · tỷ lệ phiên tăng thực tế</dt>
-            <dd className="tabular mt-0.5 font-semibold">
-              {state.signPair ? `${state.signPair.sign} · ${state.signPair.upRate}` : "—"}
-            </dd>
-            <dd className="text-xs text-muted">Đọc hai số cùng nhau: đoán luôn “tăng” cũng đúng bằng tỷ lệ phiên tăng.</dd>
-          </div>
+          <Metric name={ACCURACY_METRIC_TEXT.width.name} value={state.widthPct} hint={ACCURACY_METRIC_TEXT.width.hint} />
+          <Metric
+            name={ACCURACY_METRIC_TEXT.sign.name}
+            value={state.signPair ? `${state.signPair.sign} · ${state.signPair.upRate}` : null}
+            hint={ACCURACY_METRIC_TEXT.sign.hint}
+          />
         </dl>
       ) : null}
 

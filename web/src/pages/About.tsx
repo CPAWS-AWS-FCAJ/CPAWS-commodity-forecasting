@@ -1,17 +1,16 @@
 import { Link } from "react-router-dom";
 import { config } from "../api/config";
-import { DISCLAIMER_TEXT } from "../components/Disclaimer";
 import { SOURCE_ATTRIBUTION } from "../lib/source";
 
 export default function About() {
   return (
     <div className="max-w-2xl space-y-4">
-      <h1 className="text-2xl font-bold">Giới thiệu</h1>
+      <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Giới thiệu</h1>
       <p className="text-sm">
         CPAWS dự báo khoảng giá và xác suất tăng của vàng, bạc, dầu Brent và dầu WTI trong 1–7 phiên giao
         dịch tới, hiển thị theo USD hoặc VND.
       </p>
-      <h2 className="text-lg font-semibold">Cách đọc dự báo</h2>
+      <h2 className="pt-4 text-lg font-semibold">Cách đọc dự báo</h2>
       <ul className="list-disc space-y-2 pl-5 text-sm">
         <li>
           Dự báo là các phân vị của <strong>log return</strong>, quy đổi sang khoảng giá. Khoảng 80% (q10–q90)
@@ -29,8 +28,15 @@ export default function About() {
         </li>
         <li>Giá dầu là hợp đồng tương lai; kỳ dự báo có thể chứa ngày đáo hạn hợp đồng.</li>
       </ul>
+      <p className="text-sm">
+        Hướng dẫn chi tiết có ví dụ ở trang{" "}
+        <Link to="/guide" className="text-forecast underline">
+          Cách đọc dự báo
+        </Link>
+        .
+      </p>
 
-      <h2 className="text-lg font-semibold">Phương pháp</h2>
+      <h2 className="pt-4 text-lg font-semibold">Phương pháp</h2>
       <ul className="list-disc space-y-2 pl-5 text-sm">
         <li>
           Dự báo hiện dùng <strong>mốc thống kê 252 phiên</strong>: với mỗi số phiên h = 1…7, các phân vị lấy
@@ -46,9 +52,8 @@ export default function About() {
           .
         </li>
       </ul>
-      <h2 className="text-lg font-semibold">Nguồn dữ liệu</h2>
+      <h2 className="pt-4 text-lg font-semibold">Nguồn dữ liệu</h2>
       <p className="text-sm">{SOURCE_ATTRIBUTION}. Web không có tính năng tải hay xuất dữ liệu giá.</p>
-      <p className="text-sm font-medium">{DISCLAIMER_TEXT}</p>
     </div>
   );
 }

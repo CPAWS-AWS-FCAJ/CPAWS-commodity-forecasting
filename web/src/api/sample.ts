@@ -6,10 +6,11 @@ import { ApiError } from "./client";
 import { ASSET_IDS, QUANTILE_LEVELS } from "./types";
 import type {
   AssetId,
+  ClosePoint,
   ForecastDetail,
+  ForecastDetailWithHistory,
   ForecastListResponse,
   ForecastSummary,
-  HistoryResponse,
   HorizonDetail,
   PriceUnit,
 } from "./types";
@@ -25,7 +26,11 @@ const DISCLAIMER = "Dự báo mang tính tham khảo, không phải lời khuyê
 const BASE_DATE = "2026-10-20"; // thứ Ba
 const CREATED_AT = "2026-10-20T12:40:05Z";
 const FX = { usd_vnd: 26310, date: BASE_DATE };
-const HISTORY_SESSIONS = 91; // 90 phiên + phiên cuối
+/** Số giá cuối phiên mẫu: bằng tối đa của tham số `history` (520) để thử đủ các mốc 1 tháng → 2 năm. */
+export const SAMPLE_HISTORY_POINTS = 520;
+/** Giới hạn của tham số `history` trong contract. */
+const HISTORY_MIN = 1;
+const HISTORY_MAX = 520;
 
 // z của chuẩn tắc ứng với 7 mức phân vị trong QUANTILE_LEVELS
 const Z = [-1.6449, -1.2816, -0.6745, 0, 0.6745, 1.2816, 1.6449];
@@ -180,21 +185,31 @@ export function sampleAccuracy(asset: AssetId, which: SampleAccuracy): AccuracyR
   return { ...(ACCURACY_FIXTURES[which] as AccuracyResponse), asset };
 }
 
-/** Bước ngẫu nhiên lùi từ giá cuối, 91 phiên kết thúc đúng tại BASE_DATE. */
-export function sampleHistory(asset: AssetId): HistoryResponse {
+/**
+ * Giá cuối phiên mẫu: bước ngẫu nhiên lùi từ giá cuối, SAMPLE_HISTORY_POINTS điểm (chỉ ngày thứ Hai–thứ
+ * Sáu, không xét ngày lễ) kết thúc đúng tại BASE_DATE, cũ → mới như `price_history` của API.
+ */
+export function sampleCloses(asset: AssetId): ClosePoint[] {
   const spec = SPECS[asset];
   if (!spec) throw new ApiError(400, "invalid_asset", "Mã tài sản không hợp lệ.");
   const random = mulberry32(spec.seed);
-  const dates = [...previousWeekdays(BASE_DATE, HISTORY_SESSIONS - 1), BASE_DATE];
+  const dates = [...previousWeekdays(BASE_DATE, SAMPLE_HISTORY_POINTS - 1), BASE_DATE];
   const prices = new Array<number>(dates.length);
   prices[dates.length - 1] = spec.lastPrice;
   for (let i = dates.length - 1; i > 0; i -= 1) {
     const step = spec.dailyDrift + spec.dailySigma * gaussian(random);
     prices[i - 1] = prices[i] / Math.exp(step);
   }
-  return {
-    asset,
-    price_unit: spec.unit,
-    points: dates.map((date, i) => ({ date, price: round(prices[i], 2) })),
-  };
+  return dates.map((date, i) => ({ base_date: date, last_price: round(prices[i], 2) }));
+}
+
+/**
+ * Chi tiết mẫu kèm `price_history` (tối đa `sessions` điểm gần nhất). `sessions` ngoài 1–520 → lỗi
+ * 400 invalid_history như API.
+ */
+export function sampleDetailWithHistory(asset: AssetId, sessions: number): ForecastDetailWithHistory {
+  if (!Number.isInteger(sessions) || sessions < HISTORY_MIN || sessions > HISTORY_MAX) {
+    throw new ApiError(400, "invalid_history", "Tham số history phải là số nguyên 1–520.");
+  }
+  return { ...sampleDetail(asset), price_history: sampleCloses(asset).slice(-sessions) };
 }

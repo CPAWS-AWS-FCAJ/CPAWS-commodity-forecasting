@@ -208,7 +208,7 @@ function ChatBody({ assetName, chat }: { assetName: string; chat: ChatState }) {
         ) : null}
         {chat.entries.map((entry) =>
           entry.kind === "user" ? (
-            <p key={entry.id} className="ml-6 whitespace-pre-line break-words rounded-md bg-price p-3 text-white">
+            <p key={entry.id} className="ml-6 whitespace-pre-line break-words rounded-md bg-price p-3 text-on-price">
               {entry.text}
             </p>
           ) : entry.kind === "assistant" ? (
@@ -256,7 +256,7 @@ function ChatBody({ assetName, chat }: { assetName: string; chat: ChatState }) {
           <button
             type="submit"
             disabled={disabled || chat.pending || !draft.trim() || Boolean(problem)}
-            className="flex-1 rounded-md bg-price px-3 py-2 text-sm text-white disabled:opacity-50"
+            className="flex-1 rounded-md bg-price px-3 py-2 text-sm text-on-price disabled:opacity-50"
           >
             {chat.pending ? "Đang gửi…" : "Gửi"}
           </button>
@@ -299,7 +299,7 @@ export function ChatPanel({ asset, assetName }: { asset: AssetId; assetName: str
     <>
       <aside
         aria-label={`Chatbot ${assetName}`}
-        className="hidden h-[32rem] flex-col overflow-hidden rounded-lg border border-line bg-white lg:flex"
+        className="hidden h-[32rem] flex-col overflow-hidden rounded-lg border border-line bg-surface lg:flex"
       >
         <h2 className="border-b border-line px-4 py-3 text-sm font-semibold">Hỏi chatbot về {assetName}</h2>
         <div className="min-h-0 flex-1">
@@ -313,7 +313,7 @@ export function ChatPanel({ asset, assetName }: { asset: AssetId; assetName: str
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="fixed bottom-4 right-4 z-20 rounded-full bg-forecast px-4 py-3 text-sm font-medium text-white shadow-lg"
+          className="fixed bottom-4 right-4 z-20 rounded-full bg-forecast px-4 py-3 text-sm font-medium text-on-price shadow-lg"
         >
           Hỏi chatbot
         </button>
@@ -323,9 +323,9 @@ export function ChatPanel({ asset, assetName }: { asset: AssetId; assetName: str
               type="button"
               aria-label="Đóng chatbot"
               onClick={() => setOpen(false)}
-              className="absolute inset-0 bg-black/30"
+              className="absolute inset-0 bg-canvas/80"
             />
-            <div className="absolute inset-x-0 bottom-0 flex h-[80vh] flex-col rounded-t-xl bg-white">
+            <div className="absolute inset-x-0 bottom-0 flex h-[80vh] flex-col rounded-t-xl border-t border-line bg-surface">
               <div className="flex items-center justify-between border-b border-line px-4 py-3">
                 <h2 className="text-sm font-semibold">Hỏi chatbot về {assetName}</h2>
                 <button type="button" onClick={() => setOpen(false)} className="text-sm text-muted">

@@ -1,23 +1,12 @@
 import { ASSET_IDS } from "../api/types";
+import { GUIDE_ANCHORS, HowToRead } from "../components/HowToRead";
 import { ReliabilityBlock } from "../components/ReliabilityBlock";
+import { ACCURACY_METRIC_TEXT } from "../lib/accuracy";
 import { ASSETS } from "../lib/assets";
 
 // Độ tin cậy rolling_8w của champion hiện hành theo GET /accuracy/{asset} (docs/api/contract.md).
 // Chỉ hiện số khi API cho phép (display_status = ready); trạng thái đang thu thập phải hiện đúng.
-const METRICS: { name: string; meaning: string }[] = [
-  {
-    name: "Giá thực tế nằm trong khoảng 80%",
-    meaning: "Tỷ lệ lần giá thực tế nằm trong khoảng dự báo 80% (q10–q90), kèm số cặp đã chấm. Gần 80% là đạt.",
-  },
-  {
-    name: "Độ rộng khoảng 80%",
-    meaning: "Độ rộng trung bình của khoảng 80%, tính theo % giá. Hẹp hơn mà vẫn phủ gần 80% là tốt hơn.",
-  },
-  {
-    name: "Đúng chiều tăng/giảm",
-    meaning: "Tỷ lệ lần trung vị dự báo cùng chiều với giá thực tế. Luôn đọc cùng tỷ lệ phiên tăng thực tế.",
-  },
-];
+const METRICS = [ACCURACY_METRIC_TEXT.coverage, ACCURACY_METRIC_TEXT.width, ACCURACY_METRIC_TEXT.sign];
 
 export default function Accuracy() {
   return (
@@ -27,15 +16,19 @@ export default function Accuracy() {
         Đối chiếu dự báo chạy thật với giá thực tế trong 8 tuần gần nhất, tính trên log return, gộp 7 mức h.
         Không dùng sai số trên mức giá như MAPE.
       </p>
+      <HowToRead anchor={GUIDE_ANCHORS.reliability} topic="độ tin cậy 8 tuần" className="mt-2">
+        mỗi khối là một sản phẩm. Số chính là tỷ lệ lần giá thực tế nằm trong khoảng 80%; gần 80% là khoảng dự
+        báo rộng vừa đúng mức. Khi chưa đủ ngày dự báo đã đối chiếu, khối chỉ hiện tiến độ thu thập.
+      </HowToRead>
 
       <div className="mt-6 grid gap-4 lg:grid-cols-2">
         {ASSET_IDS.map((asset) => (
-          <ReliabilityBlock key={asset} asset={asset} title={ASSETS[asset].name} showHorizons />
+          <ReliabilityBlock key={asset} asset={asset} title={ASSETS[asset].name} showHorizons explain={false} />
         ))}
       </div>
 
       <h2 className="mt-8 text-lg font-semibold">Cách đọc các chỉ số</h2>
-      <dl className="mt-3 divide-y divide-line rounded-lg border border-line bg-white">
+      <dl className="mt-3 divide-y divide-line rounded-lg border border-line bg-surface">
         {METRICS.map((metric) => (
           <div key={metric.name} className="px-4 py-3">
             <dt className="text-sm font-medium">{metric.name}</dt>
