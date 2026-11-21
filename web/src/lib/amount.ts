@@ -32,6 +32,109 @@ export function parseAmountInput(text: string): AmountParse {
   return { ok: true, value };
 }
 
+// ---------- Ô nhập số tiền: hiện dấu chấm phân cách nghìn ngay khi gõ ----------
+
+/** Tối đa 12 chữ số (đủ cho MAX_AMOUNT_VND = 100 tỷ); gõ thêm thì bỏ qua. */
+export const MAX_AMOUNT_DIGITS = 12;
+
+/** Ký tự được coi là dấu nhóm nghìn khi gõ hoặc dán: chấm, phẩy, khoảng trắng (kể cả NBSP của vi-VN). */
+const SEPARATOR = /[.,\s\u00a0\u202f]/;
+const SEPARATORS = /[.,\s\u00a0\u202f]/g;
+
+/** "900000000" → "900.000.000" (dấu chấm kiểu vi-VN). Chuỗi vào chỉ gồm chữ số. */
+export function groupDigits(digits: string): string {
+  return digits.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+}
+
+/** Số chữ số đứng trước vị trí `position` trong chuỗi đã định dạng. */
+export function digitsBefore(text: string, position: number): number {
+  let count = 0;
+  for (let i = 0; i < Math.min(position, text.length); i += 1) if (/\d/.test(text[i])) count += 1;
+  return count;
+}
+
+/** Vị trí con trỏ trong chuỗi đã định dạng, ngay sau chữ số thứ `digitCount` (0 = đầu chuỗi). */
+export function caretAfterDigits(formatted: string, digitCount: number): number {
+  if (digitCount <= 0) return 0;
+  let seen = 0;
+  for (let i = 0; i < formatted.length; i += 1) {
+    if (/\d/.test(formatted[i])) {
+      seen += 1;
+      if (seen === digitCount) return i + 1;
+    }
+  }
+  return formatted.length;
+}
+
+export type AmountEditReject = "not_digit" | "too_long" | "decimal";
+
+export type AmountEdit =
+  | { ok: true; digits: string; caretDigits: number }
+  | { ok: false; reason: AmountEditReject };
+
+/** Bỏ số 0 ở đầu; con trỏ lùi theo số chữ số bị bỏ ở trước nó. */
+function trimLeadingZeros(digits: string, caretDigits: number): { digits: string; caretDigits: number } {
+  const zeros = /^0+/.exec(digits)?.[0].length ?? 0;
+  return { digits: digits.slice(zeros), caretDigits: Math.max(0, caretDigits - Math.min(zeros, caretDigits)) };
+}
+
+function finish(digits: string, caretDigits: number): AmountEdit {
+  const trimmed = trimLeadingZeros(digits, caretDigits);
+  if (trimmed.digits.length > MAX_AMOUNT_DIGITS) return { ok: false, reason: "too_long" };
+  return { ok: true, ...trimmed };
+}
+
+/**
+ * Nội dung ô sau một lần gõ/xóa (sự kiện change): chỉ nhận chữ số, dấu nhóm nghìn bỏ đi rồi thêm lại.
+ * `caret` là vị trí con trỏ trong chuỗi thô; kết quả trả số chữ số đứng trước con trỏ để đặt lại.
+ */
+export function editFromTyping(raw: string, caret: number): AmountEdit {
+  for (const char of raw) if (!/\d/.test(char) && !SEPARATOR.test(char)) return { ok: false, reason: "not_digit" };
+  return finish(raw.replace(SEPARATORS, ""), digitsBefore(raw, caret));
+}
+
+/** Đuôi tiền tệ hay dính khi chép số tiền từ nơi khác: "900.000.000 đ", "900.000.000 VND". */
+const CURRENCY_SUFFIX = /\s*(đồng|đ|₫|vnđ|vnd)\.?$/i;
+
+/**
+ * Số dán vào: nhận "900.000.000", "900,000,000", "900 000 000", "900000000" (có thể kèm "đ"/"VND").
+ * Dấu ở chỗ không phải nhóm nghìn ("1,5", "1.234,56") là số thập phân → từ chối thay vì đoán.
+ */
+export function readPastedDigits(text: string): { ok: true; digits: string } | { ok: false; reason: AmountEditReject } {
+  const trimmed = text.trim().replace(CURRENCY_SUFFIX, "");
+  if (/^\d+$/.test(trimmed) || /^\d{1,3}([.,\s\u00a0\u202f]\d{3})+$/.test(trimmed)) {
+    return { ok: true, digits: trimmed.replace(SEPARATORS, "") };
+  }
+  if (/^[\d.,\s\u00a0\u202f]+$/.test(trimmed) && /\d/.test(trimmed)) return { ok: false, reason: "decimal" };
+  return { ok: false, reason: "not_digit" };
+}
+
+/** Dán `pasted` thay cho đoạn đang chọn [selStart, selEnd) của chuỗi đã định dạng `formatted`. */
+export function editFromPaste(formatted: string, selStart: number, selEnd: number, pasted: string): AmountEdit {
+  const read = readPastedDigits(pasted);
+  if (!read.ok) return read;
+  const digits = formatted.replace(SEPARATORS, "");
+  const before = digits.slice(0, digitsBefore(formatted, selStart));
+  const after = digits.slice(digitsBefore(formatted, selEnd));
+  return finish(before + read.digits + after, before.length + read.digits.length);
+}
+
+/** Đọc nhanh số tiền lớn: 900.000.000 → "900 triệu đồng", 1.250.000.000 → "1,25 tỷ đồng". */
+export function amountInWords(value: number): string | null {
+  const say = (size: number, word: string) => {
+    const rounded = Math.round((value / size) * 100) / 100;
+    const text = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 2 }).format(rounded);
+    // Đúng tới 2 chữ số thập phân của đơn vị thì không cần "khoảng"
+    return `${value % (size / 100) === 0 ? "" : "khoảng "}${text} ${word} đồng`;
+  };
+  // 999.999.999 làm tròn thành "1.000 triệu": đọc theo tỷ cho tự nhiên
+  if (value >= 1_000_000_000 || Math.round((value / 1_000_000) * 100) / 100 >= 1000) {
+    return say(1_000_000_000, "tỷ");
+  }
+  if (value >= 1_000_000) return say(1_000_000, "triệu");
+  return null;
+}
+
 /** Giá trị giả định của số tiền nếu giá thay đổi đúng bằng log return q: số tiền × e^q. */
 export function hypotheticalAmount(amount: number, logReturn: number): number {
   return amount * Math.exp(logReturn);
