@@ -51,6 +51,12 @@ class CpawsApiStack(Stack):
         # ---------- Forecasts API ----------
         handler_dir = Path(__file__).resolve().parents[1] / "lambda" / "forecast_api"
 
+        # Điểm giá cũ của ?history= (tối đa 520 phiên): file JSON xuất một lần từ lake bằng
+        # scripts/export_price_history.py. Tên bucket theo quy ước của CpawsData (cpaws-<env>-lake,
+        # bucket_name của Lake); không import bucket để CpawsApi không phụ thuộc stack CpawsData.
+        price_history_bucket = f"cpaws-{env_name}-lake"
+        price_history_prefix = "serving/price-history/"
+
         forecast_api_log_group = logs.LogGroup(
             self,
             "ForecastsApiLogGroup",
@@ -62,7 +68,7 @@ class CpawsApiStack(Stack):
             self,
             "ForecastsApiHandler",
             function_name=f"cpaws-{env_name}-forecasts-api",
-            description="Read CPAWS forecast records from DynamoDB",
+            description="Read CPAWS forecast records from DynamoDB and price history from S3",
             runtime=lambda_.Runtime.PYTHON_3_12,
             handler="handler.handler",
             # Bỏ __pycache__/.pyc sinh ra khi chạy test trên máy: chúng làm đổi hash asset và
@@ -74,6 +80,8 @@ class CpawsApiStack(Stack):
             environment={
                 "FORECASTS_TABLE_NAME": forecasts_table.table_name,
                 "ALLOWED_ORIGIN": allowed_origin,
+                "PRICE_HISTORY_BUCKET": price_history_bucket,
+                "PRICE_HISTORY_PREFIX": price_history_prefix,
             },
         )
 
@@ -82,6 +90,17 @@ class CpawsApiStack(Stack):
             iam.PolicyStatement(
                 actions=["dynamodb:Query"],
                 resources=[forecasts_table.table_arn],
+            )
+        )
+
+        # Chỉ đọc file lịch sử giá: GetObject đúng prefix, không ListBucket, không ghi. Thiếu file
+        # thì S3 trả AccessDenied thay vì NoSuchKey; handler coi như lỗi đọc và chỉ trả phần
+        # Forecasts. Lake mã hóa SSE-S3 nên không cần quyền KMS.
+        forecast_api_lambda.add_to_role_policy(
+            iam.PolicyStatement(
+                sid="PriceHistoryRead",
+                actions=["s3:GetObject"],
+                resources=[f"arn:aws:s3:::{price_history_bucket}/{price_history_prefix}*"],
             )
         )
 
