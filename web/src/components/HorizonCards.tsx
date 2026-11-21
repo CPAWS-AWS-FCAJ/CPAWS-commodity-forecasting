@@ -3,14 +3,15 @@ import { formatDate, formatPrice, formatReturnPercent } from "../lib/format";
 import { horizonView } from "../lib/forecast";
 import type { HorizonView, Lean } from "../lib/forecast";
 import { convertPrice, displayUnit } from "../lib/units";
+import { GUIDE_ANCHORS, HowToRead } from "./HowToRead";
 
-// Màu nhạt theo spec dashboard: nghiêng tăng xanh lá, nghiêng giảm đỏ, chưa rõ xám.
-// Nhãn luôn có chữ và mũi tên nên không chỉ dựa vào màu.
+// Nền nhạt theo spec dashboard: nghiêng tăng xanh lá, nghiêng giảm đỏ, chưa rõ xám (token đổi theo giao
+// diện sáng/tối). Nhãn luôn có chữ và mũi tên nên không chỉ dựa vào màu.
 const ARROW: Record<Lean, string> = { up: "▲", down: "▼", flat: "◆" };
 const PILL: Record<Lean, string> = {
-  up: "bg-green-50 text-up",
-  down: "bg-red-50 text-down",
-  flat: "bg-canvas text-muted",
+  up: "bg-up-bg text-up",
+  down: "bg-down-bg text-down",
+  flat: "bg-surface-muted text-muted",
 };
 
 interface Props {
@@ -34,12 +35,13 @@ export function HorizonCards({ asset, detail, currency, hidePrice, selected, onS
   return (
     <section aria-labelledby="horizon-cards-title">
       <h2 id="horizon-cards-title" className="text-lg font-semibold">
-        Dự báo theo số phiên giao dịch (h = 1…7)
+        Dự báo cho từng phiên trong 7 phiên tới <span className="text-sm font-normal text-muted">(h = 1…7)</span>
       </h2>
-      <p className="mt-1 text-xs text-muted">
-        Khoảng 80%: kết quả sau h phiên nhiều khả năng nằm trong khoảng này (q10–q90, xác suất danh nghĩa 80%). Nhãn: xác suất
-        tăng từ 60% là “Nghiêng tăng”, từ 40% trở xuống là “Nghiêng giảm”, còn lại “Chưa rõ xu hướng”.
-      </p>
+      <HowToRead anchor={GUIDE_ANCHORS.horizon} topic="dự báo theo số phiên">
+        mỗi thẻ là một phiên giao dịch tới, bấm để xem chi tiết phía trên. “Khoảng 80%” là khoảng q10–q90 mà dự báo
+        đặt ra, chưa phải mức đã kiểm chứng. Nhãn “Nghiêng tăng” khi xác suất tăng từ 60%, “Nghiêng giảm” khi từ 40%
+        trở xuống, còn lại là “Chưa rõ xu hướng”.
+      </HowToRead>
       <ul className="mt-3 grid grid-cols-[repeat(auto-fill,minmax(13rem,1fr))] gap-3">
         {views.map((view) => (
           <li key={view.h}>
@@ -87,7 +89,7 @@ function HorizonCard({
       aria-pressed={active}
       aria-label={`Sau ${view.h} phiên: ${probability.label}, xác suất tăng ${probability.probUpLabel}`}
       onClick={() => onSelect(view.h)}
-      className={`tabular flex h-full w-full flex-col rounded-lg border bg-white p-4 text-left text-sm transition hover:border-forecast ${
+      className={`tabular flex h-full w-full flex-col rounded-lg border bg-surface p-4 text-left text-sm transition-colors hover:border-forecast ${
         active ? "border-forecast ring-1 ring-forecast" : "border-line"
       }`}
     >

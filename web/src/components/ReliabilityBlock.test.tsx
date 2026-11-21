@@ -19,7 +19,6 @@ vi.mock("../api/config", () => ({
     get accuracyApiEnabled() {
       return flags.accuracyApi;
     },
-    historyAvailable: false,
     showMetalPrices: false,
     authEnabled: false,
     region: "ap-southeast-1",
@@ -54,7 +53,8 @@ describe("ReliabilityBlock với fixtures Accuracy", () => {
     pickFixture("not_ready");
     mount();
     expect(await screen.findByText("Chưa có kết quả đánh giá")).toBeInTheDocument();
-    expect(screen.queryByText(/%/)).toBeNull();
+    // "%" chỉ được có trong dòng "Cách đọc" (nói về khoảng 80%), không phải số liệu
+    expect(screen.queryAllByText(/%/).every((node) => node.textContent?.startsWith("Cách đọc:"))).toBe(true);
     expect(screen.queryByText(/Kể từ/)).toBeNull();
   });
 
@@ -135,6 +135,29 @@ describe("ReliabilityBlock với fixtures Accuracy", () => {
     expect(screen.getByText("Chưa có kết quả đánh giá")).toBeInTheDocument();
     expect(screen.queryByText(/Đang tải độ tin cậy/)).not.toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("ReliabilityBlock: lời giải thích", () => {
+  it("mặc định có tiêu đề dễ hiểu, dòng 'Cách đọc' và link tới mục độ tin cậy", async () => {
+    pickFixture("collecting");
+    mount();
+    await screen.findByText(/Đang thu thập/);
+    expect(screen.getByRole("heading", { name: /Độ tin cậy: dự báo 8 tuần qua sát giá thật/ })).toBeInTheDocument();
+    expect(screen.getByText("Cách đọc:")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Tìm hiểu thêm/ })).toHaveAttribute("href", "/guide#do-tin-cay");
+  });
+
+  it("explain = false (trang Độ chính xác): không lặp dòng 'Cách đọc'", async () => {
+    pickFixture("collecting");
+    const client = new QueryClient({ defaultOptions: { queries: { retryDelay: 0 } } });
+    render(
+      <QueryClientProvider client={client}>
+        <ReliabilityBlock asset="gold" title="Vàng" explain={false} />
+      </QueryClientProvider>,
+    );
+    await screen.findByText(/Đang thu thập/);
+    expect(screen.queryByText("Cách đọc:")).toBeNull();
   });
 });
 
