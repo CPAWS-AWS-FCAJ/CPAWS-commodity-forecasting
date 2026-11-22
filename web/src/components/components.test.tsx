@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { sampleDetail, sampleList } from "../api/sample";
 import { formatReturnPercent } from "../lib/format";
-import { AssetCard } from "./AssetCard";
+import { AssetCard, h7Returns, rangeScale } from "./AssetCard";
 import { Disclaimer, DISCLAIMER_TEXT } from "./Disclaimer";
 import { PriceRange } from "./PriceRange";
 import { ProbabilityBadge } from "./ProbabilityBadge";
@@ -153,6 +153,48 @@ describe("AssetCard", () => {
       </MemoryRouter>,
     );
     expect(screen.queryByText("Mốc thống kê 252 phiên")).not.toBeInTheDocument();
+  });
+});
+
+describe("AssetCard: thanh khoảng 80%", () => {
+  const items = sampleList().items;
+
+  it("thang chung lấy theo khoảng rộng nhất, làm tròn lên 1%", () => {
+    const widest = Math.max(
+      ...items.flatMap((item) => {
+        const { low, high } = h7Returns(item);
+        return [Math.abs(low), Math.abs(high)];
+      }),
+    );
+    const scale = rangeScale(items);
+    expect(scale).toBeGreaterThanOrEqual(widest);
+    expect(Math.round(scale * 100 * 1e6) / 1e6 % 1).toBe(0);
+    // Mọi thẻ dùng cùng thang thì nhãn hai đầu giống nhau
+    expect(rangeScale(items.slice(0, 1))).toBeLessThanOrEqual(scale);
+  });
+
+  it("thanh có mô tả cho trình đọc màn hình và dùng thang được truyền vào", () => {
+    const gold = items.find((item) => item.asset === "gold")!;
+    render(
+      <MemoryRouter>
+        <AssetCard item={gold} scale={0.07} />
+      </MemoryRouter>,
+    );
+    const strip = screen.getByRole("img", { name: /^Khoảng 80% sau 7 phiên từ .* so với giá cuối, trung vị/ });
+    expect(strip).toBeInTheDocument();
+    expect(screen.getByText("−7%")).toBeInTheDocument();
+    expect(screen.getByText("+7%")).toBeInTheDocument();
+  });
+
+  it("thẻ dẫn tới trang sản phẩm, có mã chuỗi cạnh tên", () => {
+    const wti = items.find((item) => item.asset === "wti")!;
+    render(
+      <MemoryRouter>
+        <AssetCard item={wti} />
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole("link")).toHaveAttribute("href", "/asset/wti");
+    expect(screen.getByText("CL=F")).toBeInTheDocument();
   });
 });
 

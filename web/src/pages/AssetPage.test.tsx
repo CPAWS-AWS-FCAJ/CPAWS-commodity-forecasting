@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import About from "./About";
 import AssetPage from "./AssetPage";
@@ -12,7 +12,6 @@ vi.mock("../api/config", () => ({
   config: {
     apiUrl: "",
     useSample: true,
-    historyAvailable: true,
     sampleAccuracy: "collecting",
     accuracyApiEnabled: true,
     get showMetalPrices() {
@@ -54,7 +53,7 @@ describe("trang sản phẩm và trang chủ với cờ VITE_SHOW_METAL_PRICES",
     expect(screen.queryByRole("button", { name: "VND" })).toBeNull();
     expect(screen.queryByText(/Giá thực tế và dự báo/)).toBeNull();
     expect(screen.queryByText(/Giá cuối ngày .* tỷ giá USD\/VND/)).toBeNull();
-    expect(screen.getAllByText(/Quạt log return/)).toHaveLength(1);
+    expect(screen.getAllByRole("heading", { name: /Mức thay đổi dự báo theo số phiên tới/ })).toHaveLength(1);
     expect(screen.getByText(/mức thay đổi nhiều khả năng/)).toBeInTheDocument();
   });
 
@@ -62,7 +61,7 @@ describe("trang sản phẩm và trang chủ với cờ VITE_SHOW_METAL_PRICES",
     flags.show = false;
     mount("/asset/gold", "advanced");
     expect((await screen.findAllByText(/đang được ẩn/)).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/Quạt log return/)).toHaveLength(1);
+    expect(screen.getAllByRole("heading", { name: /Mức thay đổi dự báo theo số phiên tới/ })).toHaveLength(1);
     expect(screen.queryByText("Giá q10–q90")).toBeNull();
     expect(screen.getByText("Phân vị của log return")).toBeInTheDocument();
   });
@@ -127,6 +126,38 @@ describe("trang sản phẩm và trang chủ với cờ VITE_SHOW_METAL_PRICES",
     mount("/", "basic");
     expect((await screen.findAllByText(/Thay đổi 80% sau 7 phiên/)).length).toBe(2);
     expect(screen.getAllByText(/Khoảng giá 80% sau 7 phiên/).length).toBe(2);
+  });
+});
+
+describe("trang sản phẩm: biểu đồ dùng price_history thật, giải thích dễ hiểu", () => {
+  it("biểu đồ giá có mốc 1 tháng → 2 năm; mặc định 1 tháng; chú thích chấm đỏ", async () => {
+    flags.show = true;
+    mount("/asset/wti", "basic");
+    expect(await screen.findByRole("heading", { name: /Giá thực tế và dự báo/ })).toBeInTheDocument();
+    const group = screen.getByRole("group", { name: "Mốc xem lịch sử giá" });
+    for (const label of ["1 tháng", "6 tháng", "1 năm", "2 năm"]) {
+      expect(within(group).getByRole("button", { name: label })).not.toHaveAttribute("aria-disabled");
+    }
+    expect(within(group).getByRole("button", { name: "1 tháng" })).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(within(group).getByRole("button", { name: "2 năm" }));
+    expect(within(group).getByRole("button", { name: "2 năm" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText(/Trung vị dự báo từng phiên/)).toBeInTheDocument();
+    expect(screen.getByText(/chấm đỏ là mức giữa, không có nghĩa là giảm/)).toBeInTheDocument();
+    expect(screen.queryByText(/Chưa có lịch sử giá|endpoint lịch sử/)).toBeNull();
+  });
+
+  it("các khối có tiêu đề dễ hiểu, dòng 'Cách đọc' và link tới trang hướng dẫn", async () => {
+    flags.show = true;
+    mount("/asset/brent", "advanced");
+    await screen.findByRole("heading", { name: /Giá thực tế và dự báo/ });
+    const links = screen.getAllByRole("link", { name: /^Tìm hiểu thêm/ });
+    const hrefs = links.map((link) => link.getAttribute("href"));
+    for (const anchor of ["doc-bieu-do", "log-return", "phan-vi", "so-phien", "do-tin-cay", "quy-doi-vnd"]) {
+      expect(hrefs).toContain(`/guide#${anchor}`);
+    }
+    expect(screen.getAllByText("Cách đọc:").length).toBeGreaterThanOrEqual(5);
+    expect(screen.getByRole("heading", { name: /Bảng chi tiết theo từng phiên/ })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Độ tin cậy: dự báo 8 tuần qua/ })).toBeInTheDocument();
   });
 });
 

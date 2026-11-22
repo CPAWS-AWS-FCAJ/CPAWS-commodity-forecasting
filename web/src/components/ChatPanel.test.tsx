@@ -11,7 +11,6 @@ vi.mock("../api/config", () => ({
     },
     sampleAccuracy: "collecting",
     accuracyApiEnabled: false,
-    historyAvailable: false,
     showMetalPrices: false,
     authEnabled: false,
     region: "ap-southeast-1",

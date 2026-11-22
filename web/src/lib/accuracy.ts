@@ -16,6 +16,32 @@ import { roundPercent } from "./forecast";
 
 const METRIC_KEYS = ["coverage_80", "width_80", "width_80_pct", "sign_accuracy", "up_rate"] as const;
 
+/**
+ * Tên và cách đọc các chỉ số web hiện ở khối "Độ tin cậy" (skill forecast-display): dùng chung cho khối,
+ * trang Độ chính xác và trang "Cách đọc dự báo" để lời giải thích không lệch nhau. Không có pinball,
+ * Brier, MAPE hay sai số trên mức giá.
+ */
+export const ACCURACY_METRIC_TEXT = {
+  coverage: {
+    name: "Giá thực tế nằm trong khoảng 80%",
+    hint: "Gần 80% là khoảng dự báo rộng vừa đúng mức.",
+    meaning:
+      "Tỷ lệ lần giá thực tế rơi vào khoảng dự báo 80% (q10–q90), kèm số cặp đã chấm. Gần 80% là đúng mức; thấp hơn nhiều nghĩa là khoảng quá hẹp, cao hơn nhiều nghĩa là khoảng quá rộng.",
+  },
+  width: {
+    name: "Độ rộng khoảng 80% (% giá)",
+    hint: "Trung bình khoảng cách từ q10 đến q90, tính theo % giá.",
+    meaning:
+      "Độ rộng trung bình của khoảng 80%, tính theo % giá. Hai dự báo cùng phủ gần 80% thì khoảng hẹp hơn cho nhiều thông tin hơn.",
+  },
+  sign: {
+    name: "Đúng chiều tăng/giảm · tỷ lệ phiên tăng thực tế",
+    hint: "Đọc cùng tỷ lệ phiên tăng thực tế; hai tỷ lệ có thể dùng mẫu quan sát khác nhau.",
+    meaning:
+      "Tỷ lệ lần mức giữa (trung vị) dự báo cùng chiều với giá thực tế. Đọc tỷ lệ dự báo đúng chiều cùng tỷ lệ phiên tăng thực tế để có thêm bối cảnh. Hai tỷ lệ có thể dùng mẫu quan sát khác nhau, nên không xem chênh lệch giữa chúng là mức cải thiện chính xác của mô hình.",
+  },
+} as const;
+
 /** Response có trạng thái ngoài enum đóng của contract: báo lỗi, không đoán. */
 export class AccuracyFormatError extends Error {
   constructor(detail: string) {

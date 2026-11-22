@@ -1,7 +1,20 @@
 import { QUANTILE_LEVELS } from "../api/types";
-import { sampleDetail, sampleHistory, sampleList } from "../api/sample";
+import { SAMPLE_HISTORY_POINTS, sampleCloses, sampleDetail, sampleDetailWithHistory, sampleList } from "../api/sample";
 import { ASSET_IDS } from "../api/types";
-import { formatDate, formatDateVn, formatNumber, formatPrice, formatProbability, formatReturnPercent } from "./format";
+import { buildFanData, describeMedianChange, jointIndex } from "./chartData";
+import {
+  dateTickFormatter,
+  formatAxisPrice,
+  formatDate,
+  formatDateVn,
+  formatDayMonth,
+  formatMonthYear,
+  formatNumber,
+  monthStartTicks,
+  formatPrice,
+  formatProbability,
+  formatReturnPercent,
+} from "./format";
 import {
   describeProbability,
   isStaleByDate,
@@ -10,7 +23,21 @@ import {
   roundPercent,
   weekdaysSince,
 } from "./forecast";
-import { MIN_AMOUNT_VND, amountRange, hypotheticalAmount, parseAmountInput, roundToThousand } from "./amount";
+import {
+  MAX_AMOUNT_DIGITS,
+  MIN_AMOUNT_VND,
+  amountInWords,
+  amountRange,
+  caretAfterDigits,
+  digitsBefore,
+  editFromPaste,
+  editFromTyping,
+  groupDigits,
+  hypotheticalAmount,
+  parseAmountInput,
+  readPastedDigits,
+  roundToThousand,
+} from "./amount";
 import { isPriceHidden } from "./assets";
 import { LUONG_GRAMS, TROY_OUNCE_GRAMS, usdToVnd } from "./units";
 
@@ -139,13 +166,25 @@ describe("dữ liệu mẫu tuân thủ contract", () => {
     }
   });
 
-  it("lịch sử 91 phiên kết thúc đúng tại base_date với giá cuối khớp last_price", () => {
-    const history = sampleHistory("gold");
+  it("lịch sử ~520 phiên, cũ → mới, kết thúc đúng tại base_date với giá cuối khớp last_price", () => {
+    const closes = sampleCloses("gold");
     const detail = sampleDetail("gold");
-    expect(history.points).toHaveLength(91);
-    const last = history.points[history.points.length - 1];
-    expect(last.date).toBe(detail.base_date);
-    expect(last.price).toBeCloseTo(detail.last_price, 2);
+    expect(closes).toHaveLength(SAMPLE_HISTORY_POINTS);
+    expect(SAMPLE_HISTORY_POINTS).toBeGreaterThanOrEqual(505); // đủ cho mốc 2 năm (504 phiên)
+    const last = closes[closes.length - 1];
+    expect(last.base_date).toBe(detail.base_date);
+    expect(last.last_price).toBeCloseTo(detail.last_price, 2);
+    for (let i = 1; i < closes.length; i += 1) {
+      expect(closes[i].base_date > closes[i - 1].base_date).toBe(true);
+      expect(closes[i].last_price).toBeGreaterThan(0);
+    }
+  });
+
+  it("price_history mẫu cắt đúng N điểm gần nhất; N ngoài 1–520 báo invalid_history như API", () => {
+    expect(sampleDetailWithHistory("wti", 21).price_history).toHaveLength(21);
+    expect(sampleDetailWithHistory("wti", 520).price_history).toHaveLength(520);
+    expect(() => sampleDetailWithHistory("wti", 0)).toThrow(/history/);
+    expect(() => sampleDetailWithHistory("wti", 521)).toThrow(/history/);
   });
 });
 
@@ -203,5 +242,121 @@ describe("amount (ADR-0005 mục (2))", () => {
     expect(parseAmountInput(String(MIN_AMOUNT_VND))).toEqual({ ok: true, value: MIN_AMOUNT_VND });
     expect(parseAmountInput("100.000.000.001")).toEqual({ ok: false, reason: "too_large" });
     expect(parseAmountInput("99999999999999999999")).toEqual({ ok: false, reason: "too_large" });
+  });
+});
+
+describe("ô nhập số tiền: dấu chấm nhóm nghìn khi gõ", () => {
+  it("nhóm 3 chữ số bằng dấu chấm kiểu vi-VN", () => {
+    expect(groupDigits("")).toBe("");
+    expect(groupDigits("900")).toBe("900");
+    expect(groupDigits("9000")).toBe("9.000");
+    expect(groupDigits("900000000")).toBe("900.000.000");
+    expect(groupDigits("100000000000")).toBe("100.000.000.000");
+  });
+
+  it("gõ thêm chữ số ở cuối hay ở giữa: giữ số chữ số đứng trước con trỏ", () => {
+    // "900.000" gõ thêm "1" ở cuối → con trỏ sau 7 chữ số
+    expect(editFromTyping("900.0001", 8)).toEqual({ ok: true, digits: "9000001", caretDigits: 7 });
+    expect(caretAfterDigits("9.000.001", 7)).toBe(9);
+    // "1.234" gõ "5" sau chữ "1" → "15.234", con trỏ sau chữ số thứ 2
+    expect(editFromTyping("15.234", 2)).toEqual({ ok: true, digits: "15234", caretDigits: 2 });
+    expect(caretAfterDigits("15.234", 2)).toBe(2);
+    // "12.345" xóa chữ "3" → "12.45", con trỏ sau chữ số thứ 2
+    expect(editFromTyping("12.45", 3)).toEqual({ ok: true, digits: "1245", caretDigits: 2 });
+    expect(caretAfterDigits("1.245", 2)).toBe(3);
+  });
+
+  it("chỉ nhận chữ số; bỏ số 0 ở đầu; giới hạn số chữ số", () => {
+    expect(editFromTyping("12a", 3)).toEqual({ ok: false, reason: "not_digit" });
+    expect(editFromTyping("-5", 2)).toEqual({ ok: false, reason: "not_digit" });
+    expect(editFromTyping("0", 1)).toEqual({ ok: true, digits: "", caretDigits: 0 });
+    expect(editFromTyping("0.012", 5)).toEqual({ ok: true, digits: "12", caretDigits: 2 });
+    expect(editFromTyping("9".repeat(MAX_AMOUNT_DIGITS), MAX_AMOUNT_DIGITS).ok).toBe(true);
+    expect(editFromTyping("9".repeat(MAX_AMOUNT_DIGITS + 1), MAX_AMOUNT_DIGITS + 1)).toEqual({
+      ok: false,
+      reason: "too_long",
+    });
+  });
+
+  it("dán '900.000.000', '900000000', '900,000,000', '900 000 000 đ' đều được; số thập phân bị từ chối", () => {
+    for (const text of ["900.000.000", "900000000", "900,000,000", "900 000 000", " 900.000.000 đ", "900.000.000 VND"]) {
+      expect(readPastedDigits(text)).toEqual({ ok: true, digits: "900000000" });
+    }
+    expect(readPastedDigits("1,5")).toEqual({ ok: false, reason: "decimal" });
+    expect(readPastedDigits("1.234,56")).toEqual({ ok: false, reason: "decimal" });
+    expect(readPastedDigits("10 triệu")).toEqual({ ok: false, reason: "not_digit" });
+    expect(readPastedDigits("")).toEqual({ ok: false, reason: "not_digit" });
+  });
+
+  it("dán thay cho đoạn đang chọn", () => {
+    // ô trống
+    expect(editFromPaste("", 0, 0, "900.000.000")).toEqual({ ok: true, digits: "900000000", caretDigits: 9 });
+    // "1.000" chọn hết rồi dán
+    expect(editFromPaste("1.000", 0, 5, "25000")).toEqual({ ok: true, digits: "25000", caretDigits: 5 });
+    // "1.000" dán "5" sau chữ số đầu
+    expect(editFromPaste("1.000", 1, 1, "5")).toEqual({ ok: true, digits: "15000", caretDigits: 2 });
+    expect(editFromPaste("", 0, 0, "1234567890123")).toEqual({ ok: false, reason: "too_long" });
+    expect(digitsBefore("1.000", 2)).toBe(1);
+  });
+
+  it("đọc nhanh số tiền lớn", () => {
+    expect(amountInWords(900_000_000)).toBe("900 triệu đồng");
+    expect(amountInWords(1_250_000_000)).toBe("1,25 tỷ đồng");
+    expect(amountInWords(1_234_567_890)).toBe("khoảng 1,23 tỷ đồng");
+    expect(amountInWords(999_999_999)).toBe("khoảng 1 tỷ đồng");
+    expect(amountInWords(500_000)).toBeNull();
+  });
+});
+
+describe("biểu đồ giá thực tế và dự báo", () => {
+  it("nối lịch sử với 7 phiên dự báo; chỉ điểm dự báo có h và changeMid", () => {
+    const detail = sampleDetailWithHistory("wti", 22);
+    const data = buildFanData("wti", detail, detail.price_history, "USD");
+    expect(data).toHaveLength(22 + 7);
+    const joint = jointIndex(data);
+    expect(joint).toBe(21);
+    expect(data[joint].date).toBe(detail.base_date);
+    expect(data[joint].median).toBeCloseTo(detail.last_price, 6);
+    expect(data[joint].h).toBeUndefined();
+    const forecast = data.slice(joint + 1);
+    expect(forecast.map((point) => point.h)).toEqual([1, 2, 3, 4, 5, 6, 7]);
+    for (const point of forecast) {
+      expect(point.price).toBeUndefined();
+      expect(point.low!).toBeLessThanOrEqual(point.median!);
+      expect(point.median!).toBeLessThanOrEqual(point.high!);
+      expect(point.changeMid).toBeDefined();
+    }
+    expect(data.slice(0, joint).every((point) => point.median === undefined)).toBe(true);
+  });
+
+  it("không có lịch sử: vẫn vẽ phiên gần nhất + 7 phiên dự báo", () => {
+    const detail = sampleDetail("brent");
+    const data = buildFanData("brent", detail, undefined, "VND");
+    expect(data).toHaveLength(8);
+    expect(data[0].price).toBeCloseTo(detail.last_price * detail.fx.usd_vnd, 0);
+  });
+
+  it("thay đổi của trung vị có hướng và độ lớn 1 chữ số", () => {
+    expect(describeMedianChange(0.0042)).toEqual({ direction: "up", magnitude: "0,4%" });
+    expect(describeMedianChange(-0.0123)).toEqual({ direction: "down", magnitude: "1,2%" });
+    expect(describeMedianChange(0.0004)).toEqual({ direction: "flat", magnitude: "0,0%" });
+  });
+
+  it("nhãn trục: ngày/tháng khi ngắn, tháng/năm khi dài; giá VND theo triệu", () => {
+    expect(formatMonthYear("2026-10-20")).toBe("10/2026");
+    expect(dateTickFormatter(30)).toBe(formatDayMonth);
+    expect(dateTickFormatter(260)).toBe(formatMonthYear);
+    expect(formatAxisPrice("gold", "USD")(2655.4)).toBe("2.655");
+    expect(formatAxisPrice("wti", "USD")(71.32)).toBe("71,3");
+    expect(formatAxisPrice("wti", "VND")(1_876_000)).toBe("1,9 tr");
+  });
+
+  it("mốc theo tháng: phiên đầu mỗi tháng, không lặp, tối đa 8 mốc", () => {
+    const dates = sampleCloses("gold").map((point) => point.base_date);
+    const six = monthStartTicks(dates.slice(-127));
+    expect(new Set(six.map(formatMonthYear)).size).toBe(six.length);
+    expect(six.every((date, i) => i === 0 || date > six[i - 1])).toBe(true);
+    expect(monthStartTicks(dates).length).toBeLessThanOrEqual(8);
+    expect(monthStartTicks(["2026-10-30", "2026-11-02", "2026-11-03"])).toEqual(["2026-11-02"]);
   });
 });

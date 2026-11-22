@@ -324,11 +324,20 @@ def test_bedrock_statements_follow_global_inference_requirements(templates):
 
 
 def test_forecast_api_role_is_unchanged(templates):
+    """Lambda forecasts-api không nhận quyền nào của chat; ngoài Query bảng Forecasts chỉ thêm
+    s3:GetObject đọc file lịch sử giá (khóa chi tiết ở tests/test_infra_stacks.py)."""
     statements = _role_statements(templates["api"], "cpaws-dev-forecasts-api")
     actions = {a for st in statements for a in _as_list(st["Action"])}
-    assert actions == {"dynamodb:Query"}
+    assert actions == {"dynamodb:Query", "s3:GetObject"}
     assert "chat-usage" not in json.dumps(statements)
     assert "news-labels" not in json.dumps(statements)
+    assert "bedrock" not in json.dumps(statements)
+
+
+def test_chat_role_has_no_price_history_access(templates):
+    statements = _role_statements(templates["api"], "cpaws-dev-chat-api")
+    assert "s3:" not in json.dumps(statements)
+    assert "price-history" not in json.dumps(statements)
 
 
 # ---------- API Gateway ----------

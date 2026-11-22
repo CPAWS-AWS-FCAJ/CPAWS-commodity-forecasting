@@ -67,19 +67,18 @@ export interface ForecastDetail {
   disclaimer: string;
 }
 
-/**
- * LỊCH SỬ GIÁ: contract CHƯA có endpoint này (câu hỏi mở cho Khải/Tuấn).
- * Tạm giả định GET /history/{asset}?days=90 trả về dạng dưới đây; khi chốt thì sửa contract trước.
- */
-export interface PricePoint {
-  date: string;
-  price: number;
+/** Một điểm giá cuối phiên trong `price_history` (GET /forecasts/{asset}?history=N). */
+export interface ClosePoint {
+  base_date: string;
+  last_price: number;
 }
 
-export interface HistoryResponse {
-  asset: AssetId;
-  price_unit: PriceUnit;
-  points: PricePoint[];
+/**
+ * GET /forecasts/{asset}?history=N (N = 1–520): chi tiết dự báo mới nhất kèm giá cuối phiên, cũ → mới.
+ * Có thể ít hơn N điểm (lịch sử bắt đầu từ bản ghi sớm nhất).
+ */
+export interface ForecastDetailWithHistory extends ForecastDetail {
+  price_history: ClosePoint[];
 }
 
 /**

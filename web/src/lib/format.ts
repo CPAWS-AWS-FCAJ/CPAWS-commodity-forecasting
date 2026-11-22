@@ -43,6 +43,38 @@ export function formatDayMonth(iso: string): string {
   return `${day}/${month}`;
 }
 
+/** "2026-10-20" → "10/2026" cho nhãn trục khi biểu đồ trải nhiều tháng. */
+export function formatMonthYear(iso: string): string {
+  const [year, month] = iso.slice(0, 10).split("-");
+  return `${month}/${year}`;
+}
+
+/** Trên khoảng 6 tháng phiên (126) nhãn "ngày/tháng" lặp lại khó đọc: chuyển sang "tháng/năm". */
+export const MONTH_TICKS_FROM_POINTS = 130;
+
+export function dateTickFormatter(visiblePoints: number): (iso: string) => string {
+  return visiblePoints > MONTH_TICKS_FROM_POINTS ? formatMonthYear : formatDayMonth;
+}
+
+/**
+ * Mốc trục ngang khi hiện theo tháng: phiên đầu tiên của mỗi tháng (bỏ tháng đầu nếu bị cắt dở), tối đa
+ * `maxTicks` mốc, cách đều. Tránh "07/2026" lặp lại vì nhiều phiên cùng tháng.
+ */
+export function monthStartTicks(dates: readonly string[], maxTicks = 8): string[] {
+  const starts = dates.filter((date, i) => i > 0 && date.slice(0, 7) !== dates[i - 1].slice(0, 7));
+  if (starts.length <= maxTicks) return starts;
+  const step = Math.ceil(starts.length / maxTicks);
+  return starts.filter((_, i) => i % step === 0);
+}
+
+/** Nhãn trục giá: VND theo triệu đồng ("84,2 tr"), vàng số nguyên, bạc/dầu 1 chữ số. */
+export function formatAxisPrice(asset: AssetId, currency: Currency): (value: number) => string {
+  return (value: number) =>
+    currency === "VND"
+      ? `${formatNumber(value / 1_000_000, 1)} tr`
+      : formatNumber(value, asset === "gold" ? 0 : 1);
+}
+
 /** Ngày theo giờ Việt Nam của một thời điểm UTC: "2026-10-28T18:00:00Z" → "29/10/2026". */
 export function formatDateVn(iso: string): string {
   const date = new Date(iso);

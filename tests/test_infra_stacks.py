@@ -1005,3 +1005,65 @@ def test_accuracy_get_route_uses_cognito_and_accuracy_lambda(templates: dict) ->
     integration = json.dumps(method["Integration"]["Uri"])
     assert accuracy_function_id in integration
     assert method["Integration"]["Type"] == "AWS_PROXY"
+
+
+# ---------- Forecasts API: file lịch sử giá trên lake (?history= tối đa 520 phiên) ----------
+
+
+def _forecast_api_props(template: dict) -> dict:
+    return template["Resources"][_function_id(template, "cpaws-dev-forecasts-api")]["Properties"]
+
+
+def test_forecast_api_env_points_to_lake_price_history(templates):
+    from scripts.export_price_history import SERVING_PREFIX
+
+    variables = _forecast_api_props(templates["api"])["Environment"]["Variables"]
+    lake_names = [
+        r["Properties"]["BucketName"]
+        for k, r in _items(templates["data"], "AWS::S3::Bucket").items()
+        if k.startswith("Lake")
+    ]
+    # Cùng bucket lake của CpawsData, cùng prefix script xuất ghi
+    assert lake_names == ["cpaws-dev-lake"]
+    assert variables["PRICE_HISTORY_BUCKET"] == "cpaws-dev-lake"
+    assert variables["PRICE_HISTORY_PREFIX"] == f"{SERVING_PREFIX}/" == "serving/price-history/"
+    # Env cũ giữ nguyên
+    assert set(variables) == {
+        "FORECASTS_TABLE_NAME",
+        "ALLOWED_ORIGIN",
+        "PRICE_HISTORY_BUCKET",
+        "PRICE_HISTORY_PREFIX",
+    }
+
+
+def test_forecast_api_s3_access_is_get_object_on_price_history_only(templates):
+    t = templates["api"]
+    role_id = _forecast_api_props(t)["Role"]["Fn::GetAtt"][0]
+    statements = _role_statements(t, role_id)
+    s3_statements = [st for st in statements if "s3:" in json.dumps(st["Action"])]
+    assert s3_statements == [
+        {
+            "Sid": "PriceHistoryRead",
+            "Effect": "Allow",
+            "Action": "s3:GetObject",
+            "Resource": "arn:aws:s3:::cpaws-dev-lake/serving/price-history/*",
+        }
+    ]
+    others = [st for st in statements if st not in s3_statements]
+    assert [st["Action"] for st in others] == ["dynamodb:Query"]
+
+
+def test_price_history_adds_no_api_resources(templates):
+    """Không tạo bucket, không đổi API Gateway: /forecasts/{asset} vẫn chỉ khai báo asset, date."""
+    t = templates["api"]
+    assert not _items(t, "AWS::S3::Bucket")
+    assert not _items(t, "AWS::S3::BucketPolicy")
+    methods = [
+        m["Properties"]
+        for m in _items(t, "AWS::ApiGateway::Method").values()
+        if m["Properties"]["HttpMethod"] == "GET"
+        and "method.request.querystring.date" in m["Properties"].get("RequestParameters", {})
+    ]
+    assert [m["RequestParameters"] for m in methods] == [
+        {"method.request.path.asset": True, "method.request.querystring.date": False}
+    ]

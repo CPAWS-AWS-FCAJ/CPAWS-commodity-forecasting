@@ -1,13 +1,13 @@
 import { useMemo, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { config } from "../api/config";
 import { isAssetId } from "../api/types";
 import type { AssetId, ForecastDetail } from "../api/types";
-import { useForecast, useHistory } from "../api/hooks";
+import { useForecast, useForecastWithHistory } from "../api/hooks";
 import { AmountConverter } from "../components/AmountConverter";
 import { ChatPanel } from "../components/ChatPanel";
 import { FanChart } from "../components/FanChart";
 import { HorizonCards } from "../components/HorizonCards";
+import { GUIDE_ANCHORS, GuideLink } from "../components/HowToRead";
 import { PriceRange } from "../components/PriceRange";
 import { ProbabilityBadge } from "../components/ProbabilityBadge";
 import { ReturnRange } from "../components/ReturnRange";
@@ -18,7 +18,7 @@ import { EmptyBlock, ErrorBlock, LoadingBlock } from "../components/StateViews";
 import { BaselineBadge, RollBadge, SampleBadge, StaleBadge } from "../components/StatusBadges";
 import { CurrencyToggle, HorizonPicker, ModeToggle } from "../components/Toggles";
 import { ASSETS, isPriceHidden } from "../lib/assets";
-import { buildFanData, buildReturnFanData } from "../lib/chartData";
+import { buildReturnFanData } from "../lib/chartData";
 import { formatDate, formatDateTimeVn, formatNumber, formatPrice } from "../lib/format";
 import {
   BASELINE_Q252,
@@ -46,21 +46,21 @@ function AssetContent({ asset }: { asset: AssetId }) {
   const hidePrice = isPriceHidden(asset);
   const { mode, currency, setMode, setCurrency } = useSettings();
   const [horizonDays, setHorizonDays] = useState<number>(7);
-  const forecast = useForecast(asset);
-  const history = useHistory(asset);
-  const detail = forecast.data;
+  // Một truy vấn lấy cả dự báo lẫn price_history (dùng chung cache với trang Tổng quan giá). Lỗi thì
+  // lấy dự báo không kèm lịch sử để trang vẫn dùng được; biểu đồ khi đó chỉ vẽ phần dự báo.
+  const withHistory = useForecastWithHistory(asset);
+  const fallback = useForecast(asset, { enabled: withHistory.isError });
+  const detail: ForecastDetail | undefined = withHistory.data ?? fallback.data;
+  const pending = withHistory.isPending || (withHistory.isError && fallback.isPending);
+  const failed = withHistory.isError && fallback.isError;
 
-  const fanData = useMemo(
-    () => (detail && !hidePrice ? buildFanData(asset, detail, history.data?.points, currency) : []),
-    [asset, detail, history.data, currency, hidePrice],
-  );
   const returnFan = useMemo(() => (detail ? buildReturnFanData(detail) : []), [detail]);
 
   return (
     <div>
       <p className="text-sm">
         <Link to="/" className="text-forecast hover:underline">
-          ← Tất cả sản phẩm
+          Về danh sách sản phẩm
         </Link>
       </p>
       <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
@@ -71,18 +71,19 @@ function AssetContent({ asset }: { asset: AssetId }) {
         </div>
       </div>
 
-      {forecast.isPending ? (
+      {pending ? (
         <div className="mt-4">
           <LoadingBlock label="Đang tải dự báo…" />
         </div>
       ) : null}
-      {forecast.isError ? (
+      {failed ? (
         <div className="mt-4">
           <ErrorBlock
-            message={
-              forecast.error.message
-            }
-            onRetry={() => void forecast.refetch()}
+            message={fallback.error?.message ?? withHistory.error.message}
+            onRetry={() => {
+              void withHistory.refetch();
+              void fallback.refetch();
+            }}
           />
         </div>
       ) : null}
@@ -112,15 +113,17 @@ function AssetContent({ asset }: { asset: AssetId }) {
             {/* ADR-0005 (2): quy đổi khoảng dự báo ra số tiền, cả 4 tài sản, cả hai chế độ */}
             <AmountConverter asset={asset} detail={detail} horizonDays={selectedHorizon(detail, horizonDays)} />
 
-            {!hidePrice && (!config.historyAvailable || history.isError) ? (
-              <EmptyBlock title="Chưa có lịch sử giá">
-                Biểu đồ dưới đây chỉ vẽ phần dự báo vì API chưa có endpoint lịch sử giá.
-              </EmptyBlock>
-            ) : null}
             {hidePrice ? (
               mode === "advanced" ? null : <ReturnFanChart data={returnFan} />
             ) : (
-              <FanChart asset={asset} currency={currency} data={fanData} baseDate={detail.base_date} />
+              <FanChart
+                key={asset}
+                asset={asset}
+                currency={currency}
+                detail={detail}
+                history={withHistory.data?.price_history}
+                historyFailed={withHistory.isError}
+              />
             )}
 
             {mode === "advanced" ? (
@@ -156,7 +159,7 @@ function Summary({
   hidePrice,
 }: {
   asset: AssetId;
-  detail: NonNullable<ReturnType<typeof useForecast>["data"]>;
+  detail: ForecastDetail;
   horizonDays: number;
   onHorizonChange: (h: number) => void;
   currency: "USD" | "VND";
@@ -184,7 +187,7 @@ function Summary({
     .join(" · ");
 
   return (
-    <section aria-label="Tóm tắt dự báo" className="rounded-lg border border-line bg-white p-5">
+    <section aria-label="Tóm tắt dự báo" className="rounded-lg border border-line bg-surface p-5">
       <div className="flex flex-wrap items-center gap-2">
         {detail.is_sample ? <SampleBadge /> : null}
         {detail.model_version === BASELINE_Q252 ? <BaselineBadge /> : null}
@@ -259,7 +262,7 @@ function Notes({
   hidePrice,
 }: {
   asset: AssetId;
-  detail: NonNullable<ReturnType<typeof useForecast>["data"]>;
+  detail: ForecastDetail;
   currency: "USD" | "VND";
   hidePrice: boolean;
 }) {
@@ -271,17 +274,20 @@ function Notes({
       {asset === "gold" && currency === "VND" && !hidePrice ? <p>{GOLD_VND_NOTE}</p> : null}
       {isPriceHidden(asset) ? <p>Giá vàng và bạc đang được ẩn; trang này chỉ hiển thị % thay đổi và xác suất tăng.</p> : null}
       {detail.roll_in_horizon ? (
-        <p>Kỳ dự báo chứa ngày đáo hạn hợp đồng tương lai, giá có thể nhảy khi chuyển hợp đồng.</p>
+        <p>
+          Kỳ dự báo chứa ngày đáo hạn hợp đồng tương lai, giá có thể nhảy khi chuyển hợp đồng.{" "}
+          <GuideLink anchor={GUIDE_ANCHORS.roll} topic="đáo hạn hợp đồng dầu" />
+        </p>
       ) : null}
       {detail.is_sample ? <p>Số liệu trên trang này là dữ liệu mẫu, không phải dự báo thật.</p> : null}
       {detail.model_version === BASELINE_Q252 ? (
         <p>
           Dự báo hiện dùng mốc thống kê: khoảng dự báo lấy từ phân phối return của 252 phiên giao dịch gần nhất
-          (khoảng 1 năm), chưa dùng mô hình học máy.
+          (khoảng 1 năm), chưa dùng mô hình học máy.{" "}
+          <GuideLink anchor={GUIDE_ANCHORS.baseline} topic="mốc thống kê 252 phiên" />
         </p>
       ) : null}
       <p>{SOURCE_ATTRIBUTION}</p>
-      <p>{detail.disclaimer}</p>
     </section>
   );
 }

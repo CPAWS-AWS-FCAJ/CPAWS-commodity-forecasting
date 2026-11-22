@@ -20,6 +20,7 @@ data/cache/
 data/lake/
 data/forecasts/
 data/eval/
+data/serving/
 data/*.csv
 !data/sample_*.csv
 models/

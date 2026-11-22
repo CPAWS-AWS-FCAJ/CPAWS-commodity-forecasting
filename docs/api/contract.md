@@ -9,6 +9,8 @@
 - Cập nhật 2026-10-30 theo RFC [#45](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/45) v4.6 (PR [#65](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/65)): Rolling Accuracy và fixtures v3.1; không xác nhận code/API/IAM đã deploy.
 - Cập nhật 2026-10-31 (PR bổ sung sau #65): thống nhất key encoding, schema writer Rolling r3, error semantics `503 accuracy_unavailable` và xác nhận smoke PR #48 theo #68; **không sửa JSON fixtures** hoặc khẳng định API/Writer đã deploy.
 - Cập nhật 2026-11-03 (PR #72, review Khải): thống nhất nhãn Web `not_ready`/`collecting`; không đổi JSON response, DynamoDB schema hoặc ba fixtures.
+- Cập nhật 2026-11-20: `GET /forecasts/{asset}` thêm tham số tùy chọn `history` và trường `price_history` cho trang "Tổng quan giá" của web; không đổi bảng `Forecasts`, IAM hay API Gateway.
+- Cập nhật 2026-11-21: `history` tăng lên 1–520 phiên (~2 năm); điểm cũ hơn bảng `Forecasts` lấy từ file `serving/price-history/<asset>.json` trên lake (xuất một lần bằng `scripts/export_price_history.py`). Lambda forecasts-api thêm env `PRICE_HISTORY_BUCKET`, `PRICE_HISTORY_PREFIX` và quyền `s3:GetObject` đúng prefix đó; không đổi bảng `Forecasts` hay API Gateway.
 - Người viết: Khải; góp ý: Long (bản "Chốt target, phân vị và đánh giá mô hình" và "Đánh giá các metric trong metrics.py", 15/10; review PR #6)
 - Người dùng: Tuấn (API, Cognito), Tiến (web, Lambda `predict`), Long (DLinear), Phước (tool `get_forecast` của chatbot)
 
@@ -139,6 +141,51 @@ Dự báo mới nhất của một tài sản, đủ 7 mức h và 7 phân vị 
 ```
 
 Lỗi: `400 invalid_asset` (mã tài sản sai), `400 invalid_date`, `404 not_found` (chưa có bản ghi).
+
+#### Tham số `history` (trang "Tổng quan giá", biểu đồ trang sản phẩm)
+
+`?history=N` (số nguyên 1–520, 520 phiên ~ 2 năm giao dịch) trả thêm `price_history`: giá cuối phiên (`last_price`, cùng đơn vị hiển thị với bản ghi: USD/oz cho vàng, bạc; USD/bbl cho dầu) của tối đa N phiên gần nhất, xếp **cũ → mới**. Không có `history` thì response giữ nguyên như trên.
+
+```json
+{
+  "price_history": [
+    {"base_date": "2026-11-18", "last_price": 71.04},
+    {"base_date": "2026-11-19", "last_price": 71.32}
+  ]
+}
+```
+
+Nguồn điểm:
+
+1. **Bảng `Forecasts` (điểm mới):** Lambda đọc bằng `Query` theo `asset`, `ScanIndexForward=False`, `ProjectionExpression` chỉ `base_date`, `last_price`, `is_sample`; bỏ bản ghi `is_sample = true` và bản ghi thiếu `last_price` dương; đọc thêm trang khi trang đầu bị lọc bớt.
+2. **File lịch sử trên lake (điểm cũ):** chỉ khi `Forecasts` chưa đủ N điểm, Lambda đọc `s3://<PRICE_HISTORY_BUCKET>/<PRICE_HISTORY_PREFIX><asset>.json` (mặc định `s3://cpaws-<env>-lake/serving/price-history/<asset>.json`). File do `scripts/export_price_history.py` xuất **một lần** từ giá clean trên S3, tính bằng đúng hàm `last_price_display` của Lambda `predict` nên cùng đơn vị hiển thị với `Forecasts.last_price`: dầu = CL=F/BZ=F; vàng, bạc = GLD/SLV × display factor gần nhất ≤ ngày (factor trễ quá `FACTOR_MAX_LAG_SESSIONS` = 5 phiên NYSE hoặc không có thì bỏ ngày đó). Chỉ phiên của lịch tài sản, giá > 0, không nằm trong `rejected.parquet`, không forward-fill. Không cần chạy lại hằng ngày vì phiên mới lấy từ `Forecasts`. Script luôn ghi ở gốc bucket; nếu đặt `LAKE_PREFIX` mà `--dest s3` thì script dừng với mã 2, không ghi file nào.
+3. **Ghép:** ngày có trong cả hai thì **ưu tiên `Forecasts`**; ngày còn lại lấy từ file. Lấy N ngày gần nhất, xếp cũ → mới. Điểm trong file có ngày sai hoặc giá không dương/không hữu hạn bị bỏ; file sai `asset` hay sai `unit` bị bỏ cả file.
+4. **S3 lỗi** (chưa có file, `AccessDenied`, JSON hỏng, timeout): Lambda log `WARNING PRICE_HISTORY_FILE_UNAVAILABLE` kèm asset và lỗi, vẫn trả `200` với phần lấy từ `Forecasts` (như trước khi có file). Không có env `PRICE_HISTORY_BUCKET` thì chỉ đọc `Forecasts`.
+5. Lambda giữ nội dung file trong bộ nhớ container khoảng 30 phút theo asset (lần đọc lỗi không cache), nên file mới xuất có thể mất tới 30 phút mới hiện đủ.
+
+Định dạng file `serving/price-history/<asset>.json` (`ContentType: application/json`):
+
+```json
+{
+  "asset": "wti",
+  "unit": "USD/bbl",
+  "source": "Yahoo Finance (yfinance)",
+  "generated_at": "2026-11-21T03:00:00Z",
+  "last_base_date": "2026-11-20",
+  "input_snapshot_dt": "2026-11-21",
+  "points": [
+    {"base_date": "2024-11-19", "last_price": 70.0},
+    {"base_date": "2026-11-20", "last_price": 60.0}
+  ]
+}
+```
+
+Ví dụ rút gọn còn 2 điểm, số minh họa. `points` xếp cũ → mới, tối đa `--sessions` điểm (mặc định 520), giá làm tròn 2 chữ số; `input_snapshot_dt` là ngày `dt=` của snapshot `clean/prices` đã dùng. Lambda chỉ đọc `asset`, `unit`, `points`.
+
+- Chỉ có một điểm mỗi `base_date` (giá cuối phiên, không có dữ liệu trong ngày). Lịch sử bắt đầu từ điểm sớm nhất có trong file và bảng, nên có thể ít hơn N điểm.
+- Quyền IAM của Lambda forecasts-api: `dynamodb:Query` trên bảng `Forecasts` và `s3:GetObject` trên `arn:aws:s3:::cpaws-<env>-lake/serving/price-history/*` (không `ListBucket`, không ghi).
+- Cùng quy tắc hiển thị dữ liệu Yahoo của ADR-0005: chỉ sau đăng nhập, luôn ghi nguồn, web không cho tải xuống; vàng/bạc theo cờ `VITE_SHOW_METAL_PRICES`.
+- Lỗi thêm: `400 invalid_history` (N sai định dạng hoặc ngoài 1–520), `400 invalid_query` (có cả `date` và `history`, hoặc `history` trên `GET /forecasts`).
 
 ### `GET /accuracy/{asset}` — Rolling Accuracy MVP
 

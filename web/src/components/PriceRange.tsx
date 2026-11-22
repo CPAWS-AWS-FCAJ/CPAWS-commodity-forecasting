@@ -25,10 +25,10 @@ export function PriceRange({ asset, currency, usdVnd, low, mid, high, horizonDay
   const other: Currency = currency === "USD" ? "VND" : "USD";
   return (
     <div>
-      <p className="text-sm text-muted">Sau {horizonDays} phiên, nhiều khả năng trong khoảng (80%)</p>
+      <p className="text-sm text-muted">Sau {horizonDays} phiên, nhiều khả năng trong khoảng (khoảng 80%, q10–q90)</p>
       <p className="tabular mt-1 text-xl font-semibold">{range(asset, currency, usdVnd, low, high)}</p>
       <p className="tabular mt-1 text-sm text-muted">
-        Giá trung vị: {formatPrice(asset, convertPrice(asset, mid, currency, usdVnd), currency)}{" "}
+        Mức giữa (trung vị): {formatPrice(asset, convertPrice(asset, mid, currency, usdVnd), currency)}{" "}
         {displayUnit(asset, currency)}. Cùng khoảng theo {other}: {range(asset, other, usdVnd, low, high)}
       </p>
       {currency === "VND" ? (
