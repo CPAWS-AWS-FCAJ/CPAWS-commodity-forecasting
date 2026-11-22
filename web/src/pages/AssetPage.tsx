@@ -1,0 +1,293 @@
+import { useMemo, useState } from "react";
+import { Link, useParams } from "react-router-dom";
+import { isAssetId } from "../api/types";
+import type { AssetId, ForecastDetail } from "../api/types";
+import { useForecast, useForecastWithHistory } from "../api/hooks";
+import { AmountConverter } from "../components/AmountConverter";
+import { ChatPanel } from "../components/ChatPanel";
+import { FanChart } from "../components/FanChart";
+import { HorizonCards } from "../components/HorizonCards";
+import { GUIDE_ANCHORS, GuideLink } from "../components/HowToRead";
+import { PriceRange } from "../components/PriceRange";
+import { ProbabilityBadge } from "../components/ProbabilityBadge";
+import { ReturnRange } from "../components/ReturnRange";
+import { QuantileTable } from "../components/QuantileTable";
+import { ReliabilityBlock } from "../components/ReliabilityBlock";
+import { ReturnFanChart } from "../components/ReturnFanChart";
+import { EmptyBlock, ErrorBlock, LoadingBlock } from "../components/StateViews";
+import { BaselineBadge, RollBadge, SampleBadge, StaleBadge } from "../components/StatusBadges";
+import { CurrencyToggle, HorizonPicker, ModeToggle } from "../components/Toggles";
+import { ASSETS, isPriceHidden } from "../lib/assets";
+import { buildReturnFanData } from "../lib/chartData";
+import { formatDate, formatDateTimeVn, formatNumber, formatPrice } from "../lib/format";
+import {
+  BASELINE_Q252,
+  findHorizon,
+  isStaleByDate,
+  modelDisplayName,
+  todayInVietnam,
+} from "../lib/forecast";
+import { useSettings } from "../lib/settings";
+import { GOLD_VND_NOTE, SOURCE_ATTRIBUTION } from "../lib/source";
+import { convertPrice, displayUnit } from "../lib/units";
+import NotFound from "./NotFound";
+
+const BASIC_HORIZONS = [1, 3, 7] as const;
+
+export default function AssetPage() {
+  const { id } = useParams();
+  if (!isAssetId(id)) return <NotFound />;
+  return <AssetContent asset={id} />;
+}
+
+function AssetContent({ asset }: { asset: AssetId }) {
+  const meta = ASSETS[asset];
+  // Vàng/bạc có thể ẩn giá bằng VITE_SHOW_METAL_PRICES=false (ADR-0005)
+  const hidePrice = isPriceHidden(asset);
+  const { mode, currency, setMode, setCurrency } = useSettings();
+  const [horizonDays, setHorizonDays] = useState<number>(7);
+  // Một truy vấn lấy cả dự báo lẫn price_history (dùng chung cache với trang Tổng quan giá). Lỗi thì
+  // lấy dự báo không kèm lịch sử để trang vẫn dùng được; biểu đồ khi đó chỉ vẽ phần dự báo.
+  const withHistory = useForecastWithHistory(asset);
+  const fallback = useForecast(asset, { enabled: withHistory.isError });
+  const detail: ForecastDetail | undefined = withHistory.data ?? fallback.data;
+  const pending = withHistory.isPending || (withHistory.isError && fallback.isPending);
+  const failed = withHistory.isError && fallback.isError;
+
+  const returnFan = useMemo(() => (detail ? buildReturnFanData(detail) : []), [detail]);
+
+  return (
+    <div>
+      <p className="text-sm">
+        <Link to="/" className="text-forecast hover:underline">
+          Về danh sách sản phẩm
+        </Link>
+      </p>
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold">{meta.name}</h1>
+        <div className="flex flex-wrap gap-2">
+          <ModeToggle value={mode} onChange={setMode} />
+          {hidePrice ? null : <CurrencyToggle value={currency} onChange={setCurrency} />}
+        </div>
+      </div>
+
+      {pending ? (
+        <div className="mt-4">
+          <LoadingBlock label="Đang tải dự báo…" />
+        </div>
+      ) : null}
+      {failed ? (
+        <div className="mt-4">
+          <ErrorBlock
+            message={fallback.error?.message ?? withHistory.error.message}
+            onRetry={() => {
+              void withHistory.refetch();
+              void fallback.refetch();
+            }}
+          />
+        </div>
+      ) : null}
+
+      {detail ? (
+        <div className="mt-4 grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
+          <div className="min-w-0 space-y-6">
+            <Summary
+              asset={asset}
+              detail={detail}
+              horizonDays={horizonDays}
+              onHorizonChange={setHorizonDays}
+              currency={currency}
+              advanced={mode === "advanced"}
+              hidePrice={hidePrice}
+            />
+
+            <HorizonCards
+              asset={asset}
+              detail={detail}
+              currency={currency}
+              hidePrice={hidePrice}
+              selected={selectedHorizon(detail, horizonDays)}
+              onSelect={setHorizonDays}
+            />
+
+            {/* ADR-0005 (2): quy đổi khoảng dự báo ra số tiền, cả 4 tài sản, cả hai chế độ */}
+            <AmountConverter asset={asset} detail={detail} horizonDays={selectedHorizon(detail, horizonDays)} />
+
+            {hidePrice ? (
+              mode === "advanced" ? null : <ReturnFanChart data={returnFan} />
+            ) : (
+              <FanChart
+                key={asset}
+                asset={asset}
+                currency={currency}
+                detail={detail}
+                history={withHistory.data?.price_history}
+                historyFailed={withHistory.isError}
+              />
+            )}
+
+            {mode === "advanced" ? (
+              <>
+                <ReturnFanChart data={returnFan} />
+                <QuantileTable asset={asset} detail={detail} currency={currency} showPrices={!hidePrice} />
+                <EmptyBlock title="Tín hiệu ngoài giá (GPR, OVX/GVZ, lịch FOMC/OPEC+)">
+                  Biểu đồ nhỏ 90 ngày sẽ có khi bảng tín hiệu theo ngày và endpoint tương ứng sẵn sàng.
+                </EmptyBlock>
+              </>
+            ) : null}
+
+            <ReliabilityBlock asset={asset} showHorizons={mode === "advanced"} />
+
+            <Notes asset={asset} detail={detail} currency={currency} hidePrice={hidePrice} />
+          </div>
+          <div className="lg:sticky lg:top-4 lg:self-start">
+            <ChatPanel key={asset} asset={asset} assetName={meta.name} />
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function Summary({
+  asset,
+  detail,
+  horizonDays,
+  onHorizonChange,
+  currency,
+  advanced,
+  hidePrice,
+}: {
+  asset: AssetId;
+  detail: ForecastDetail;
+  horizonDays: number;
+  onHorizonChange: (h: number) => void;
+  currency: "USD" | "VND";
+  advanced: boolean;
+  hidePrice: boolean;
+}) {
+  const horizon =
+    findHorizon(detail, selectedHorizon(detail, horizonDays)) ?? detail.horizons[detail.horizons.length - 1];
+  const options = BASIC_HORIZONS.filter((h) => findHorizon(detail, h));
+  const i10 = detail.quantile_levels.findIndex((l) => Math.abs(l - 0.1) < 1e-9);
+  const i50 = detail.quantile_levels.findIndex((l) => Math.abs(l - 0.5) < 1e-9);
+  const i90 = detail.quantile_levels.findIndex((l) => Math.abs(l - 0.9) < 1e-9);
+
+  const stale =
+    detail.stale_sources.length > 0 ||
+    isStaleByDate(detail.base_date, todayInVietnam(), detail.is_sample);
+  const lastDisplay = convertPrice(asset, detail.last_price, currency, detail.fx.usd_vnd);
+  // created_at và model_version có thể chưa có trong phản hồi API (PR #22)
+  const footer = [
+    detail.created_at ? `Dự báo tạo lúc ${formatDateTimeVn(detail.created_at)}` : null,
+    detail.model_version ? modelFooter(detail.model_version) : null,
+    advanced ? `chuỗi mục tiêu ${detail.target_series}` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  return (
+    <section aria-label="Tóm tắt dự báo" className="rounded-lg border border-line bg-surface p-5">
+      <div className="flex flex-wrap items-center gap-2">
+        {detail.is_sample ? <SampleBadge /> : null}
+        {detail.model_version === BASELINE_Q252 ? <BaselineBadge /> : null}
+        {stale ? <StaleBadge sources={detail.stale_sources} /> : null}
+        {detail.roll_in_horizon ? <RollBadge /> : null}
+      </div>
+
+      {hidePrice ? (
+        <p className="mt-3 text-sm text-muted">
+          Dữ liệu đến ngày {formatDate(detail.base_date)}. Giá {ASSETS[asset].name.toLowerCase()} đang được ẩn;
+          chỉ hiển thị % thay đổi và xác suất tăng.
+        </p>
+      ) : (
+        <>
+          <p className="tabular mt-3 text-3xl font-bold">
+            {formatPrice(asset, lastDisplay, currency)}{" "}
+            <span className="text-base font-normal text-muted">{displayUnit(asset, currency)}</span>
+          </p>
+          <p className="text-xs text-muted">
+            Giá cuối ngày {formatDate(detail.base_date)} · tỷ giá USD/VND {formatNumber(detail.fx.usd_vnd)} (
+            {formatDate(detail.fx.date)})
+          </p>
+        </>
+      )}
+
+      <div className="mt-4">
+        <HorizonPicker value={horizon.h === horizonDays ? horizonDays : horizon.h} options={options} onChange={onHorizonChange} />
+      </div>
+
+      <div className="mt-5 grid gap-6 sm:grid-cols-2">
+        <ProbabilityBadge probUp={horizon.prob_up} horizonDays={horizon.h} />
+        {hidePrice ? (
+          <ReturnRange
+            low={horizon.returns[i10]}
+            mid={horizon.returns[i50]}
+            high={horizon.returns[i90]}
+            horizonDays={horizon.h}
+          />
+        ) : (
+          <PriceRange
+            asset={asset}
+            currency={currency}
+            usdVnd={detail.fx.usd_vnd}
+            low={horizon.prices[i10]}
+            mid={horizon.prices[i50]}
+            high={horizon.prices[i90]}
+            horizonDays={horizon.h}
+          />
+        )}
+      </div>
+
+      {footer ? <p className="mt-4 text-xs text-muted">{footer}</p> : null}
+    </section>
+  );
+}
+
+/** h đang chọn nếu bản ghi có mức đó, không thì mức cuối (h = 7) để tóm tắt và dải thẻ khớp nhau. */
+function selectedHorizon(detail: ForecastDetail, horizonDays: number): number {
+  return findHorizon(detail, horizonDays)?.h ?? detail.horizons[detail.horizons.length - 1].h;
+}
+
+/** "Mốc thống kê 252 phiên (baseline-q252)" hoặc "mô hình <mã>" khi không có tên riêng. */
+function modelFooter(version: string): string {
+  const name = modelDisplayName(version);
+  return name ? `${name} (${version})` : `mô hình ${version}`;
+}
+
+function Notes({
+  asset,
+  detail,
+  currency,
+  hidePrice,
+}: {
+  asset: AssetId;
+  detail: ForecastDetail;
+  currency: "USD" | "VND";
+  hidePrice: boolean;
+}) {
+  const meta = ASSETS[asset];
+  return (
+    <section aria-label="Lưu ý" className="space-y-1 text-xs text-muted">
+      {meta.note ? <p>{meta.note}</p> : null}
+      {/* Thẻ, bảng và biểu đồ cũng hiện VND/lượng nên nhãn đặt ở phần lưu ý của cả trang */}
+      {asset === "gold" && currency === "VND" && !hidePrice ? <p>{GOLD_VND_NOTE}</p> : null}
+      {isPriceHidden(asset) ? <p>Giá vàng và bạc đang được ẩn; trang này chỉ hiển thị % thay đổi và xác suất tăng.</p> : null}
+      {detail.roll_in_horizon ? (
+        <p>
+          Kỳ dự báo chứa ngày đáo hạn hợp đồng tương lai, giá có thể nhảy khi chuyển hợp đồng.{" "}
+          <GuideLink anchor={GUIDE_ANCHORS.roll} topic="đáo hạn hợp đồng dầu" />
+        </p>
+      ) : null}
+      {detail.is_sample ? <p>Số liệu trên trang này là dữ liệu mẫu, không phải dự báo thật.</p> : null}
+      {detail.model_version === BASELINE_Q252 ? (
+        <p>
+          Dự báo hiện dùng mốc thống kê: khoảng dự báo lấy từ phân phối return của 252 phiên giao dịch gần nhất
+          (khoảng 1 năm), chưa dùng mô hình học máy.{" "}
+          <GuideLink anchor={GUIDE_ANCHORS.baseline} topic="mốc thống kê 252 phiên" />
+        </p>
+      ) : null}
+      <p>{SOURCE_ATTRIBUTION}</p>
+    </section>
+  );
+}

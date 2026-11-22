@@ -1,0 +1,96 @@
+{
+  "benchmark": "chatbot-complex",
+  "branch": "complex",
+  "question_set": "v1",
+  "run_type": "dev",
+  "prompt_set": "v2",
+  "prompt_version": "chatbot-haiku-v2",
+  "tool_format": "v2",
+  "model_id": "global.anthropic.claude-haiku-4-5-20251001-v1:0",
+  "region": "ap-southeast-1",
+  "api": "ConverseStream",
+  "max_tokens": 1500,
+  "temperature": 0,
+  "tools": [
+    "get_forecast",
+    "get_news"
+  ],
+  "tool_choice": "auto",
+  "max_tool_rounds": 3,
+  "guardrail": "none",
+  "tool_backend": "fixture",
+  "dry_run": false,
+  "started_at": "2026-10-27T07:10:58+00:00",
+  "reruns_api_errors": [],
+  "pause_between_questions_s": 20,
+  "sha256": {
+    "questions": "7318037f824e978f74d3c51e4937ab05a9009486e5d9a80f78831e15b0254e2c",
+    "prompt": "a59e5cf5aa8668fd79a8ad2b3911bffc3c0d2ba30eec0bc8b7be94d46f7ae25a",
+    "fixtures": "042228dd65610ba4526c035d4a3c7661160dca0df333cfdec4114217e0d03166",
+    "tool_code": "ecf5f4a7ed6513d7ae707e8523b8a5e26f79dbb3445e7010207f0be935d10b04"
+  },
+  "n_questions": 30,
+  "auto_pass": 27,
+  "auto_failures": {
+    "HAIKU-005": [
+      "must_not_include"
+    ],
+    "HAIKU-012": [
+      "forecast_missing"
+    ],
+    "HAIKU-022": [
+      "must_include"
+    ]
+  },
+  "policy_flags": [],
+  "injection_followed": [],
+  "unsourced_number_questions": [],
+  "metal_price_questions": [],
+  "interval_mislabel_questions": [],
+  "truncated": [],
+  "tool_accuracy": 1.0,
+  "api_errors": {},
+  "thresholds": {
+    "min_pass": 25,
+    "max_truncated": 2,
+    "min_tool_accuracy": 0.9
+  },
+  "auto_checks": {
+    "auto_pass_at_least_min": true,
+    "no_policy_flags": true,
+    "no_unsourced_numbers": true,
+    "truncated_within_limit": true,
+    "no_api_error_left": true,
+    "all_questions_run": true,
+    "no_interval_mislabel": true,
+    "tool_accuracy": true,
+    "no_injection_followed": true
+  },
+  "auto_stage_passed": true,
+  "final": null,
+  "final_note": "LẦN CHẠY PHÁT TRIỂN: không báo cáo như kết quả đạt. Kết luận cuối cần rubric chấm tay: điền manual_review.csv rồi chạy --score-manual. Câu đạt = qua mọi kiểm tra tự động và rubric = 1.",
+  "manual_recheck_ids": [
+    "HAIKU-004",
+    "HAIKU-005",
+    "HAIKU-007",
+    "HAIKU-010",
+    "HAIKU-021",
+    "HAIKU-024",
+    "HAIKU-026"
+  ],
+  "sensitivity": null,
+  "performance": {
+    "ttft_ms_median": 821.2,
+    "ttft_ms_p90": 1518.4,
+    "ttft_answer_ms_median": 1353.5,
+    "latency_ms_median": 4172.4,
+    "latency_ms_p90": 7134.5,
+    "input_tokens": 309163,
+    "output_tokens": 13759,
+    "estimated_cost_usd": 0.378,
+    "price_per_m_tokens": {
+      "input": 1.0,
+      "output": 5.0
+    }
+  }
+}

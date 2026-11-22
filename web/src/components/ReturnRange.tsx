@@ -1,0 +1,27 @@
+import { formatReturnPercent } from "../lib/format";
+
+interface Props {
+  /** Log return tại q10, q50, q90 (số thập phân, ví dụ 0,01 = +1%). */
+  low: number;
+  mid: number;
+  high: number;
+  horizonDays: number;
+}
+
+/** Thay cho PriceRange khi ẩn giá (vàng/bạc, VITE_SHOW_METAL_PRICES=false): chỉ hiện % thay đổi. */
+export function ReturnRange({ low, mid, high, horizonDays }: Props) {
+  return (
+    <div>
+      <p className="text-sm text-muted">
+        Sau {horizonDays} phiên, mức thay đổi nhiều khả năng nằm trong khoảng (khoảng 80%, q10–q90)
+      </p>
+      <p className="tabular mt-1 text-xl font-semibold">
+        {formatReturnPercent(low)} đến {formatReturnPercent(high)}
+      </p>
+      <p className="tabular mt-1 text-sm text-muted">
+        Mức giữa (trung vị): {formatReturnPercent(mid)}. Tính theo log return, gần bằng % thay đổi của giá; trang
+        này không hiển thị giá.
+      </p>
+    </div>
+  );
+}

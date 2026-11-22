@@ -1,0 +1,5 @@
+# Optional standalone DLinear checks; versions match repository CI.
+# Full CPAWS development continues to use requirements-dev.txt.
+-r requirements-dlinear-training.txt
+pytest==9.1.1
+ruff==0.16.10

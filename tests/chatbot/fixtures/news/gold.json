@@ -1,0 +1,32 @@
+{
+  "asset": "gold",
+  "items": [
+    {
+      "title": "Central bank officials hint at slower pace of rate cuts",
+      "summary": "Officials at the latest policy meeting signalled that further rate cuts may come more slowly than markets expected, which tends to weigh on non-yielding assets such as gold.",
+      "link": "https://example.com/news/gold-rate-cut-pace",
+      "source": "Example Markets Wire",
+      "published_at": "2026-10-13T14:20:00Z",
+      "impact_score": 2,
+      "direction": "bearish"
+    },
+    {
+      "title": "Safe-haven demand rises after border tensions flare in a neighbouring region",
+      "summary": "Investors moved part of their portfolios into safe-haven assets after reports of renewed border tensions, supporting demand for gold-backed funds.",
+      "link": "https://example.com/news/gold-safe-haven-demand",
+      "source": "Sample Commodity Desk",
+      "published_at": "2026-10-12T09:05:00Z",
+      "impact_score": 3,
+      "direction": "bullish"
+    },
+    {
+      "title": "Jewellery retailers report steady autumn sales",
+      "summary": "A survey of retailers in a major market showed seasonal jewellery demand broadly unchanged from last year.",
+      "link": "https://example.com/news/gold-jewellery-sales",
+      "source": "Example Markets Wire",
+      "published_at": "2026-10-09T07:40:00Z",
+      "impact_score": 1,
+      "direction": "uncertain"
+    }
+  ]
+}

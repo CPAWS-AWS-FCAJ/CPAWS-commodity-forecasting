@@ -1,0 +1,8 @@
+# Build context is the repo root; send only what docker/ingest/Dockerfile copies.
+# Everything else (data/, tests/, notebooks/, env/, .env, .git ...) stays out.
+*
+!requirements-ingest.txt
+!src/__init__.py
+!src/data/
+**/__pycache__
+**/*.pyc

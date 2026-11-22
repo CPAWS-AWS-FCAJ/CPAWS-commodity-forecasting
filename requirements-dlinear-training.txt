@@ -1,0 +1,7 @@
+# Training/data dependencies only. NumPy inference needs only numpy.
+# Install the CPU or CUDA torch wheel appropriate for your local/Kaggle environment.
+-r requirements-dlinear-runtime.txt
+pandas>=2.2,<4
+pyarrow>=16
+pandas_market_calendars>=4.4,<6
+torch>=2.2,<3

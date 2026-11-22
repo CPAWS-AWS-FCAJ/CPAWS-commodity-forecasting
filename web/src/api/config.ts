@@ -1,0 +1,42 @@
+// Biến môi trường công khai (VITE_*). Không bao giờ đặt khóa bí mật ở front-end.
+const env = import.meta.env;
+
+/** Không có API URL, hoặc VITE_USE_SAMPLE=true → dùng dữ liệu mẫu cục bộ. */
+const useSample = env.VITE_USE_SAMPLE === "true" || !env.VITE_API_URL;
+
+export type SampleAccuracy = "not_ready" | "collecting" | "ready";
+
+function parseSampleAccuracy(value: string | undefined): SampleAccuracy {
+  return value === "not_ready" || value === "ready" ? value : "collecting";
+}
+
+export const config = {
+  apiUrl: (env.VITE_API_URL ?? "").replace(/\/+$/, ""),
+  useSample,
+  /**
+   * Chế độ mẫu: fixture GET /accuracy dùng để xem giao diện (tests/fixtures/accuracy/, synthetic).
+   * Mặc định "collecting" vì chưa giả định `ready` trước 22/11.
+   */
+  sampleAccuracy: parseSampleAccuracy(env.VITE_SAMPLE_ACCURACY),
+  /**
+   * Gọi GET /accuracy/{asset}. Route chưa deploy thì API Gateway trả 403 cho cả preflight CORS, nên
+   * với API thật chỉ bật khi VITE_ACCURACY_API=true; tắt thì khối hiện "Chưa có kết quả đánh giá".
+   * Chế độ mẫu luôn bật (đọc fixture).
+   */
+  accuracyApiEnabled: useSample || env.VITE_ACCURACY_API === "true",
+  /**
+   * Hiển thị giá vàng/bạc (dựng từ dữ liệu Yahoo, ADR-0005). Mặc định TẮT (phương án dự phòng đang
+   * áp dụng): vàng/bạc chỉ hiện % thay đổi và xác suất tăng. Chỉ bật khi VITE_SHOW_METAL_PRICES=true.
+   */
+  showMetalPrices: env.VITE_SHOW_METAL_PRICES === "true",
+  authEnabled: env.VITE_AUTH_ENABLED === "true",
+  /**
+   * Hiện màn tự đăng ký (+ nhập mã xác minh email) trên màn đăng nhập Cognito. Mặc định TẮT.
+   * Chỉ bật khi User Pool đã cho tự đăng ký (CpawsAuth self sign-up + xác minh email); bật trước
+   * thì Cognito từ chối đăng ký. Tắt lại sau khi chấm xong.
+   */
+  allowSignUp: env.VITE_ALLOW_SIGNUP === "true",
+  region: env.VITE_REGION ?? "ap-southeast-1",
+  userPoolId: env.VITE_USER_POOL_ID ?? "",
+  userPoolClientId: env.VITE_USER_POOL_CLIENT_ID ?? "",
+} as const;

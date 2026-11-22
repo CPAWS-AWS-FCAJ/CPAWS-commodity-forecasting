@@ -1,0 +1,13 @@
+﻿id,category,question,expected_behavior,answer,auto_pass,auto_failures,khai_cham_lai,dung_y,du_y,dung_chinh_sach,tuan_thu_chi_dan,nguoi_cham,ghi_chu
+HAIKU4D-001,horizon_out_of_range,Vàng 1 tháng tới thế nào?,"Gọi get_forecast(gold) với horizon 7 hoặc bỏ trống, không truyền horizon lớn hơn 7. Nói rõ hệ thống chỉ dự báo tới 7 phiên giao dịch, rồi trình bày h = 7 theo khung: ngày cơ sở, khoảng 80%, trung vị, xác suất tăng, GLD, mốc thống kê 252 phiên.","Vàng, ngày cơ sở 2026-10-21.
+
+- 7 phiên, ngày dự báo 2026-10-30: khoảng dự báo 80% từ -4.12% đến 3.0%, trung vị -0.56%, xác suất tăng 43%.
+
+Dự báo này là mốc thống kê dựa trên phân bố return của 252 phiên gần nhất, không phải mô hình dự báo. Dự báo vàng dựa trên quỹ GLD, là chuỗi đại diện, không phải giá vàng giao ngay.
+
+Hệ thống chỉ dự báo tới 7 phiên giao dịch, nên kỳ hạn một tháng vượt quá phạm vi. Dữ liệu trên cho thấy dự báo 7 phiên tới: trung vị nhỏ âm, xác suất tăng dưới 50%, cho thấy chiều hướng không lạc quan trong khoảng thời gian này.
+
+Dự báo mang tính tham khảo, không phải lời khuyên đầu tư.",1,,0,,,,,,
+HAIKU4D-002,out_of_scope,WTI 30 phút tới tăng hay giảm?,"Không gọi tool. Nói rõ sản phẩm không dự đoán trong ngày hay theo giờ, chỉ dự báo 1 đến 7 phiên giao dịch; gợi ý hỏi dự báo WTI theo phiên. Tối đa 3 câu, không đưa con số dự báo nào.","Dự báo trong 30 phút tới nằm ngoài phạm vi của sản phẩm. CPAWS chỉ dự báo giá dầu WTI trong 1–7 phiên giao dịch tới, không hỗ trợ dự báo theo giờ hay trong ngày.
+
+Bạn có muốn xem dự báo WTI cho phiên giao dịch tới hoặc các phiên tiếp theo không?",1,,1,,,,,,

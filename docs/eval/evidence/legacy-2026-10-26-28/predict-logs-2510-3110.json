@@ -1,0 +1,201 @@
+{
+    "events": [
+        {
+            "logStreamName": "2026/10/25/cpaws-dev-predict[$LATEST]e56bf9d0fe824a18bb742cc34ec152c0",
+            "timestamp": 1792920071532,
+            "message": "INIT_REPORT Init Duration: 10000.09 ms\tPhase: init\tStatus: timeout\n",
+            "ingestionTime": 1792920072420,
+            "eventId": "39983453676566430386382261933783939896341524637982851072"
+        },
+        {
+            "logStreamName": "2026/10/25/cpaws-dev-predict[$LATEST]e56bf9d0fe824a18bb742cc34ec152c0",
+            "timestamp": 1792920088226,
+            "message": "START RequestId: 28f5c4cb-3fd3-4282-9426-7c676a47320a Version: $LATEST\n",
+            "ingestionTime": 1792920097240,
+            "eventId": "39983454048855070730652484688586876297300969628256632832"
+        },
+        {
+            "logStreamName": "2026/10/25/cpaws-dev-predict[$LATEST]e56bf9d0fe824a18bb742cc34ec152c0",
+            "timestamp": 1792920094650,
+            "message": "[INFO]\t2026-10-25T09:21:34.650Z\t28f5c4cb-3fd3-4282-9426-7c676a47320a\tPREDICT_DONE {'snapshot_dt': '2026-10-24', 'model_version': 'baseline-q252', 'base_date_override': None, 'dry_run': True, 'ok': True, 'written': 0, 'assets': {'gold': {'status': 'ok', 'reason': '', 'base_date': '2026-10-23', 'n_crossed': 0, 'prob_up': [0.516416, 0.485528, 0.510393, 0.514393, 0.5131, 0.492515, 0.500947]}, 'silver': {'status': 'ok', 'reason': '', 'base_date': '2026-10-23', 'n_crossed': 0, 'prob_up': [0.557746, 0.544838, 0.533803, 0.522238, 0.515246, 0.535588, 0.516192]}, 'brent': {'status': 'ok', 'reason': '', 'base_date': '2026-10-23', 'n_crossed': 0, 'prob_up': [0.552251, 0.539437, 0.514087, 0.523494, 0.55394, 0.54849, 0.577294]}, 'wti': {'status': 'ok', 'reason': '', 'base_date': '2026-10-23', 'n_crossed': 0, 'prob_up': [0.543378, 0.548215, 0.541014, 0.51781, 0.535696, 0.545185, 0.547156]}}}\n",
+            "ingestionTime": 1792920097240,
+            "eventId": "39983454192115057886013207749812330480794043942674825222"
+        },
+        {
+            "logStreamName": "2026/10/25/cpaws-dev-predict[$LATEST]e56bf9d0fe824a18bb742cc34ec152c0",
+            "timestamp": 1792920094666,
+            "message": "REPORT RequestId: 28f5c4cb-3fd3-4282-9426-7c676a47320a\tDuration: 22298.60 ms\tBilled Duration: 22299 ms\tMemory Size: 1024 MB\tMax Memory Used: 254 MB\t\n",
+            "ingestionTime": 1792920097240,
+            "eventId": "39983454192471869809189697720076901973156417726770511880"
+        },
+        {
+            "logStreamName": "2026/10/25/cpaws-dev-predict[$LATEST]e56bf9d0fe824a18bb742cc34ec152c0",
+            "timestamp": 1792920239522,
+            "message": "START RequestId: 141e2cff-b224-40c2-8822-7b7c33cb417f Version: $LATEST\n",
+            "ingestionTime": 1792920248550,
+            "eventId": "39983457422868616287541643693297330226307873673418440704"
+        },
+        {
+            "logStreamName": "2026/10/25/cpaws-dev-predict[$LATEST]e56bf9d0fe824a18bb742cc34ec152c0",
+            "timestamp": 1792920240755,
+            "message": "[INFO]\t2026-10-25T09:24:00.755Z\t141e2cff-b224-40c2-8822-7b7c33cb417f\tPREDICT_DONE {'snapshot_dt': '2026-10-25', 'model_version': 'baseline-q252', 'base_date_override': None, 'dry_run': False, 'ok': True, 'written': 4, 'assets': {'gold': {'status': 'ok', 'reason': '', 'base_date': '2026-10-23', 'n_crossed': 0, 'prob_up': [0.516416, 0.485528, 0.510393, 0.514393, 0.5131, 0.492515, 0.500947], 'written_to': 'dynamodb://cpaws-dev-forecasts/gold/2026-10-23'}, 'silver': {'status': 'ok', 'reason': '', 'base_date': '2026-10-23', 'n_crossed': 0, 'prob_up': [0.557746, 0.544838, 0.533803, 0.522238, 0.515246, 0.535588, 0.516192], 'written_to': 'dynamodb://cpaws-dev-forecasts/silver/2026-10-23'}, 'brent': {'status': 'ok', 'reason': '', 'base_date': '2026-10-23', 'n_crossed': 0, 'prob_up': [0.543218, 0.539437, 0.514087, 0.523494, 0.55394, 0.54849, 0.577294], 'written_to': 'dynamodb://cpaws-dev-forecasts/brent/2026-10-23'}, 'wti': {'status': 'ok', 'reason': '', 'base_date': '2026-10-23', 'n_crossed': 0, 'prob_up': [0.543378, 0.548215, 0.541014, 0.51781, 0.535696, 0.545185, 0.547156], 'written_to': 'dynamodb://cpaws-dev-forecasts/wti/2026-10-23'}}}\n",
+            "ingestionTime": 1792920248550,
+            "eventId": "39983457450365435117329902026810870856483303410292293637"
+        },
+        {
+            "logStreamName": "2026/10/25/cpaws-dev-predict[$LATEST]e56bf9d0fe824a18bb742cc34ec152c0",
+            "timestamp": 1792920240766,
+            "message": "REPORT RequestId: 141e2cff-b224-40c2-8822-7b7c33cb417f\tDuration: 1243.04 ms\tBilled Duration: 1244 ms\tMemory Size: 1024 MB\tMax Memory Used: 265 MB\t\n",
+            "ingestionTime": 1792920248550,
+            "eventId": "39983457450610743314513738881367763757482435386858078215"
+        },
+        {
+            "logStreamName": "2026/10/25/cpaws-dev-predict[$LATEST]e56bf9d0fe824a18bb742cc34ec152c0",
+            "timestamp": 1792920548016,
+            "message": "START RequestId: 3c37a868-98ce-4500-a2d4-99225a51c38e Version: $LATEST\n",
+            "ingestionTime": 1792920557031,
+            "eventId": "39983464302514705563047699491147671718568720068484661248"
+        },
+        {
+            "logStreamName": "2026/10/25/cpaws-dev-predict[$LATEST]e56bf9d0fe824a18bb742cc34ec152c0",
+            "timestamp": 1792920549040,
+            "message": "[INFO]\t2026-10-25T09:29:09.040Z\t3c37a868-98ce-4500-a2d4-99225a51c38e\tPREDICT_DONE {'snapshot_dt': '2026-10-25', 'model_version': 'baseline-q252', 'base_date_override': None, 'dry_run': False, 'ok': True, 'written': 4, 'assets': {'gold': {'status': 'ok', 'reason': '', 'base_date': '2026-10-23', 'n_crossed': 0, 'prob_up': [0.516416, 0.485528, 0.510393, 0.514393, 0.5131, 0.492515, 0.500947], 'written_to': 'dynamodb://cpaws-dev-forecasts/gold/2026-10-23'}, 'silver': {'status': 'ok', 'reason': '', 'base_date': '2026-10-23', 'n_crossed': 0, 'prob_up': [0.557746, 0.544838, 0.533803, 0.522238, 0.515246, 0.535588, 0.516192], 'written_to': 'dynamodb://cpaws-dev-forecasts/silver/2026-10-23'}, 'brent': {'status': 'ok', 'reason': '', 'base_date': '2026-10-23', 'n_crossed': 0, 'prob_up': [0.543218, 0.539437, 0.514087, 0.523494, 0.55394, 0.54849, 0.577294], 'written_to': 'dynamodb://cpaws-dev-forecasts/brent/2026-10-23'}, 'wti': {'status': 'ok', 'reason': '', 'base_date': '2026-10-23', 'n_crossed': 0, 'prob_up': [0.543378, 0.548215, 0.541014, 0.51781, 0.535696, 0.545185, 0.547156], 'written_to': 'dynamodb://cpaws-dev-forecasts/wti/2026-10-23'}}}\n",
+            "ingestionTime": 1792920557031,
+            "eventId": "39983464325350668646343057588080247229760642250608607237"
+        },
+        {
+            "logStreamName": "2026/10/25/cpaws-dev-predict[$LATEST]e56bf9d0fe824a18bb742cc34ec152c0",
+            "timestamp": 1792920549049,
+            "message": "REPORT RequestId: 3c37a868-98ce-4500-a2d4-99225a51c38e\tDuration: 1032.91 ms\tBilled Duration: 1033 ms\tMemory Size: 1024 MB\tMax Memory Used: 268 MB\t\n",
+            "ingestionTime": 1792920557031,
+            "eventId": "39983464325551375353129833196354068694214477504162430983"
+        },
+        {
+            "logStreamName": "2026/10/27/cpaws-dev-predict[$LATEST]f03c14ddcf784058a68f17c6335a684d",
+            "timestamp": 1793103330014,
+            "message": "START RequestId: ed5fe050-6f93-41fe-bc6f-3e0127e29794 Version: $LATEST\n",
+            "ingestionTime": 1793103333288,
+            "eventId": "39987540477278981897009915389458389998365643391277072384"
+        },
+        {
+            "logStreamName": "2026/10/27/cpaws-dev-predict[$LATEST]f03c14ddcf784058a68f17c6335a684d",
+            "timestamp": 1793103333057,
+            "message": "[INFO]\t2026-10-27T12:15:33.056Z\ted5fe050-6f93-41fe-bc6f-3e0127e29794\tPREDICT_DONE {'snapshot_dt': '2026-10-27', 'model_version': 'baseline-q252', 'base_date_override': None, 'dry_run': False, 'ok': True, 'written': 4, 'assets': {'gold': {'status': 'ok', 'reason': '', 'base_date': '2026-10-26', 'n_crossed': 0, 'prob_up': [0.518463, 0.485528, 0.510393, 0.514393, 0.512996, 0.492515, 0.500902], 'written_to': 'dynamodb://cpaws-dev-forecasts/gold/2026-10-26'}, 'silver': {'status': 'ok', 'reason': '', 'base_date': '2026-10-26', 'n_crossed': 0, 'prob_up': [0.557746, 0.545432, 0.533803, 0.521408, 0.505503, 0.535305, 0.515781], 'written_to': 'dynamodb://cpaws-dev-forecasts/silver/2026-10-26'}, 'brent': {'status': 'ok', 'reason': '', 'base_date': '2026-10-26', 'n_crossed': 0, 'prob_up': [0.552251, 0.54619, 0.532007, 0.532241, 0.557461, 0.552728, 0.578082], 'written_to': 'dynamodb://cpaws-dev-forecasts/brent/2026-10-26'}, 'wti': {'status': 'ok', 'reason': '', 'base_date': '2026-10-26', 'n_crossed': 0, 'prob_up': [0.543378, 0.551683, 0.543836, 0.51781, 0.535696, 0.545185, 0.547837], 'written_to': 'dynamodb://cpaws-dev-forecasts/wti/2026-10-26'}}}\n",
+            "ingestionTime": 1793103333288,
+            "eventId": "39987540545140149536138601609151580702034607453975478277"
+        },
+        {
+            "logStreamName": "2026/10/27/cpaws-dev-predict[$LATEST]f03c14ddcf784058a68f17c6335a684d",
+            "timestamp": 1793103333066,
+            "message": "REPORT RequestId: ed5fe050-6f93-41fe-bc6f-3e0127e29794\tDuration: 3050.99 ms\tBilled Duration: 6864 ms\tMemory Size: 1024 MB\tMax Memory Used: 259 MB\tInit Duration: 3812.33 ms\t\n",
+            "ingestionTime": 1793103333288,
+            "eventId": "39987540545340856242925377217425402166488442707529302023"
+        },
+        {
+            "logStreamName": "2026/10/28/cpaws-dev-predict[$LATEST]fbb3a2abe7f54cf888076663ce631a87",
+            "timestamp": 1793189762844,
+            "message": "START RequestId: 4531bd81-51f0-4d82-86a3-73677054f01a Version: $LATEST\n",
+            "ingestionTime": 1793189763977,
+            "eventId": "39989467993797599810609806300426047334862417876403224576"
+        },
+        {
+            "logStreamName": "2026/10/28/cpaws-dev-predict[$LATEST]fbb3a2abe7f54cf888076663ce631a87",
+            "timestamp": 1793189765817,
+            "message": "[INFO]\t2026-10-28T12:16:05.817Z\t4531bd81-51f0-4d82-86a3-73677054f01a\tPREDICT_DONE {'snapshot_dt': '2026-10-28', 'model_version': 'baseline-q252', 'base_date_override': None, 'dry_run': False, 'ok': True, 'written': 4, 'assets': {'gold': {'status': 'ok', 'reason': '', 'base_date': '2026-10-27', 'n_crossed': 0, 'prob_up': [0.520989, 0.491853, 0.51396, 0.514393, 0.513114, 0.492515, 0.500978], 'written_to': 'dynamodb://cpaws-dev-forecasts/gold/2026-10-27'}, 'silver': {'status': 'ok', 'reason': '', 'base_date': '2026-10-27', 'n_crossed': 0, 'prob_up': [0.560836, 0.549153, 0.533803, 0.515193, 0.505357, 0.535305, 0.515781], 'written_to': 'dynamodb://cpaws-dev-forecasts/silver/2026-10-27'}, 'brent': {'status': 'ok', 'reason': '', 'base_date': '2026-10-27', 'n_crossed': 0, 'prob_up': [0.550599, 0.54619, 0.534088, 0.53969, 0.558883, 0.557473, 0.580525], 'written_to': 'dynamodb://cpaws-dev-forecasts/brent/2026-10-27'}, 'wti': {'status': 'ok', 'reason': '', 'base_date': '2026-10-27', 'n_crossed': 0, 'prob_up': [0.542548, 0.551458, 0.543836, 0.524825, 0.535696, 0.545111, 0.547837], 'written_to': 'dynamodb://cpaws-dev-forecasts/wti/2026-10-27'}}}\n",
+            "ingestionTime": 1793189773536,
+            "eventId": "39989468060097715285841348911767961156828559271723991044"
+        },
+        {
+            "logStreamName": "2026/10/28/cpaws-dev-predict[$LATEST]fbb3a2abe7f54cf888076663ce631a87",
+            "timestamp": 1793189765823,
+            "message": "REPORT RequestId: 4531bd81-51f0-4d82-86a3-73677054f01a\tDuration: 2978.67 ms\tBilled Duration: 6631 ms\tMemory Size: 1024 MB\tMax Memory Used: 260 MB\tInit Duration: 3652.04 ms\t\n",
+            "ingestionTime": 1793189773536,
+            "eventId": "39989468060231519757032532650617175466464449440759873542"
+        },
+        {
+            "logStreamName": "2026/10/29/cpaws-dev-predict[$LATEST]20fb8e674dd94635a84f61da16774ded",
+            "timestamp": 1793276130064,
+            "message": "START RequestId: 36563a5d-8b81-42ab-89bb-42ff84461c54 Version: $LATEST\n",
+            "ingestionTime": 1793276131853,
+            "eventId": "39991394047164325248615512819299679126535193906584682496"
+        },
+        {
+            "logStreamName": "2026/10/29/cpaws-dev-predict[$LATEST]20fb8e674dd94635a84f61da16774ded",
+            "timestamp": 1793276133045,
+            "message": "[INFO]\t2026-10-29T12:15:33.045Z\t36563a5d-8b81-42ab-89bb-42ff84461c54\tPREDICT_DONE {'snapshot_dt': '2026-10-29', 'model_version': 'baseline-q252', 'base_date_override': None, 'dry_run': False, 'ok': True, 'written': 4, 'assets': {'gold': {'status': 'ok', 'reason': '', 'base_date': '2026-10-28', 'n_crossed': 0, 'prob_up': [0.525717, 0.495004, 0.51396, 0.514393, 0.50546, 0.492515, 0.500978], 'written_to': 'dynamodb://cpaws-dev-forecasts/gold/2026-10-28'}, 'silver': {'status': 'ok', 'reason': '', 'base_date': '2026-10-28', 'n_crossed': 0, 'prob_up': [0.558413, 0.549153, 0.533803, 0.507055, 0.504094, 0.533675, 0.509642], 'written_to': 'dynamodb://cpaws-dev-forecasts/silver/2026-10-28'}, 'brent': {'status': 'ok', 'reason': '', 'base_date': '2026-10-28', 'n_crossed': 0, 'prob_up': [0.554695, 0.54619, 0.534088, 0.543713, 0.560173, 0.561437, 0.584575], 'written_to': 'dynamodb://cpaws-dev-forecasts/brent/2026-10-28'}, 'wti': {'status': 'ok', 'reason': '', 'base_date': '2026-10-28', 'n_crossed': 0, 'prob_up': [0.544921, 0.5551, 0.543836, 0.529163, 0.536927, 0.549502, 0.547837], 'written_to': 'dynamodb://cpaws-dev-forecasts/wti/2026-10-28'}}}\n",
+            "ingestionTime": 1793276141042,
+            "eventId": "39991394113642846685435300415326438186539135731349651459"
+        },
+        {
+            "logStreamName": "2026/10/29/cpaws-dev-predict[$LATEST]20fb8e674dd94635a84f61da16774ded",
+            "timestamp": 1793276133056,
+            "message": "REPORT RequestId: 36563a5d-8b81-42ab-89bb-42ff84461c54\tDuration: 2991.93 ms\tBilled Duration: 6687 ms\tMemory Size: 1024 MB\tMax Memory Used: 261 MB\tInit Duration: 3694.50 ms\t\n",
+            "ingestionTime": 1793276141042,
+            "eventId": "39991394113888154882619137269883331087538267707915436037"
+        },
+        {
+            "logStreamName": "2026/10/30/cpaws-dev-predict[$LATEST]f6e30f17a5db4fd5b033bd47e3304178",
+            "timestamp": 1793347953432,
+            "message": "START RequestId: 8db92462-bd71-4b7e-8a84-fe30ab041b19 Version: $LATEST\n",
+            "ingestionTime": 1793347962482,
+            "eventId": "39992995761793393546620763493180302057618080214666444800"
+        },
+        {
+            "logStreamName": "2026/10/30/cpaws-dev-predict[$LATEST]f6e30f17a5db4fd5b033bd47e3304178",
+            "timestamp": 1793347956385,
+            "message": "[INFO]\t2026-10-30T08:12:36.384Z\t8db92462-bd71-4b7e-8a84-fe30ab041b19\tPREDICT_DONE {'snapshot_dt': '2026-10-29', 'model_version': 'baseline-q252', 'base_date_override': None, 'dry_run': True, 'ok': True, 'written': 0, 'already_published': 0, 'assets': {'gold': {'status': 'ok', 'reason': '', 'base_date': '2026-10-28', 'n_crossed': 0, 'prob_up': [0.525717, 0.495004, 0.51396, 0.514393, 0.50546, 0.492515, 0.500978]}, 'silver': {'status': 'ok', 'reason': '', 'base_date': '2026-10-28', 'n_crossed': 0, 'prob_up': [0.558413, 0.549153, 0.533803, 0.507055, 0.504094, 0.533675, 0.509642]}, 'brent': {'status': 'ok', 'reason': '', 'base_date': '2026-10-28', 'n_crossed': 0, 'prob_up': [0.554695, 0.54619, 0.534088, 0.543713, 0.560173, 0.561437, 0.584575]}, 'wti': {'status': 'ok', 'reason': '', 'base_date': '2026-10-28', 'n_crossed': 0, 'prob_up': [0.544921, 0.5551, 0.543836, 0.529163, 0.536927, 0.549502, 0.547837]}}}\n",
+            "ingestionTime": 1793347962482,
+            "eventId": "39992995827647494117881693630135278116748691741826613254"
+        },
+        {
+            "logStreamName": "2026/10/30/cpaws-dev-predict[$LATEST]f6e30f17a5db4fd5b033bd47e3304178",
+            "timestamp": 1793347956398,
+            "message": "REPORT RequestId: 8db92462-bd71-4b7e-8a84-fe30ab041b19\tDuration: 2965.07 ms\tBilled Duration: 5527 ms\tMemory Size: 1024 MB\tMax Memory Used: 254 MB\tInit Duration: 2561.14 ms\t\n",
+            "ingestionTime": 1793347962482,
+            "eventId": "39992995827937403805462591730975242454293120441404358664"
+        },
+        {
+            "logStreamName": "2026/10/30/cpaws-dev-predict[$LATEST]53c6bfe0199343e9960ca288534030d2",
+            "timestamp": 1793362528386,
+            "message": "START RequestId: 9844fde9-8d1c-490c-8d9e-e6b57141a6f0 Version: $LATEST\n",
+            "ingestionTime": 1793362532894,
+            "eventId": "39993320794128827851320660326310652844356137594102874112"
+        },
+        {
+            "logStreamName": "2026/10/30/cpaws-dev-predict[$LATEST]53c6bfe0199343e9960ca288534030d2",
+            "timestamp": 1793362531313,
+            "message": "[INFO]\t2026-10-30T12:15:31.313Z\t9844fde9-8d1c-490c-8d9e-e6b57141a6f0\tPREDICT_DONE {'snapshot_dt': '2026-10-30', 'model_version': 'baseline-q252', 'base_date_override': None, 'dry_run': False, 'ok': True, 'written': 4, 'already_published': 0, 'assets': {'gold': {'status': 'ok', 'reason': '', 'base_date': '2026-10-29', 'n_crossed': 0, 'prob_up': [0.525246, 0.491853, 0.51396, 0.514393, 0.50546, 0.491147, 0.497996], 'written_to': 'dynamodb://cpaws-dev-forecasts/gold/2026-10-29'}, 'silver': {'status': 'ok', 'reason': '', 'base_date': '2026-10-29', 'n_crossed': 0, 'prob_up': [0.55464, 0.545432, 0.529716, 0.501114, 0.497546, 0.530766, 0.507346], 'written_to': 'dynamodb://cpaws-dev-forecasts/silver/2026-10-29'}, 'brent': {'status': 'ok', 'reason': '', 'base_date': '2026-10-29', 'n_crossed': 0, 'prob_up': [0.552251, 0.54619, 0.532007, 0.53969, 0.561579, 0.565014, 0.584774], 'written_to': 'dynamodb://cpaws-dev-forecasts/brent/2026-10-29'}, 'wti': {'status': 'ok', 'reason': '', 'base_date': '2026-10-29', 'n_crossed': 0, 'prob_up': [0.543378, 0.555892, 0.541014, 0.524825, 0.536927, 0.55169, 0.547837], 'written_to': 'dynamodb://cpaws-dev-forecasts/wti/2026-10-29'}}}\n",
+            "ingestionTime": 1793362532894,
+            "eventId": "39993320859403109047419794261585700228397891722107551749"
+        },
+        {
+            "logStreamName": "2026/10/30/cpaws-dev-predict[$LATEST]53c6bfe0199343e9960ca288534030d2",
+            "timestamp": 1793362531318,
+            "message": "REPORT RequestId: 9844fde9-8d1c-490c-8d9e-e6b57141a6f0\tDuration: 2931.83 ms\tBilled Duration: 5723 ms\tMemory Size: 1024 MB\tMax Memory Used: 262 MB\tInit Duration: 2790.77 ms\t\n",
+            "ingestionTime": 1793362532894,
+            "eventId": "39993320859514612773412447377293378819761133529637453831"
+        },
+        {
+            "logStreamName": "2026/10/31/cpaws-dev-predict[$LATEST]a2a1cb1f152347bea0980173477e4628",
+            "timestamp": 1793448944603,
+            "message": "START RequestId: 859e1252-1e92-42e9-a59b-1633eabdf1d1 Version: $LATEST\n",
+            "ingestionTime": 1793448948304,
+            "eventId": "39995247940165165781731308968474492581676469922334834688"
+        },
+        {
+            "logStreamName": "2026/10/31/cpaws-dev-predict[$LATEST]a2a1cb1f152347bea0980173477e4628",
+            "timestamp": 1793448947591,
+            "message": "[INFO]\t2026-10-31T12:15:47.591Z\t859e1252-1e92-42e9-a59b-1633eabdf1d1\tPREDICT_DONE {'snapshot_dt': '2026-10-31', 'model_version': 'baseline-q252', 'base_date_override': None, 'dry_run': False, 'ok': True, 'written': 4, 'already_published': 0, 'assets': {'gold': {'status': 'ok', 'reason': '', 'base_date': '2026-10-30', 'n_crossed': 0, 'prob_up': [0.520185, 0.485816, 0.510393, 0.514016, 0.50435, 0.489948, 0.491301], 'written_to': 'dynamodb://cpaws-dev-forecasts/gold/2026-10-30'}, 'silver': {'status': 'ok', 'reason': '', 'base_date': '2026-10-30', 'n_crossed': 0, 'prob_up': [0.550973, 0.538569, 0.529292, 0.50106, 0.492471, 0.529184, 0.500797], 'written_to': 'dynamodb://cpaws-dev-forecasts/silver/2026-10-30'}, 'brent': {'status': 'ok', 'reason': '', 'base_date': '2026-10-30', 'n_crossed': 0, 'prob_up': [0.554695, 0.552359, 0.534088, 0.543713, 0.561579, 0.568823, 0.585422], 'written_to': 'dynamodb://cpaws-dev-forecasts/brent/2026-10-30'}, 'wti': {'status': 'ok', 'reason': '', 'base_date': '2026-10-30', 'n_crossed': 0, 'prob_up': [0.544921, 0.555892, 0.541014, 0.529163, 0.537531, 0.552236, 0.553067], 'written_to': 'dynamodb://cpaws-dev-forecasts/wti/2026-10-30'}}}\n",
+            "ingestionTime": 1793448948304,
+            "eventId": "39995248006799792434940810915383218780349774102204317701"
+        },
+        {
+            "logStreamName": "2026/10/31/cpaws-dev-predict[$LATEST]a2a1cb1f152347bea0980173477e4628",
+            "timestamp": 1793448947601,
+            "message": "REPORT RequestId: 859e1252-1e92-42e9-a59b-1633eabdf1d1\tDuration: 2996.91 ms\tBilled Duration: 4338 ms\tMemory Size: 1024 MB\tMax Memory Used: 262 MB\tInit Duration: 1340.97 ms\t\n",
+            "ingestionTime": 1793448948304,
+            "eventId": "39995248007022799886926117146798575963076257717264121863"
+        }
+    ],
+    "searchedLogStreams": []
+}

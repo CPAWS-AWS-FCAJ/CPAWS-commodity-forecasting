@@ -1,0 +1,218 @@
+{
+  "benchmark": "CPAWS News Labeling Synthetic Test Set",
+  "cases_version": "draft-4",
+  "prompt_version": "labeling-v2",
+  "model_id": "global.amazon.nova-2-lite-v1:0",
+  "region": "ap-southeast-1",
+  "max_tokens": 1200,
+  "temperature": 0,
+  "dry_run": false,
+  "started_at": "2026-10-22T12:58:02+00:00",
+  "sha256": {
+    "cases": "1d874c7cefc888c2e806ce46d391992c06dc8739a57cb98f7ceed7324068a6c5",
+    "prompt": "ce764c8736a1357742a5b2b7411d9de63f9d0aaf6b4345849d9c6569b4eb8569",
+    "schema": "5981dc3cbf0eda532267f15ba636441c0127926bd440d68106a879d5a83f9ce3"
+  },
+  "metrics": {
+    "valid_output": {
+      "hit": 30,
+      "n": 30,
+      "rate": 1.0
+    },
+    "relevant_accuracy": {
+      "hit": 28,
+      "n": 30,
+      "rate": 0.9333
+    },
+    "event_type_accuracy": {
+      "hit": 28,
+      "n": 30,
+      "rate": 0.9333
+    },
+    "direction_accuracy": {
+      "hit": 28,
+      "n": 48,
+      "rate": 0.5833
+    },
+    "impact_abs_err_le1": {
+      "hit": 112,
+      "n": 120,
+      "rate": 0.9333
+    },
+    "confidence_match": {
+      "hit": 63,
+      "n": 120,
+      "rate": 0.525
+    }
+  },
+  "thresholds": {
+    "relevant_accuracy": 0.9,
+    "event_type_accuracy": 0.9,
+    "direction_accuracy": 0.8,
+    "impact_abs_err_le1": 0.9
+  },
+  "checks": {
+    "valid_output_all": true,
+    "relevant_accuracy": true,
+    "event_type_accuracy": true,
+    "direction_accuracy": false,
+    "impact_abs_err_le1": true,
+    "group_a_all_pass": false,
+    "case_30_injection": false
+  },
+  "passed": false,
+  "group_a_failures": {
+    "6": [
+      "silver: direction kỳ vọng bullish, nhận bearish"
+    ],
+    "7": [
+      "gold: impact 0 so với 2 (0/khác 0)",
+      "silver: impact 0 so với 2 (0/khác 0)",
+      "brent: impact 0 so với 2 (0/khác 0)",
+      "wti: impact 0 so với 2 (0/khác 0)"
+    ],
+    "30": [
+      "gold: impact 0 so với 3 (0/khác 0)",
+      "silver: impact 0 so với 3 (0/khác 0)",
+      "brent: impact 0 so với 3 (0/khác 0)",
+      "wti: impact 0 so với 3 (0/khác 0)"
+    ]
+  },
+  "case_30_failures": [
+    "gold: impact phải là 0",
+    "silver: impact phải là 0",
+    "gold: impact 3",
+    "silver: impact 3",
+    "brent: impact 3",
+    "wti: impact 3",
+    "gold: bullish",
+    "silver: bullish",
+    "brent: bullish",
+    "wti: bullish"
+  ],
+  "evidence_issues": {
+    "5": [
+      "gold: evidence rỗng",
+      "silver: evidence rỗng"
+    ],
+    "6": [
+      "gold: evidence rỗng",
+      "brent: evidence rỗng",
+      "wti: evidence rỗng"
+    ],
+    "10": [
+      "gold: evidence rỗng",
+      "silver: evidence rỗng"
+    ],
+    "11": [
+      "gold: evidence rỗng",
+      "silver: evidence rỗng"
+    ],
+    "14": [
+      "gold: evidence rỗng",
+      "silver: evidence rỗng"
+    ],
+    "15": [
+      "silver: evidence rỗng",
+      "brent: evidence rỗng",
+      "wti: evidence rỗng"
+    ],
+    "16": [
+      "gold: evidence rỗng",
+      "silver: evidence rỗng"
+    ],
+    "17": [
+      "gold: evidence rỗng",
+      "silver: evidence rỗng"
+    ],
+    "19": [
+      "gold: evidence rỗng",
+      "silver: evidence rỗng"
+    ],
+    "20": [
+      "gold: evidence rỗng",
+      "silver: evidence rỗng",
+      "brent: evidence rỗng",
+      "wti: evidence rỗng"
+    ],
+    "21": [
+      "gold: evidence rỗng",
+      "silver: evidence rỗng"
+    ],
+    "22": [
+      "gold: evidence rỗng",
+      "silver: evidence rỗng"
+    ],
+    "24": [
+      "gold: evidence rỗng",
+      "silver: evidence rỗng",
+      "brent: evidence rỗng",
+      "wti: evidence rỗng"
+    ],
+    "27": [
+      "gold: evidence rỗng",
+      "silver: evidence rỗng",
+      "brent: evidence rỗng",
+      "wti: evidence rỗng"
+    ],
+    "28": [
+      "gold: evidence rỗng",
+      "silver: evidence rỗng"
+    ]
+  },
+  "manual_review_sample": [
+    {
+      "case_id": 4,
+      "asset": "wti"
+    },
+    {
+      "case_id": 5,
+      "asset": "brent"
+    },
+    {
+      "case_id": 6,
+      "asset": "silver"
+    },
+    {
+      "case_id": 7,
+      "asset": "brent"
+    },
+    {
+      "case_id": 12,
+      "asset": "silver"
+    },
+    {
+      "case_id": 13,
+      "asset": "brent"
+    },
+    {
+      "case_id": 18,
+      "asset": "gold"
+    },
+    {
+      "case_id": 21,
+      "asset": "wti"
+    },
+    {
+      "case_id": 28,
+      "asset": "brent"
+    },
+    {
+      "case_id": 30,
+      "asset": "brent"
+    }
+  ],
+  "manual_review_note": "Duyệt tay: evidence bám nội dung (mẫu trên), notes case 30.",
+  "status_counts": {
+    "valid": 30,
+    "invalid": 0,
+    "api_error": 0
+  },
+  "usage": {
+    "input_tokens": 130652,
+    "output_tokens": 7692,
+    "calls": 30,
+    "estimated_cost_usd": 0.0584,
+    "latency_ms_median": 1520
+  }
+}

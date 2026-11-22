@@ -1,0 +1,13 @@
+file câu hỏi: router_heldout_v1.jsonl  sha256=da914c2d96d72c89e2b82325d1ccea5a91eb9f9d53cde7b9235c41ed4ba663aa
+luật: src/chatbot/router.py  sha256=c29073a79721ab95cbd87a4d69e0e4f941da7d8a050ddaa1a3ccb1d68d0d4101
+luật: configs/chatbot_router.py  sha256=0f5589b2a120585b3cd53b321c3a278a1c94cc530b23dbe16ea9c7f85168cdb3
+đúng 26/30 (86.7%), cần Haiku nhưng sang Nova: 0, đơn giản nhưng sang Haiku: 4
+  SAI RH-003: nhãn simple, router complex (news)
+      Tại sao hệ thống lại dùng tin của EIA khi nói về dầu WTI?
+  SAI RH-004: nhãn simple, router complex (default_uncertain)
+      Pinball loss là cái gì vậy?
+  SAI RH-007: nhãn simple, router complex (forecast)
+      GLD là quỹ gì, sao lại dùng để dự báo vàng?
+  SAI RH-012: nhãn simple, router complex (default_uncertain)
+      Viết giúp mình một bài thơ về mùa thu
+ngưỡng: độ chính xác >= 90%, cần Haiku sang Nova <= 1 → KHÔNG ĐẠT

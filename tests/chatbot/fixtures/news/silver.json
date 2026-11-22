@@ -1,0 +1,32 @@
+{
+  "asset": "silver",
+  "items": [
+    {
+      "title": "Solar panel makers trim orders as inventories build up",
+      "summary": "Several solar manufacturers said they would slow purchases of raw materials after inventories rose, a possible drag on industrial demand for silver.",
+      "link": "https://example.com/news/silver-solar-orders",
+      "source": "Sample Commodity Desk",
+      "published_at": "2026-10-13T11:30:00Z",
+      "impact_score": 2,
+      "direction": "bearish"
+    },
+    {
+      "title": "Factory activity index slips for a second month",
+      "summary": "A manufacturing survey pointed to weaker factory activity, adding to concerns about industrial metals demand.",
+      "link": "https://example.com/news/silver-factory-index",
+      "source": "Example Markets Wire",
+      "published_at": "2026-10-10T08:15:00Z",
+      "impact_score": 2,
+      "direction": "bearish"
+    },
+    {
+      "title": "Precious metals funds see small inflows",
+      "summary": "Weekly flow data from an industry tracker showed modest inflows into precious metals funds, partly offsetting weaker industrial sentiment.",
+      "link": "https://example.com/news/silver-fund-inflows",
+      "source": "Sample Commodity Desk",
+      "published_at": "2026-10-08T16:00:00Z",
+      "impact_score": 1,
+      "direction": "bullish"
+    }
+  ]
+}

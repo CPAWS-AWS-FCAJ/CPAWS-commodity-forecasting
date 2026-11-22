@@ -1,0 +1,83 @@
+/* Amplify Authenticator theo token của app (index.css), nên tự đổi theo giao diện sáng/tối (.dark trên
+   <html>). Biến --amplify-* mặc định khai báo ở ":root, [data-amplify-theme]" và các biến thành phần
+   tham chiếu biến gốc tại chính :root, nên phải ghi đè ở cùng phần tử với độ ưu tiên cao hơn
+   (html:root). Không có mã màu cố định: chỉ token của app. */
+html:root {
+  --amplify-fonts-default-variable: var(--font-sans);
+  --amplify-fonts-default-static: var(--font-sans);
+
+  /* Nút chính: nền chữ chính, chữ trên nền đậm (giống nút chính của app ở cả hai giao diện) */
+  --amplify-colors-primary-10: var(--color-surface-muted);
+  --amplify-colors-primary-20: var(--color-surface-muted);
+  --amplify-colors-primary-40: var(--color-line);
+  --amplify-colors-primary-60: var(--color-muted);
+  --amplify-colors-primary-80: var(--color-price);
+  --amplify-colors-primary-90: color-mix(in oklab, var(--color-price) 86%, var(--color-canvas));
+  --amplify-colors-primary-100: color-mix(in oklab, var(--color-price) 78%, var(--color-canvas));
+
+  --amplify-colors-font-primary: var(--color-price);
+  --amplify-colors-font-secondary: var(--color-muted);
+  --amplify-colors-font-tertiary: var(--color-muted);
+  --amplify-colors-font-disabled: var(--color-muted);
+  --amplify-colors-font-inverse: var(--color-on-price);
+  --amplify-colors-font-interactive: var(--color-forecast);
+  --amplify-colors-font-hover: var(--color-forecast);
+  --amplify-colors-font-focus: var(--color-price);
+  --amplify-colors-font-active: var(--color-price);
+  --amplify-colors-font-error: var(--color-down);
+  --amplify-colors-font-warning: var(--color-warn-fg);
+  --amplify-colors-font-success: var(--color-up);
+  --amplify-colors-font-info: var(--color-price);
+
+  --amplify-colors-background-primary: var(--color-surface);
+  --amplify-colors-background-secondary: var(--color-surface-muted);
+  --amplify-colors-background-tertiary: var(--color-line);
+  --amplify-colors-background-quaternary: var(--color-muted);
+  --amplify-colors-background-error: var(--color-down-bg);
+  --amplify-colors-background-warning: var(--color-warn-bg);
+  --amplify-colors-background-success: var(--color-up-bg);
+  --amplify-colors-background-info: var(--color-surface-muted);
+
+  /* Viền ô nhập cần tương phản >= 3:1 nên dùng muted; viền khung và tab dùng line */
+  --amplify-colors-border-primary: var(--color-muted);
+  --amplify-colors-border-secondary: var(--color-line);
+  --amplify-colors-border-tertiary: var(--color-line);
+  --amplify-colors-border-focus: var(--color-forecast);
+  --amplify-colors-border-pressed: var(--color-price);
+  --amplify-colors-border-error: var(--color-down);
+
+  --amplify-colors-overlay-5: color-mix(in oklab, var(--color-price) 6%, transparent);
+  --amplify-colors-overlay-10: color-mix(in oklab, var(--color-price) 10%, transparent);
+  --amplify-colors-overlay-20: color-mix(in oklab, var(--color-price) 20%, transparent);
+
+  --amplify-components-authenticator-router-border-color: var(--color-line);
+  --amplify-components-authenticator-router-box-shadow: none;
+  --amplify-components-authenticator-container-width-max: 28rem;
+  --amplify-components-authenticator-form-padding: 1.5rem;
+  --amplify-components-fieldcontrol-focus-box-shadow: 0 0 0 1px var(--color-forecast);
+  --amplify-components-button-primary-focus-box-shadow: 0 0 0 2px var(--color-forecast);
+  --amplify-components-button-link-color: var(--color-forecast);
+  --amplify-components-button-link-hover-color: var(--color-forecast);
+  --amplify-components-button-link-hover-background-color: var(--color-surface-muted);
+  --amplify-radii-small: 0.375rem;
+  --amplify-radii-medium: 0.5rem;
+}
+
+/* Amplify bật cuộn mượt cho cả trang; app giữ chuyển động thấp */
+html:root:focus-within {
+  scroll-behavior: auto;
+}
+
+[data-amplify-authenticator] [data-amplify-container] {
+  width: 100%;
+}
+
+[data-amplify-authenticator] [data-amplify-router] {
+  border-radius: 0.75rem;
+  overflow: hidden;
+}
+
+/* Tab không hoạt động: nền phụ, chữ muted (tương phản đủ ở cả hai giao diện) */
+[data-amplify-authenticator] [data-state="inactive"] {
+  color: var(--color-muted);
+}

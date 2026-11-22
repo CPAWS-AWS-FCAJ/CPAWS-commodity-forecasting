@@ -1,0 +1,23 @@
+{
+  "asset": "silver",
+  "items": [
+    {
+      "title": "Silver jewellery exports steady",
+      "summary": "Exports of silver jewellery were broadly unchanged.",
+      "link": "https://example.com/news/silver-jewellery-exports",
+      "source": "Northfield Markets Wire",
+      "published_at": "2026-10-19T08:00:00Z",
+      "impact_score": 1,
+      "direction": "uncertain"
+    },
+    {
+      "title": "Coin dealers report quiet week",
+      "summary": "Dealers described retail demand for coins as quiet.",
+      "link": "https://example.com/news/silver-coin-dealers",
+      "source": "Harbor Commodity Desk",
+      "published_at": "2026-10-16T09:00:00Z",
+      "impact_score": 1,
+      "direction": "uncertain"
+    }
+  ]
+}

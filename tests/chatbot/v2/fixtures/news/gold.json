@@ -1,0 +1,32 @@
+{
+  "asset": "gold",
+  "items": [
+    {
+      "title": "Real yields climb after a stronger-than-expected jobs report",
+      "summary": "Bond yields adjusted for inflation rose after hiring data beat expectations, raising the opportunity cost of holding non-yielding metals.",
+      "link": "https://example.com/news/gold-real-yields",
+      "source": "Northfield Markets Wire",
+      "published_at": "2026-10-20T13:10:00Z",
+      "impact_score": 3,
+      "direction": "bearish"
+    },
+    {
+      "title": "Central banks keep adding to reserves, survey finds",
+      "summary": "A survey of reserve managers found several central banks still plan to increase gold holdings over the coming year.",
+      "link": "https://example.com/news/gold-reserve-buying",
+      "source": "Harbor Commodity Desk",
+      "published_at": "2026-10-17T08:30:00Z",
+      "impact_score": 2,
+      "direction": "bullish"
+    },
+    {
+      "title": "Mine output holds steady in the third quarter",
+      "summary": "Producers reported quarterly output broadly in line with plans.",
+      "link": "https://example.com/news/gold-mine-output",
+      "source": "Northfield Markets Wire",
+      "published_at": "2026-10-15T06:00:00Z",
+      "impact_score": 1,
+      "direction": "uncertain"
+    }
+  ]
+}

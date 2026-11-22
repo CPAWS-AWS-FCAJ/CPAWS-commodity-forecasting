@@ -1,0 +1,170 @@
+"""Cấu hình nguồn giá, tài sản, quy tắc thời điểm công bố và ngưỡng kiểm tra (ADR-0005)."""
+
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass, field
+
+START_DATE = "2012-01-01"
+NY_TZ = "America/New_York"
+REFETCH_SESSIONS = 5  # mỗi lần chạy tải lại 5 phiên gần nhất, ghi đè theo khóa (date, asset)
+
+# Hiển thị ở front-end; không có tính năng tải/xuất dữ liệu giá.
+SOURCE_ATTRIBUTION = "Nguồn: Yahoo Finance, U.S. EIA"
+
+
+@dataclass(frozen=True)
+class SourceRef:
+    source: str  # "yfinance" | "eia"
+    symbol: str
+
+
+@dataclass(frozen=True)
+class AssetSpec:
+    asset: str
+    kind: str  # "etf" | "future" | "fx" | "spot"
+    unit: str
+    calendar: str  # "NYSE" | "CME" | "ICE" | "FX"
+    primary: SourceRef
+    valid_range: tuple[float, float] | None = None
+    jump_threshold: float = 0.15  # |log return 1 ngày| vượt ngưỡng → flag "jump" (chỉ đánh dấu)
+    roll_rule: str | None = None  # "CL" | "BZ" cho hợp đồng tương lai
+    # Loại spike (vọt > ngưỡng jump rồi quay về gần mức cũ trong <= SPIKE_MAX_SESSIONS phiên),
+    # cả đoạn gắn flag "bad_value|spike"
+    reject_spikes: bool = False
+    extra: dict = field(default_factory=dict)
+
+
+# Tài sản dùng cho mô hình
+ASSETS: dict[str, AssetSpec] = {
+    "gold": AssetSpec(
+        "gold",
+        "etf",
+        "USD/share",
+        "NYSE",
+        primary=SourceRef("yfinance", "GLD"),
+        jump_threshold=0.08,
+    ),
+    "silver": AssetSpec(
+        "silver",
+        "etf",
+        "USD/share",
+        "NYSE",
+        primary=SourceRef("yfinance", "SLV"),
+        jump_threshold=0.10,  # bạc biến động mạnh hơn vàng
+    ),
+    "wti": AssetSpec(
+        "wti", "future", "USD/bbl", "CME", primary=SourceRef("yfinance", "CL=F"), roll_rule="CL"
+    ),
+    "brent": AssetSpec(
+        "brent", "future", "USD/bbl", "CME", primary=SourceRef("yfinance", "BZ=F"), roll_rule="BZ"
+    ),
+    "usd_vnd": AssetSpec(
+        "usd_vnd",
+        "fx",
+        "VND/USD",
+        "FX",
+        primary=SourceRef("yfinance", "VND=X"),
+        valid_range=(20_000.0, 30_000.0),
+        jump_threshold=0.02,
+        reject_spikes=True,
+    ),
+}
+
+# Chuỗi tham chiếu: chỉ dùng trong quality.py và hệ số hiển thị, không đưa vào train
+REFERENCES: dict[str, AssetSpec] = {
+    "rwtc": AssetSpec("rwtc", "spot", "USD/bbl", "CME", primary=SourceRef("eia", "RWTC")),
+    "rbrte": AssetSpec("rbrte", "spot", "USD/bbl", "ICE", primary=SourceRef("eia", "RBRTE")),
+    "gc_fut": AssetSpec("gc_fut", "future", "USD/oz", "CME", primary=SourceRef("yfinance", "GC=F")),
+    "si_fut": AssetSpec("si_fut", "future", "USD/oz", "CME", primary=SourceRef("yfinance", "SI=F")),
+}
+
+# published_at = 00:00 UTC của (date + days) + giờ. Bảo thủ, sẽ sửa sau khi đo độ trễ chốt thanh.
+# yfinance: tạm 12:00 UTC ngày date+1. EIA: phát hành hằng tuần → date+7, 12:00 UTC.
+PUBLISHED_AT_RULES: dict[str, tuple[int, int]] = {
+    "yfinance": (1, 12),
+    "eia": (7, 12),
+}
+
+# Lịch chạy Lambda ingest (EventBridge Scheduler, múi giờ UTC) — Tiến dùng khi viết CDK.
+# Phải KHỚP published_at: dữ liệu phiên D chỉ được coi là có sẵn từ 12:00 UTC ngày D+1, nên ingest
+# chạy 12:15 UTC (sau published_at, có 15 phút lề). Nếu chạy sớm hơn published_at thì production
+# dùng dữ liệu sớm hơn so với backtest giả định (lệch train/serve).
+# Thứ Ba–thứ Bảy: lấy phiên thứ Hai–thứ Sáu của hôm trước.
+# Lambda predict chạy SAU ingest (nối tiếp trong Step Functions, không đặt giờ riêng).
+# Khi rút PUBLISHED_AT_RULES["yfinance"] thì rút giờ này cùng lúc (test_schedule_matches_published_at).
+INGEST_SCHEDULE_UTC = (12, 15)  # (giờ, phút)
+INGEST_SCHEDULE_DAYS = "TUE-SAT"
+INGEST_SCHEDULE_EXPRESSION = (
+    f"cron({INGEST_SCHEDULE_UTC[1]} {INGEST_SCHEDULE_UTC[0]} ? * {INGEST_SCHEDULE_DAYS} *)"
+)
+INGEST_SCHEDULE_TIMEZONE = "UTC"
+
+# Ngưỡng đối chiếu chéo (chỉ đánh dấu, không loại)
+# "xcheck_level" trên wti: tỷ số CL=F / RWTC lệch > 3% so với trung vị của chính tỷ số đó trong
+# XCHECK_WTI_WINDOW phiên chung trước đó (nhân quả, không gồm phiên t). So với trung vị trượt thay
+# vì 1,0 để không đánh dấu cả giai đoạn chênh lệch kỳ hạn kéo dài (contango/backwardation).
+# Chưa đủ XCHECK_WTI_MIN_PERIODS phiên lịch sử thì so với 1,0.
+XCHECK_WTI_LEVEL = 0.03
+XCHECK_WTI_WINDOW = 60
+XCHECK_WTI_MIN_PERIODS = 20
+XCHECK_BRENT_RESID = 0.08  # |r(BZ=F) - r(CL=F)| > 8% → "xcheck_resid" trên brent
+STALE_RUN = 3  # giá y hệt ≥ 3 phiên liên tiếp → "stale" (chỉ đánh dấu)
+# Spike: sau phiên vọt, giá phải quay về trong ±ngưỡng/2 quanh giá trước khi vọt trong tối đa
+# SPIKE_MAX_SESSIONS phiên. Cũng là số phiên lớp hiển thị tỷ giá giữ "pending_confirm".
+SPIKE_MAX_SESSIONS = 3
+DISPLAY_FACTOR_WINDOW = 20  # giá vàng USD/oz = GLD × trung vị 20 phiên (GC=F / GLD), chỉ hiển thị
+NBP_FIRST_DATE = "2013-01-02"
+NBP_MONTHLY_TOL = 0.01
+
+# Lỗi đã biết ở phía nguồn tham chiếu → flag "known_source_error", bỏ khỏi đối chiếu
+KNOWN_SOURCE_ERRORS: set[tuple[str, str]] = {
+    ("rwtc", "2026-09-25"),
+    ("rwtc", "2026-09-28"),
+}
+
+# Ngày có biến động thật đã kiểm chứng (probe 07/10/2026) → không gắn "jump"
+KNOWN_EVENTS: dict[str, set[str]] = {
+    "gold": {"2013-04-15", "2026-01-30"},
+    "silver": {"2013-04-15", "2020-03-16", "2026-01-30", "2026-02-05"},
+    "wti": {
+        "2014-11-28",
+        "2019-09-16",
+        "2020-03-09",
+        "2020-03-18",
+        "2020-03-19",
+        "2020-04-02",
+        "2020-04-21",
+        "2020-04-22",
+        "2020-04-23",
+        "2020-04-27",
+        "2020-04-29",
+        "2020-04-30",
+        "2020-05-05",
+        "2026-04-08",
+    },
+    "brent": {
+        "2019-09-16",
+        "2020-03-09",
+        "2020-03-18",
+        "2020-04-02",
+        "2020-04-21",
+        "2026-04-01",
+    },
+    "usd_vnd": {"2015-08-12", "2015-08-19"},
+}
+
+# Ngày WTI âm hợp lệ: giữ giá, flag "negative_price"; returns trả NaN
+ALLOWED_NEGATIVE: set[tuple[str, str]] = {("wti", "2020-04-20")}
+
+
+def lake_bucket(env: str | None = None) -> str:
+    """Bucket lake: biến môi trường LAKE_BUCKET nếu có (Lambda đặt qua CDK), nếu không thì theo quy
+    ước cpaws-<env>-lake (skill aws-serverless-platform), env lấy từ CPAWS_ENV (mặc định dev)."""
+    return os.getenv("LAKE_BUCKET") or f"cpaws-{env or os.getenv('CPAWS_ENV', 'dev')}-lake"
+
+
+def lake_prefix() -> str:
+    """Tiền tố key trong bucket (LAKE_PREFIX, mặc định rỗng = gốc bucket)."""
+    p = os.getenv("LAKE_PREFIX", "").strip("/")
+    return f"{p}/" if p else ""

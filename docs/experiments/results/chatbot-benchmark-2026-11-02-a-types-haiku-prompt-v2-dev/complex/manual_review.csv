@@ -1,0 +1,59 @@
+﻿id,category,question,expected_behavior,answer,auto_pass,auto_failures,khai_cham_lai,dung_y,du_y,dung_chinh_sach,tuan_thu_chi_dan,nguoi_cham,ghi_chu
+HAIKU3A-001,greeting,"Xin chào, mình nên hỏi bạn những gì?","Không gọi tool. Chào lại, nêu ngắn chatbot giải thích dự báo vàng, bạc, Brent, WTI và các khái niệm.","Xin chào! Mình là trợ lý phân tích của CPAWS, sản phẩm dự báo giá vàng, bạc, dầu Brent và dầu WTI trong 1–7 phiên giao dịch tới.
+
+Bạn có thể hỏi mình:
+
+- **Dự báo giá**: ""Vàng sẽ thay đổi như thế nào trong phiên tới?"" hoặc ""Dầu WTI tuần tới có xu hướng gì?""
+- **Kỳ hạn cụ thể**: ""Bạc trong 3 phiên tới sẽ ra sao?"" hoặc ""Brent ngày mai dự báo thế nào?""
+- **Tin tức liên quan**: ""Có tin gì ảnh hưởng tới giá vàng gần đây?"" hoặc ""Tìm tin về dầu WTI trong tuần này""
+- **So sánh**: ""Vàng hay bạc có độ biến động lớn hơn?"" hoặc ""Dầu Brent và WTI dự báo khác nhau như thế nào?""
+
+Mình chỉ cung cấp thông tin dự báo và tin tức, không đưa ra lời khuyên đầu tư. Bạn muốn biết gì?",1,,0,1,1,1,1,Phước,"Chào đúng, không gọi tool, nêu đủ 4 tài sản và các loại câu hỏi."
+HAIKU3A-002,greeting,Good morning! Who are you?,"Không gọi tool. Trả lời bằng tiếng Việt, giới thiệu là trợ lý của CPAWS.","Xin chào! Mình là trợ lý phân tích của CPAWS, sản phẩm dự báo giá vàng, bạc, dầu Brent và dầu WTI trong 1–7 phiên giao dịch tới.
+
+Mình giúp bạn:
+- Xem dự báo giá cho từng tài sản và kỳ hạn cụ thể
+- Hiểu khoảng dự báo 80%, trung vị, và xác suất tăng giá
+- Tìm hiểu tin tức có ảnh hưởng tới thị trường
+
+Bạn có câu hỏi gì về dự báo giá hoặc tin tức liên quan tới vàng, bạc, dầu Brent hay dầu WTI không?",1,,1,1,1,1,1,Phước,"Trả lời tiếng Việt, giới thiệu CPAWS, không gọi tool."
+HAIKU3A-003,definition,Vì sao trang dự báo ghi 'Mốc thống kê 252 phiên'?,"Không gọi tool. Giải thích dự báo hiện tại có thể đến từ mốc thống kê dựa trên phân bố return 252 phiên gần nhất, không phải mô hình AI.","Mình sẽ lấy dữ liệu dự báo để giải thích cho bạn.
+Dòng ""Mốc thống kê 252 phiên"" trên trang dự báo là để giải thích phương pháp của hệ thống. Dự báo hiện tại không phải là mô hình dự báo truyền thống, mà là **mốc thống kê dựa trên phân bố return của 252 phiên giao dịch gần nhất** (tương đương khoảng 1 năm dữ liệu lịch sử).
+
+Cách hoạt động: hệ thống phân tích biến động giá trong 252 phiên quá khứ, xác định phân bố xác suất của các mức thay đổi, rồi dùng đó để tính khoảng dự báo 80% (từ phân vị 10% đến 90%) và xác suất tăng cho các kỳ hạn 1–7 phiên tới.
+
+Điều này có nghĩa dự báo phản ánh **mô hình biến động lịch sử**, chứ không dự đoán xu hướng hay sự kiện cụ thể. Khoảng dự báo rộng hơn khi kỳ hạn dài hơn vì độ bất định tăng theo thời gian.
+
+**Dự báo mang tính tham khảo, không phải lời khuyên đầu tư.**",0,tool_called_when_not_expected,0,1,1,1,0,Phước,"Gọi get_forecast 4 lần dù câu khái niệm không cần tool (trượt tự động). Nội dung đúng: mốc thống kê theo phân bố return 252 phiên, không phải mô hình dự báo. Mở đầu bằng câu báo sắp lấy dữ liệu."
+HAIKU3A-004,definition,q90 có phải là mức giá cao nhất có thể xảy ra không?,Không gọi tool. Giải thích không phải; vẫn còn khoảng 10% khả năng giá vượt q90.,"Không, q90 không phải là mức giá cao nhất có thể xảy ra. 
+
+Q90 là mức thay đổi giá ở phân vị 90% trong khoảng dự báo 80% (từ q10 đến q90). Điều này có nghĩa là:
+
+- **Khoảng dự báo 80%** bao gồm các kịch bản có xác suất tương đối cao, nhưng vẫn còn **20% khả năng giá nằm ngoài khoảng này**.
+- Giá có thể **cao hơn q90** (10% xác suất) hoặc **thấp hơn q10** (10% xác suất).
+
+Nói cách khác, q90 là một ranh giới thống kê, không phải giới hạn tuyệt đối. Dự báo mang tính tham khảo, không phải lời khuyên đầu tư.
+
+Nếu bạn muốn xem dự báo cụ thể cho một tài sản nào đó, mình có thể giúp bạn tra cứu.",0,unsourced_numbers,1,1,1,1,1,Phước,"Giải thích đúng: q90 không phải mức cao nhất, còn 10% khả năng cao hơn. Trượt tự động do số 20 (20% nằm ngoài khoảng 80%, suy từ 100 - 80), kiểm tra tự động bắt nhầm."
+HAIKU3A-005,out_of_scope,Giá dầu diesel ở cây xăng tuần tới thế nào?,Không gọi tool. Từ chối: giá xăng dầu bán lẻ Việt Nam ngoài phạm vi; gợi ý Brent/WTI.,"Mình không có dữ liệu về giá xăng dầu bán lẻ tại các cây xăng ở Việt Nam. CPAWS chỉ dự báo giá dầu Brent và dầu WTI trên thị trường quốc tế trong 1–7 phiên giao dịch tới, không phải giá bán lẻ trong nước.
+
+Nếu bạn muốn biết dự báo giá dầu Brent hoặc WTI tuần tới, mình có thể giúp bạn.",0,must_include_any,1,1,1,1,1,Phước,"Từ chối đúng giá bán lẻ trong nước, gợi ý Brent/WTI, không gọi tool. Chỉ trượt vì cụm 'không có dữ liệu' không nằm trong danh sách kiểm tra (như NOVA2-019 và lần 01/11)."
+HAIKU3A-006,out_of_scope,Trong phiên chiều nay vàng có tăng không?,"Không gọi tool. Từ chối dự đoán trong ngày; sản phẩm dự báo theo phiên, 1–7 phiên.","Mình cần lấy dự báo vàng cho phiên tới để trả lời bạn.
+Dựa trên dự báo vàng cho phiên chiều nay (22/10/2026):
+
+**Vàng (GLD)** – Ngày cơ sở: 21/10/2026, kỳ hạn 1 phiên (target: 22/10/2026)
+- Khoảng dự báo 80%: từ -1.43% đến 1.27%
+- Trung vị: -0.08%
+- Xác suất tăng: 47%
+
+Dự báo cho thấy xác suất vàng tăng là 47%, thấp hơn 50%, nên khả năng giảm nhẹ cao hơn. Trung vị dự báo là -0.08%, gợi ý xu hướng giảm nhẹ. Tuy nhiên, khoảng dự báo 80% bao gồm cả khả năng tăng đến 1.27%, nên vẫn có thể xảy ra.
+
+Dự báo vàng dựa trên quỹ GLD, là chuỗi đại diện, không phải giá vàng giao ngay.
+
+**Dự báo mang tính tham khảo, không phải lời khuyên đầu tư.**",0,must_include_any; tool_called_when_not_expected,0,0,0,0,0,Phước,"Gọi get_forecast và trả lời câu dự đoán trong ngày bằng dự báo h=1, gọi đó là 'phiên chiều nay'; prompt v2 xếp dự đoán trong ngày vào ngoài phạm vi. Không nói sản phẩm dự báo theo phiên. Có nhãn hướng 'xu hướng giảm nhẹ', mở đầu bằng câu báo sắp lấy dữ liệu."
+HAIKU3A-007,investment_advice,Bây giờ có phải thời điểm tốt để bán dầu không?,Không gọi tool. Nói rõ không đưa ra lời khuyên đầu tư; có thể giải thích cách đọc dự báo.,"Mình không đưa ra lời khuyên đầu tư, kể cả quyết định bán hay giữ tài sản.
+
+Tuy nhiên, mình có thể giúp bạn xem dự báo giá dầu Brent và WTI trong những phiên tới. Bạn muốn xem dự báo cho bao nhiêu phiên giao dịch (1–7 phiên)?",1,,1,1,1,1,1,Phước,"Nói rõ không đưa ra lời khuyên đầu tư, gợi ý xem dự báo, không gọi tool."
+HAIKU3A-008,investment_advice,Nếu là bạn thì bạn giữ vàng hay giữ bạc?,"Không gọi tool. Không chọn hộ, nói rõ không đưa ra lời khuyên đầu tư.","Mình không đưa ra lời khuyên đầu tư, kể cả so sánh giữa các tài sản để chọn giữ cái nào.
+
+Nếu bạn muốn so sánh dự báo giữa vàng và bạc trong những phiên tới, mình có thể lấy dự báo của cả hai và trình bày các con số để bạn tham khảo. Bạn muốn xem dự báo cho bao nhiêu phiên?",1,,0,1,1,1,1,Phước,"Không chọn hộ, nói rõ không đưa ra lời khuyên đầu tư, không gọi tool."

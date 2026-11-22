@@ -1,0 +1,32 @@
+{
+  "asset": "wti",
+  "items": [
+    {
+      "title": "Weekly report shows unexpected draw in crude inventories",
+      "summary": "A weekly storage report showed crude inventories falling while analysts had expected a build, a sign of firmer domestic demand.",
+      "link": "https://example.com/news/wti-inventory-draw",
+      "source": "Example Energy Brief",
+      "published_at": "2026-10-14T15:00:00Z",
+      "impact_score": 2,
+      "direction": "bullish"
+    },
+    {
+      "title": "Producer group signals it may raise output next quarter",
+      "summary": "Delegates of a producer group said members are discussing a gradual increase in supply, which could ease tightness in the crude market.",
+      "link": "https://example.com/news/wti-output-increase",
+      "source": "Example Energy Brief",
+      "published_at": "2026-10-13T10:45:00Z",
+      "impact_score": 2,
+      "direction": "bearish"
+    },
+    {
+      "title": "Pipeline operator completes routine inspection",
+      "summary": "A pipeline operator said a routine inspection finished on schedule with no impact on flows.",
+      "link": "https://example.com/news/wti-pipeline-inspection",
+      "source": "Sample Commodity Desk",
+      "published_at": "2026-10-09T12:00:00Z",
+      "impact_score": 0,
+      "direction": "uncertain"
+    }
+  ]
+}

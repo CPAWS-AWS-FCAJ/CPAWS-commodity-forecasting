@@ -1,0 +1,32 @@
+{
+  "asset": "wti",
+  "items": [
+    {
+      "title": "Weekly data show a build in crude stocks",
+      "summary": "Weekly storage data showed crude stocks rising more than analysts had expected.",
+      "link": "https://example.com/news/wti-stock-build",
+      "source": "Meridian Energy Note",
+      "published_at": "2026-10-21T15:00:00Z",
+      "impact_score": 2,
+      "direction": "bearish"
+    },
+    {
+      "title": "Refiners raise processing rates ahead of winter",
+      "summary": "Refiners increased processing rates, lifting near-term crude demand.",
+      "link": "https://example.com/news/wti-refinery-runs",
+      "source": "Harbor Commodity Desk",
+      "published_at": "2026-10-18T12:30:00Z",
+      "impact_score": 2,
+      "direction": "bullish"
+    },
+    {
+      "title": "Drilling rig count unchanged",
+      "summary": "The number of active drilling rigs was unchanged from the previous week.",
+      "link": "https://example.com/news/wti-rig-count",
+      "source": "Northfield Markets Wire",
+      "published_at": "2026-10-17T17:00:00Z",
+      "impact_score": 0,
+      "direction": "uncertain"
+    }
+  ]
+}
