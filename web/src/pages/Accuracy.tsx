@@ -13,8 +13,7 @@ export default function Accuracy() {
     <div>
       <h1 className="text-2xl font-bold">Độ chính xác</h1>
       <p className="mt-1 max-w-2xl text-sm text-muted">
-        Đối chiếu dự báo chạy thật với giá thực tế trong 8 tuần gần nhất, tính trên log return, gộp 7 mức h.
-        Không dùng sai số trên mức giá như MAPE.
+        So các dự báo đã đưa ra trong 8 tuần gần nhất với giá thật xảy ra sau đó, gộp cả 7 mức số phiên.
       </p>
       <HowToRead anchor={GUIDE_ANCHORS.reliability} topic="độ tin cậy 8 tuần" className="mt-2">
         mỗi khối là một sản phẩm. Số chính là tỷ lệ lần giá thực tế nằm trong khoảng 80%; gần 80% là khoảng dự

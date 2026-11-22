@@ -13,6 +13,7 @@ import { CHART } from "../lib/chartTheme";
 import type { ReturnFanPoint } from "../lib/chartData";
 import { formatDate, formatNumber, formatReturnPercent } from "../lib/format";
 import { GUIDE_ANCHORS, HowToRead } from "./HowToRead";
+import { useEntrance } from "../lib/motion";
 
 /** Tiêu đề khối (test và trang hướng dẫn dùng lại). */
 export const RETURN_FAN_TITLE = "Mức thay đổi dự báo theo số phiên tới";
@@ -44,6 +45,8 @@ function ReturnTooltip({ active, payload }: TooltipProps) {
 
 /** Quạt theo log return (%) cho h = 0…7, dải 80% đậm hơn dải 90%. */
 export function ReturnFanChart({ data }: { data: ReturnFanPoint[] }) {
+  // Lần đầu: hai dải hiện dần rồi đường trung vị (CSS .chart-enter); sau đó tức thì
+  const entering = useEntrance(900);
   return (
     <section aria-labelledby="return-fan-title" className="rounded-lg border border-line bg-surface p-4 sm:p-5">
       <h2 id="return-fan-title" className="text-lg font-semibold">
@@ -57,7 +60,7 @@ export function ReturnFanChart({ data }: { data: ReturnFanPoint[] }) {
       <div
         role="img"
         aria-label="Biểu đồ mức thay đổi dự báo (log return) theo số phiên tới, có dải khoảng 80% và 90%. Bảng theo từng phiên có đủ số liệu."
-        className="mt-3 h-64 w-full sm:h-80"
+        className={`mt-3 h-64 w-full sm:h-80 ${entering ? "chart-enter" : ""}`}
       >
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={data} margin={{ top: 8, right: 8, bottom: 16, left: 0 }}>
@@ -110,6 +113,7 @@ export function ReturnFanChart({ data }: { data: ReturnFanPoint[] }) {
               stroke={CHART.forecast}
               strokeWidth={2}
               strokeDasharray="6 4"
+              className="chart-median-line"
               dot={false}
               activeDot={{ r: 4, fill: CHART.forecast, stroke: CHART.surface, strokeWidth: 2 }}
               isAnimationActive={false}

@@ -76,4 +76,31 @@ describe("FanChart: mốc xem và phóng to", () => {
     expect(screen.getByText("Trục dọc: VND/lượng, không bắt đầu từ 0.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Tìm hiểu thêm/ })).toHaveAttribute("href", "/guide#doc-bieu-do");
   });
+
+  it("hướng dẫn phóng to: chuột/bàn phím nói phím ← →; màn cảm ứng không nói phím", () => {
+    const history = sampleCloses("wti").slice(-60);
+    const { unmount } = render(<FanChart asset="wti" currency="USD" detail={detail} history={history} />);
+    expect(screen.getByText(/Bàn phím: Tab tới một đầu thanh/)).toBeInTheDocument();
+    unmount();
+
+    vi.stubGlobal(
+      "matchMedia",
+      (query: string) =>
+        ({
+          matches: query === "(pointer: coarse)",
+          addEventListener: () => {},
+          removeEventListener: () => {},
+        }) as unknown as MediaQueryList,
+    );
+    try {
+      render(<FanChart asset="wti" currency="USD" detail={detail} history={history} />);
+      expect(
+        screen.getByText("Phóng to: kéo hai đầu thanh dưới biểu đồ, hoặc dùng các nút Phóng to, Thu nhỏ, Đặt lại."),
+      ).toBeInTheDocument();
+      expect(screen.queryByText(/Bàn phím/)).toBeNull();
+      expect(screen.getByRole("button", { name: "Phóng to" })).toHaveClass("pointer-coarse:min-h-11");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });

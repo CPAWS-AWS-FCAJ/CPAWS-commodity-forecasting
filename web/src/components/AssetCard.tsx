@@ -97,7 +97,7 @@ export function AssetCard({ item, hidePrice = false, scale }: Props) {
   return (
     <Link
       to={`/asset/${item.asset}`}
-      className={`group flex h-full flex-col rounded-lg border border-line bg-surface p-5 transition-colors duration-150 sm:p-6 ${ASSET_HOVER_BORDER_CLASS[item.asset]}`}
+      className={`lift group flex h-full flex-col rounded-lg border border-line bg-surface p-5 sm:p-6 ${ASSET_HOVER_BORDER_CLASS[item.asset]}`}
     >
       <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-2">
         <h2 className="flex items-center gap-2 text-lg font-semibold">
@@ -153,7 +153,7 @@ export function AssetCard({ item, hidePrice = false, scale }: Props) {
 
       <p className="mt-auto inline-flex items-center gap-1 pt-4 text-sm font-medium text-forecast">
         Xem chi tiết
-        <ChevronRightIcon className="transition-transform duration-150 group-hover:translate-x-0.5 motion-reduce:transition-none" />
+        <ChevronRightIcon className="transition-transform duration-200 ease-standard group-hover:translate-x-[3px] motion-reduce:transition-none" />
       </p>
     </Link>
   );

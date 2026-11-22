@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { AuthContext, SAMPLE_AUTH } from "../auth/AuthContext";
 import About from "./About";
 import AssetPage from "./AssetPage";
 import Home from "./Home";
@@ -31,13 +32,16 @@ function mount(path: string, mode: "basic" | "advanced", currency: "USD" | "VND"
   render(
     <QueryClientProvider client={client}>
       <SettingsProvider>
-        <MemoryRouter initialEntries={[path]}>
-          <Routes>
-            <Route index element={<Home />} />
-            <Route path="asset/:id" element={<AssetPage />} />
-            <Route path="about" element={<About />} />
-          </Routes>
-        </MemoryRouter>
+        {/* Chế độ dữ liệu mẫu (authEnabled=false): AuthProvider cấp SAMPLE_AUTH */}
+        <AuthContext.Provider value={SAMPLE_AUTH}>
+          <MemoryRouter initialEntries={[path]}>
+            <Routes>
+              <Route index element={<Home />} />
+              <Route path="asset/:id" element={<AssetPage />} />
+              <Route path="about" element={<About />} />
+            </Routes>
+          </MemoryRouter>
+        </AuthContext.Provider>
       </SettingsProvider>
     </QueryClientProvider>,
   );

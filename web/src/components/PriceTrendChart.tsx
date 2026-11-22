@@ -19,6 +19,7 @@ import {
   monthStartTicks,
 } from "../lib/format";
 import { displayUnit } from "../lib/units";
+import { useEntrance } from "../lib/motion";
 
 export interface TrendPoint {
   date: string;
@@ -61,6 +62,7 @@ function TrendTooltip({ active, payload, asset, currency }: TooltipProps) {
 export function PriceTrendChart({ asset, currency, data, label }: Props) {
   const last = data[data.length - 1];
   const color = ASSET_COLOR[asset];
+  const entering = useEntrance(900);
   const ticks = data.length > MONTH_TICKS_FROM_POINTS ? monthStartTicks(data.map((point) => point.date)) : undefined;
   return (
     <div role="img" aria-label={label} className="h-64 w-full sm:h-80">
@@ -96,7 +98,10 @@ export function PriceTrendChart({ asset, currency, data, label }: Props) {
             strokeWidth={2}
             dot={false}
             activeDot={{ r: 4, fill: color, stroke: CHART.surface, strokeWidth: 2 }}
-            isAnimationActive={false}
+            // Lần đầu (mở trang, chọn sản phẩm khác) đường giá vẽ ~400ms; đổi mốc/đơn vị sau đó tức thì
+            isAnimationActive={entering}
+            animationDuration={400}
+            animationEasing="ease-out"
           />
           {last ? (
             <ReferenceDot

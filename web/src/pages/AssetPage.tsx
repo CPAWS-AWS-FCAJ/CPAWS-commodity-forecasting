@@ -14,6 +14,7 @@ import { ReturnRange } from "../components/ReturnRange";
 import { QuantileTable } from "../components/QuantileTable";
 import { ReliabilityBlock } from "../components/ReliabilityBlock";
 import { ReturnFanChart } from "../components/ReturnFanChart";
+import { Swap } from "../components/Swap";
 import { EmptyBlock, ErrorBlock, LoadingBlock } from "../components/StateViews";
 import { BaselineBadge, RollBadge, SampleBadge, StaleBadge } from "../components/StatusBadges";
 import { CurrencyToggle, HorizonPicker, ModeToggle } from "../components/Toggles";
@@ -73,7 +74,7 @@ function AssetContent({ asset }: { asset: AssetId }) {
 
       {pending ? (
         <div className="mt-4">
-          <LoadingBlock label="Đang tải dự báo…" />
+          <LoadingBlock label="Đang tải dự báo…" shape="asset" />
         </div>
       ) : null}
       {failed ? (
@@ -89,7 +90,7 @@ function AssetContent({ asset }: { asset: AssetId }) {
       ) : null}
 
       {detail ? (
-        <div className="mt-4 grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
+        <div className="mt-4 grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem] 2xl:grid-cols-[minmax(0,1fr)_26rem] xl:group-data-[sidebar=collapsed]/app:grid-cols-[minmax(0,1fr)_26rem] 2xl:group-data-[sidebar=collapsed]/app:grid-cols-[minmax(0,1fr)_28rem]">
           <div className="min-w-0 space-y-6">
             <Summary
               asset={asset}
@@ -140,6 +141,8 @@ function AssetContent({ asset }: { asset: AssetId }) {
 
             <Notes asset={asset} detail={detail} currency={currency} hidePrice={hidePrice} />
           </div>
+          {/* Cột chat rộng dần theo màn hình và rộng thêm khi sidebar thu gọn (Layout data-sidebar); cao gần
+              hết màn hình và dính khi cuộn (ChatPanel) */}
           <div className="lg:sticky lg:top-4 lg:self-start">
             <ChatPanel key={asset} asset={asset} assetName={meta.name} />
           </div>
@@ -203,8 +206,10 @@ function Summary({
       ) : (
         <>
           <p className="tabular mt-3 text-3xl font-bold">
-            {formatPrice(asset, lastDisplay, currency)}{" "}
-            <span className="text-base font-normal text-muted">{displayUnit(asset, currency)}</span>
+            <Swap value={currency}>
+              {formatPrice(asset, lastDisplay, currency)}{" "}
+              <span className="text-base font-normal text-muted">{displayUnit(asset, currency)}</span>
+            </Swap>
           </p>
           <p className="text-xs text-muted">
             Giá cuối ngày {formatDate(detail.base_date)} · tỷ giá USD/VND {formatNumber(detail.fx.usd_vnd)} (

@@ -123,4 +123,50 @@ describe("trang Tổng quan giá", () => {
       expect(screen.queryByRole("link", { name: text })).toBeNull();
     }
   });
+
+  it("điện thoại: chọn thẻ giá khi biểu đồ nằm dưới màn hình thì cuộn tới biểu đồ; đã thấy biểu đồ thì không", async () => {
+    flags.show = true;
+    mount();
+    await screen.findByRole("region", { name: "Vàng" });
+    const chart = screen.getByTestId("overview-chart");
+    const scrollIntoView = vi.fn();
+    chart.scrollIntoView = scrollIntoView;
+
+    // Biểu đồ ở dưới màn hình (4 thẻ xếp dọc trên điện thoại)
+    chart.getBoundingClientRect = () => ({ top: window.innerHeight + 200 }) as DOMRect;
+    fireEvent.click(screen.getByRole("button", { name: /^Bạc/ }));
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: "start", behavior: "smooth" });
+    expect(await screen.findByRole("region", { name: "Bạc" })).toBeInTheDocument();
+
+    // Máy tính: biểu đồ đã trong màn hình
+    chart.getBoundingClientRect = () => ({ top: 300 }) as DOMRect;
+    fireEvent.click(screen.getByRole("button", { name: /^Dầu WTI/ }));
+    expect(scrollIntoView).toHaveBeenCalledTimes(1);
+  });
+
+  it("người dùng giảm chuyển động: cuộn tức thì", async () => {
+    flags.show = true;
+    vi.stubGlobal(
+      "matchMedia",
+      (query: string) =>
+        ({
+          matches: query === "(prefers-reduced-motion: reduce)",
+          addEventListener: () => {},
+          removeEventListener: () => {},
+        }) as unknown as MediaQueryList,
+    );
+    try {
+      mount();
+      await screen.findByRole("region", { name: "Vàng" });
+      const chart = screen.getByTestId("overview-chart");
+      const scrollIntoView = vi.fn();
+      chart.scrollIntoView = scrollIntoView;
+      chart.getBoundingClientRect = () => ({ top: -500 }) as DOMRect;
+      fireEvent.click(screen.getByRole("button", { name: /^Dầu Brent/ }));
+      expect(scrollIntoView).toHaveBeenCalledWith({ block: "start", behavior: "auto" });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });

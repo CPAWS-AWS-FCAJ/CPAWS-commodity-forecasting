@@ -142,7 +142,7 @@ export function AmountConverter({ asset, detail, horizonDays }: Props) {
           onKeyDown={onKeyDown}
           aria-invalid={blocking ? true : undefined}
           aria-describedby={describedBy}
-          className="tabular w-full max-w-xs rounded-md border border-line bg-surface px-3 py-2 text-base text-price placeholder:text-muted"
+          className="tabular w-full max-w-xs rounded-md border border-line bg-surface px-3 py-2 text-base text-price placeholder:text-muted pointer-coarse:min-h-11"
         />
         {words ? (
           <span className="tabular text-sm text-muted" aria-hidden="true">
@@ -200,7 +200,7 @@ export function AmountConverter({ asset, detail, horizonDays }: Props) {
           <li>Tính theo % thay đổi dự báo của chuỗi đại diện {detail.target_series}, không phải giá giao ngay.</li>
         ) : null}
         <li>
-          Cách tính: số tiền × e<sup>q</sup>, với q là log return {view.h} phiên ở q10, q50, q90.{" "}
+          Cách tính: lấy số tiền nhân với mức thay đổi dự báo cho {view.h} phiên tới, ở mép dưới, mức giữa và mép trên của khoảng 80%.{" "}
           <GuideLink anchor={GUIDE_ANCHORS.vnd} topic="cách quy đổi ra số tiền" />
         </li>
         <li>{AMOUNT_NOTE}</li>
