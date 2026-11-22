@@ -23,22 +23,22 @@ const METRIC_KEYS = ["coverage_80", "width_80", "width_80_pct", "sign_accuracy",
  */
 export const ACCURACY_METRIC_TEXT = {
   coverage: {
-    name: "Giá thực tế nằm trong khoảng 80%",
-    hint: "Gần 80% là khoảng dự báo rộng vừa đúng mức.",
+    name: "Giá thật nằm trong khoảng 80%",
+    hint: "Mục tiêu là gần 80%: thấp hơn hẳn là khoảng quá hẹp, cao hơn hẳn là khoảng quá rộng.",
     meaning:
-      "Tỷ lệ lần giá thực tế rơi vào khoảng dự báo 80% (q10–q90), kèm số cặp đã chấm. Gần 80% là đúng mức; thấp hơn nhiều nghĩa là khoảng quá hẹp, cao hơn nhiều nghĩa là khoảng quá rộng.",
+      "Trong các lần đã có giá thật để so, bao nhiêu phần trăm số lần giá thật rơi vào khoảng 80% của dự báo; ghi kèm số lần đếm được. Gần 80% là khoảng rộng vừa phải; thấp hơn hẳn nghĩa là khoảng đang quá hẹp, cao hơn hẳn nghĩa là khoảng đang quá rộng.",
   },
   width: {
     name: "Độ rộng khoảng 80% (% giá)",
-    hint: "Trung bình khoảng cách từ q10 đến q90, tính theo % giá.",
+    hint: "Trung bình mép trên cách mép dưới bao nhiêu phần trăm giá.",
     meaning:
-      "Độ rộng trung bình của khoảng 80%, tính theo % giá. Hai dự báo cùng phủ gần 80% thì khoảng hẹp hơn cho nhiều thông tin hơn.",
+      "Khoảng 80% trung bình rộng bao nhiêu phần trăm so với giá. Nếu hai dự báo cùng chứa giá thật gần 80% số lần, dự báo có khoảng hẹp hơn cho biết nhiều hơn.",
   },
   sign: {
     name: "Đúng chiều tăng/giảm · tỷ lệ phiên tăng thực tế",
-    hint: "Đọc cùng tỷ lệ phiên tăng thực tế; hai tỷ lệ có thể dùng mẫu quan sát khác nhau.",
+    hint: "Đọc hai số cùng nhau; chúng có thể dùng mẫu quan sát khác nhau nên không trừ cho nhau.",
     meaning:
-      "Tỷ lệ lần mức giữa (trung vị) dự báo cùng chiều với giá thực tế. Đọc tỷ lệ dự báo đúng chiều cùng tỷ lệ phiên tăng thực tế để có thêm bối cảnh. Hai tỷ lệ có thể dùng mẫu quan sát khác nhau, nên không xem chênh lệch giữa chúng là mức cải thiện chính xác của mô hình.",
+      "Số thứ nhất: tỷ lệ lần mức giữa của dự báo đoán đúng chiều (tăng hay giảm) so với giá thật. Số thứ hai: tỷ lệ lần giá thật đã tăng trong cùng giai đoạn, để biết bối cảnh (khi giá tăng gần như liên tục, đoán “tăng” cũng dễ đúng). Hai tỷ lệ có thể dùng mẫu quan sát khác nhau, nên không xem chênh lệch giữa chúng là mức cải thiện của mô hình.",
   },
 } as const;
 
