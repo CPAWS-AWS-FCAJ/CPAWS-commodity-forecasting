@@ -19,7 +19,7 @@ const Overview = lazy(() => import("./pages/Overview"));
 const Guide = lazy(() => import("./pages/Guide"));
 
 function Lazy({ label, children }: { label: string; children: ReactNode }) {
-  return <Suspense fallback={<LoadingBlock label={label} />}>{children}</Suspense>;
+  return <Suspense fallback={<LoadingBlock label={label} shape="panel" />}>{children}</Suspense>;
 }
 
 /**
@@ -42,8 +42,8 @@ function AppFrame() {
 }
 
 /**
- * Định tuyến: công khai (/, /guide, /about, /dang-nhap) và cần đăng nhập (/overview, /asset/:id,
- * /accuracy → /dang-nhap?next=… khi chưa đăng nhập).
+ * Định tuyến: công khai (/, /about, /dang-nhap) và cần đăng nhập (/overview, /asset/:id, /accuracy,
+ * /guide → /dang-nhap?next=… khi chưa đăng nhập, giữ cả #anchor của /guide).
  */
 export default function App() {
   return (
@@ -52,14 +52,6 @@ export default function App() {
         <Route path="dang-nhap" element={<SignIn />} />
         <Route element={<AppFrame />}>
           <Route index element={<Home />} />
-          <Route
-            path="guide"
-            element={
-              <Lazy label="Đang tải hướng dẫn…">
-                <Guide />
-              </Lazy>
-            }
-          />
           <Route path="about" element={<About />} />
           <Route element={<RequireAuth />}>
             <Route
@@ -79,6 +71,14 @@ export default function App() {
               }
             />
             <Route path="accuracy" element={<Accuracy />} />
+            <Route
+              path="guide"
+              element={
+                <Lazy label="Đang tải hướng dẫn…">
+                  <Guide />
+                </Lazy>
+              }
+            />
           </Route>
           <Route path="*" element={<NotFound />} />
         </Route>

@@ -81,3 +81,11 @@ html:root:focus-within {
 [data-amplify-authenticator] [data-state="inactive"] {
   color: var(--color-muted);
 }
+
+/* Màn cảm ứng: ô nhập và nút của form cao tối thiểu 44 px (vùng chạm) */
+@media (pointer: coarse) {
+  [data-amplify-authenticator] input,
+  [data-amplify-authenticator] button {
+    min-height: 2.75rem;
+  }
+}

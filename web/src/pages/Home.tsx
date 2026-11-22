@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import { Link } from "react-router-dom";
 import { useForecasts } from "../api/hooks";
 import { AssetCard, rangeScale } from "../components/AssetCard";
@@ -7,7 +8,7 @@ import { isPriceHidden } from "../lib/assets";
 import { METAL_PRICE_NOTE } from "../lib/source";
 import { isMetal } from "../lib/units";
 
-/** Khung chờ cùng hình dạng lưới thẻ (không nhấp nháy). */
+/** Khung chờ cùng hình dạng lưới thẻ (nhịp sáng-tối chậm, không đổi bố cục khi thẻ thật tới). */
 function CardsSkeleton() {
   return (
     <div role="status" aria-live="polite">
@@ -15,10 +16,10 @@ function CardsSkeleton() {
       <ul aria-hidden="true" className="grid gap-4 md:grid-cols-2">
         {[0, 1, 2, 3].map((key) => (
           <li key={key} className="h-72 rounded-lg border border-line bg-surface p-6">
-            <div className="h-5 w-32 rounded bg-surface-muted" />
-            <div className="mt-6 h-8 w-40 rounded bg-surface-muted" />
+            <div className="skeleton h-5 w-32" />
+            <div className="skeleton mt-6 h-8 w-40" />
             <div className="mt-10 h-px w-full bg-line" />
-            <div className="mt-6 h-4 w-3/4 rounded bg-surface-muted" />
+            <div className="skeleton mt-6 h-4 w-3/4" />
           </li>
         ))}
       </ul>
@@ -50,8 +51,9 @@ export default function Home() {
         {items.length > 0 ? (
           <>
             <ul className="grid gap-4 md:grid-cols-2">
-              {items.map((item) => (
-                <li key={item.asset} className="h-full">
+              {items.map((item, index) => (
+                // Bốn thẻ xuất hiện so le 40ms (một lần khi dữ liệu tới)
+                <li key={item.asset} className="stagger-item h-full" style={{ "--i": index } as CSSProperties}>
                   <AssetCard item={item} hidePrice={isPriceHidden(item.asset)} scale={scale} />
                 </li>
               ))}
@@ -67,7 +69,7 @@ export default function Home() {
               </div>
               <Link
                 to="/guide"
-                className="shrink-0 text-sm font-medium text-forecast underline-offset-4 hover:underline"
+                className="shrink-0 text-sm font-medium text-forecast underline-offset-4 hover:underline pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:items-center"
               >
                 Cách đọc dự báo
               </Link>

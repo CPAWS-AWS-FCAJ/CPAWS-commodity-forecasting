@@ -30,8 +30,10 @@ export default function SignIn() {
 
   return (
     <PublicShell showAuthActions={false}>
-      <div className="mx-auto grid max-w-6xl items-start gap-6 px-4 py-8 sm:px-6 lg:gap-10 lg:grid-cols-[minmax(0,1fr)_28rem] lg:px-10 lg:py-16">
-        <section className="max-w-lg">
+      {/* Điện thoại: tiêu đề → form → danh sách lợi ích (form vẫn ở màn đầu). Máy tính: hai cột như cũ,
+          danh sách nằm dưới tiêu đề ở cột trái. */}
+      <div className="mx-auto grid max-w-6xl items-start gap-6 px-4 py-8 sm:px-6 lg:grid-cols-[minmax(0,1fr)_28rem] lg:grid-rows-[auto_1fr] lg:gap-x-10 lg:gap-y-8 lg:px-10 lg:py-16">
+        <section className="max-w-lg lg:col-start-1 lg:row-start-1">
           <h1 className="text-3xl font-semibold tracking-tight">
             {config.allowSignUp ? "Đăng nhập hoặc tạo tài khoản" : "Đăng nhập để xem dự báo"}
           </h1>
@@ -41,18 +43,8 @@ export default function SignIn() {
               ? "Tài khoản dùng tên đăng nhập và mật khẩu; email chỉ để nhận mã xác minh."
               : "Tài khoản do nhóm CPAWS cấp."}
           </p>
-          {/* Trên điện thoại bỏ danh sách để form nằm ngay màn đầu */}
-          <h2 className="mt-8 hidden text-sm font-medium lg:block">Sau khi đăng nhập</h2>
-          <ul className="mt-3 hidden space-y-2 text-sm text-muted lg:block">
-            {AFTER_SIGN_IN.map((line) => (
-              <li key={line} className="flex gap-3">
-                <span aria-hidden="true" className="mt-2 h-px w-3 shrink-0 bg-muted" />
-                <span>{line}</span>
-              </li>
-            ))}
-          </ul>
         </section>
-        <div className="w-full">
+        <div className="w-full lg:col-start-2 lg:row-span-2 lg:row-start-1">
           {status === "loading" ? (
             <LoadingBlock label="Đang kiểm tra đăng nhập…" />
           ) : (
@@ -61,6 +53,19 @@ export default function SignIn() {
             </Suspense>
           )}
         </div>
+        <section aria-labelledby="after-sign-in" className="max-w-lg lg:col-start-1 lg:row-start-2">
+          <h2 id="after-sign-in" className="text-sm font-medium">
+            Sau khi đăng nhập
+          </h2>
+          <ul className="mt-3 space-y-2 text-sm text-muted">
+            {AFTER_SIGN_IN.map((line) => (
+              <li key={line} className="flex gap-3">
+                <span aria-hidden="true" className="mt-2 h-px w-3 shrink-0 bg-muted" />
+                <span>{line}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
       </div>
     </PublicShell>
   );

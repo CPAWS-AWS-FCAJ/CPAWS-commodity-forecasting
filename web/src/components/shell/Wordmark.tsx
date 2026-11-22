@@ -6,7 +6,7 @@ export function Wordmark({ onClick, withTagline = false }: { onClick?: () => voi
     <Link
       to="/"
       onClick={onClick}
-      className="inline-flex flex-col rounded-md leading-none text-price"
+      className="inline-flex flex-col justify-center rounded-md leading-none text-price pointer-coarse:min-h-11"
       aria-label="CPAWS, về trang chủ"
     >
       <span className="text-base font-semibold tracking-tight">CPAWS</span>
