@@ -5,6 +5,8 @@ Bedrock Converse với vòng gọi tool tối đa MAX_TOOL_ROUNDS, dựng respon
 - Hạn chót: Lambda truyền `budget_s` (giây còn lại, tính từ `requestTimeEpoch` của API Gateway);
   chỉ bắt đầu một lần gọi model khi còn đủ MIN_CALL_S để lần gọi đó xong trước hạn.
 - Giới hạn lượt hỏi: `QuotaGate`; Lambda dùng `quota.DynamoQuotaGate`, test dùng `NoQuota`.
+- Ngày giờ hiện tại (v1.0.1): khối system thứ hai do code tạo (`current_time_block`), đặt sau
+  prompt đã khóa SHA-256; prompt giữ nguyên từng byte. Đồng hồ tiêm qua `ChatDeps.now`.
 Phần còn chờ chốt trong PR #41:
 - router (mục 9): `choose_branch`, mặc định mọi câu đi `complex`;
 - Guardrails: chỉ gắn `guardrailConfig` khi có cấu hình.
@@ -14,6 +16,7 @@ Module không import boto3: Lambda truyền client vào, test truyền client gi
 
 from __future__ import annotations
 
+import datetime as dt
 import logging
 import re
 import time
@@ -72,6 +75,11 @@ UNAVAILABLE_CODES = frozenset(
 MODEL_TIMEOUT_CODES = frozenset({"ModelTimeoutException"})
 # Tên lớp lỗi hết thời gian của botocore (không import botocore trong module này)
 TIMEOUT_ERRORS = frozenset({"ReadTimeoutError", "ConnectTimeoutError", "ConnectTimeout"})
+# Giờ Việt Nam: UTC+7 cố định, không có giờ mùa hè. Dùng offset cố định thay cho zoneinfo
+# "Asia/Ho_Chi_Minh" để không phụ thuộc tzdata trong runtime Lambda (asset chỉ có stdlib + boto3).
+VN_TZ = N.VN_TZ
+# Không dùng locale của hệ thống (Lambda không có locale vi_VN); weekday() 0 = thứ Hai
+WEEKDAYS_VI = ("thứ Hai", "thứ Ba", "thứ Tư", "thứ Năm", "thứ Sáu", "thứ Bảy", "Chủ nhật")
 
 
 class ChatError(Exception):
@@ -208,6 +216,32 @@ class ChatDeps:
     guardrail: Mapping[str, str] | None = None  # {"guardrailIdentifier", "guardrailVersion"}
     clock: Callable[[], float] = time.monotonic
     sleep: Callable[[float], None] = time.sleep
+    # Đồng hồ thực (có múi giờ) cho khối "Thời điểm hiện tại" và ngày mặc định của get_news;
+    # test tiêm giờ cố định. `clock` ở trên là đồng hồ đơn điệu chỉ để tính hạn chót.
+    now: Callable[[], dt.datetime] = field(default=lambda: dt.datetime.now(dt.UTC))
+
+
+def vn_now(now: dt.datetime) -> dt.datetime:
+    """Đổi thời điểm có múi giờ sang giờ Việt Nam; datetime không có múi giờ thì báo lỗi (không
+    đoán là UTC hay giờ máy)."""
+    if now.tzinfo is None or now.utcoffset() is None:
+        raise ValueError("now() must return a timezone-aware datetime")
+    return now.astimezone(VN_TZ)
+
+
+def current_time_block(now: dt.datetime) -> dict[str, str]:
+    """Khối system thứ hai: ngày giờ hiện tại theo giờ Việt Nam. Lỗi production 23/11/2026: model
+    không biết hôm nay nên hiểu "năm nay" là 2024 và lấy ngày cơ sở làm hôm nay. Khối này chỉ nêu
+    sự kiện, không đổi quy tắc của prompt đã khóa."""
+    local = vn_now(now)
+    stamp = f"{WEEKDAYS_VI[local.weekday()]}, {local:%d/%m/%Y %H:%M}"
+    return {
+        "text": (
+            f"Thời điểm hiện tại: {stamp} (giờ Việt Nam, UTC+7). "
+            '"Hôm nay", "năm nay" tính theo mốc này. '
+            "Ngày cơ sở trong dữ liệu dự báo là phiên giá gần nhất, có thể sớm hơn hôm nay."
+        )
+    }
 
 
 def _tool_config() -> dict[str, Any]:
@@ -227,11 +261,14 @@ def _messages(req: ChatRequest) -> list[dict[str, Any]]:
     return msgs
 
 
-def _run_tool(name: str, tool_input: Mapping[str, Any], deps: ChatDeps) -> dict[str, Any]:
+def _run_tool(
+    name: str, tool_input: Mapping[str, Any], deps: ChatDeps, today: dt.date
+) -> dict[str, Any]:
     if name == T.TOOL_NAME:
         return T.get_forecast(tool_input, deps.forecasts)
     if name == N.TOOL_NAME:
-        return N.get_news(tool_input, deps.news)
+        # cùng mốc "hôm nay" với khối thời gian trong system (giờ VN), không đọc đồng hồ lần nữa
+        return N.get_news(tool_input, deps.news, today=today)
     return {"error": "unknown_tool", "message": f"Không có tool {name!r}."}
 
 
@@ -301,9 +338,11 @@ def answer(
     (model không sẵn sàng) hoặc 504 (không còn đủ thời gian cho lần gọi model tiếp theo)."""
     branch = branch or choose_branch(req)
     deadline = deps.clock() + (DEFAULT_BUDGET_S if budget_s is None else budget_s)
+    now = deps.now()
     kwargs: dict[str, Any] = {
         "modelId": MODEL_IDS[branch],
-        "system": [{"text": deps.prompts[branch]}],
+        # Khối 1: prompt đã khóa, giữ nguyên từng byte; khối 2: ngày giờ hiện tại do code tạo
+        "system": [{"text": deps.prompts[branch]}, current_time_block(now)],
         "inferenceConfig": {"maxTokens": MAX_TOKENS[branch], "temperature": TEMPERATURE},
     }
     if branch == "complex":
@@ -349,7 +388,7 @@ def answer(
             break
         results = []
         for tu in uses:
-            out = _run_tool(tu["name"], tu.get("input") or {}, deps)
+            out = _run_tool(tu["name"], tu.get("input") or {}, deps, vn_now(now).date())
             tool_names.append(tu["name"])
             ok = "error" not in out
             if not ok:
@@ -430,6 +469,7 @@ __all__ = [
     "QuotaGate",
     "answer",
     "choose_branch",
+    "current_time_block",
     "load_system_prompt",
     "parse_request",
     "response_body",
