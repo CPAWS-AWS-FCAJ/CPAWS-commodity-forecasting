@@ -1,8 +1,10 @@
 # ADR-0014: Mở tự đăng ký Cognito trong thời gian chấm đồ án
 
 - Ngày: 2026-11-16
-- Trạng thái: Đề xuất; bản sửa đổi 23/11/2026 chờ Data & Security Lead (Tuấn) duyệt
-- Người viết: Tuấn; người duyệt: Khải (chờ review PR)
+- Trạng thái: Đề xuất. Bản sửa đổi 23/11/2026 chưa có quyết định.
+- Người có thẩm quyền quyết định: Data & Security Lead (Tuấn).
+- Người viết: Tuấn (bản gốc 16/11/2026); Khải (mục "Cập nhật 23/11/2026").
+- Người review: Khải (bản gốc); Data & Security Lead (bản sửa đổi); Tiến (mọi PR CDK `CpawsAuth` đi kèm).
 
 ## Bối cảnh
 
@@ -43,16 +45,37 @@ Chọn phương án 2, với các điều kiện:
 
 **Diễn biến thực tế.** PR CDK `CpawsAuth` (#141) merge ngày 19/11/2026, nhưng deploy (Tiến, từ `production` tag `v1.0.0`) diễn ra lúc 21:07 ngày 22/11/2026, cùng lượt release v1.0.0; web Amplify Deployment 6 build với `VITE_ALLOW_SIGNUP=true` lúc 21:27. Mục "Quyết định" ở trên yêu cầu mở trước 21/11 và không mở nếu chưa xong trước freeze 22/11, nên đây là **sai lệch so với điều kiện đã thống nhất**, không phải ngoại lệ đã được duyệt. Ngày 23/11 Data & Security Lead đã nêu sai lệch này trong review PR #145.
 
-**Tác động đã biết tới 23/11:** nhóm đã đăng ký thử tài khoản mới ngày 23/11; chưa có số liệu đầy đủ về số tài khoản tự tạo, cần Data & Security Lead kiểm trong Cognito. Chi phí: Cognito Lite/Essentials miễn phí tới 10.000 MAU/tháng; chatbot bị chặn ở 100 lượt/ngày toàn hệ thống (ước tính khoảng 1,2 USD/ngày nếu dùng hết, xem `docs/api/contract.md`); email xác minh dùng `COGNITO_DEFAULT` nên số email mỗi ngày bị giới hạn ở mức thấp.
+**Tác động đã biết tới 23/11:** nhóm đã đăng ký thử tài khoản mới ngày 23/11; chưa có số liệu đầy đủ về số tài khoản tự tạo, cần Data & Security Lead kiểm trong Cognito. Chi phí: Cognito Lite/Essentials miễn phí tới 10.000 MAU/tháng; chatbot bị chặn ở 100 lượt/ngày toàn hệ thống (ước tính khoảng 1,2 USD/ngày nếu dùng hết; xem cách tính ở bảng giám sát bên dưới); email xác minh dùng `COGNITO_DEFAULT` nên số email mỗi ngày bị giới hạn ở mức thấp.
 
-**Hai phương án, chờ Data & Security Lead chọn:**
+**Hai phương án, chờ Data & Security Lead chọn.** Cả hai đều là đề xuất cho tới khi có quyết định chính thức; cập nhật tài liệu này không phải là chấp thuận hồi tố cho việc đã mở sau freeze.
 
-1. **Đóng ngay** (đề nghị của Data & Security Lead ngày 23/11): PR CDK tắt `self_sign_up_enabled` → deploy `CpawsAuth` → build web với `VITE_ALLOW_SIGNUP=false` → giữ tài khoản nhóm và grader; người chấm và người dùng thử dùng tài khoản do Data & Security Lead tạo tay, gửi qua kênh riêng.
-2. **Giữ mở có thời hạn, hợp thức hóa bằng bản sửa đổi này:** giữ tự đăng ký cho người chấm và đợt dùng thử của bạn bè, người thân nhóm, kèm các biện pháp:
-   - Data & Security Lead kiểm số tài khoản tự tạo và mức dùng chatbot mỗi ngày tới khi đóng;
-   - **đóng sớm** (theo đúng thứ tự ở mục "Đóng đăng ký") nếu: số tài khoản tự tạo vượt 50, có dấu hiệu lạm dụng (đăng ký hàng loạt, cạn quota chatbot trước 12:00 hai ngày liên tiếp), lỗi hết hạn mức email lặp lại, hoặc Yahoo, mentor hay hội đồng yêu cầu;
-   - giữ nguyên mốc đóng: trong 1 ngày sau khi mentor xác nhận chấm xong, chậm nhất 10/12/2026;
+1. **Đóng ngay** (đề nghị của Data & Security Lead ngày 23/11), mỗi bước qua PR riêng có review:
+   1. PR CDK tắt `self_sign_up_enabled` (Tiến review CDK, Data & Security Lead duyệt) → merge → release → deploy `CpawsAuth`, kiểm `cdk diff` chỉ sửa tại chỗ.
+   2. Build web với `VITE_ALLOW_SIGNUP=false`, upload Amplify.
+   3. **Xử lý tài khoản đã đăng ký** (tắt self-signup không tự động xử lý tài khoản đã có):
+      - kiểm kê toàn bộ user của `cpaws-dev-users` (username, ngày tạo, trạng thái); danh sách lưu ngoài repo, chỉ chia sẻ qua kênh riêng của nhóm;
+      - đối chiếu với danh sách được phép: tài khoản 5 thành viên và tài khoản grader;
+      - tài khoản ngoài danh sách: vô hiệu hóa ngay (`AdminDisableUser`), xóa sau khi nhóm xác nhận không còn cần (`AdminDeleteUser`); không xóa tài khoản nhóm hay grader;
+      - ghi số lượng tài khoản đã vô hiệu hóa và ngày thực hiện vào Chương 4 (không ghi email hay tên người dùng).
+   4. Người chấm và người dùng thử dùng tài khoản do Data & Security Lead tạo tay (`AdminCreateUser`), gửi qua kênh riêng.
+2. **Đề xuất: giữ mở có thời hạn** cho người chấm và đợt dùng thử của bạn bè, người thân nhóm. Chỉ có hiệu lực từ ngày Data & Security Lead chấp thuận; giai đoạn từ 22/11 21:07 tới ngày đó vẫn ghi là sai lệch. Điều kiện:
+   - giám sát theo bảng bên dưới;
+   - **đóng sớm** theo các bước của phương án 1 khi chạm một ngưỡng trong bảng, hoặc khi Yahoo, mentor hay hội đồng yêu cầu;
+   - mốc đóng: trong 1 ngày sau khi mentor xác nhận chấm xong, chậm nhất 10/12/2026; khi đóng làm đủ bước 1–3 của phương án 1;
    - vẫn tạo riêng tài khoản grader, phòng khi hết hạn mức email.
+
+**Giám sát nếu chọn phương án 2** (người phụ trách: Data & Security Lead; giờ Việt Nam, UTC+7):
+
+| Chỉ số | Nguồn dữ liệu | Chu kỳ | Ngưỡng đóng sớm |
+|---|---|---|---|
+| Số tài khoản tự tạo | Cognito `ListUsers` trên `cpaws-dev-users`, đếm user có `UserCreateDate` sau 22/11/2026 21:07 và không thuộc danh sách nhóm/grader | Mỗi ngày lúc 09:00 | Vượt 50 tài khoản |
+| Dùng chatbot | Bảng DynamoDB `cpaws-dev-chat-usage`, dòng `pk = global`, `sk = day#<ngày>`: `request_count` và `updated_at` lúc đạt 100 | Mỗi ngày lúc 09:00 (xem ngày hôm trước) | Đạt 100 lượt trước 12:00 hai ngày liên tiếp |
+| Lỗi hạn mức email | CloudTrail Event history của Cognito, sự kiện `SignUp`/`ResendConfirmationCode` có `errorCode = LimitExceededException` | Mỗi ngày lúc 09:00 | Xuất hiện ở 2 ngày trở lên |
+| Đăng ký bất thường | Cùng nguồn với dòng đầu: số tài khoản tạo trong 1 giờ | Mỗi ngày lúc 09:00 | Từ 10 tài khoản trong 1 giờ |
+
+Kết quả mỗi lần kiểm ghi ngắn (ngày, số liệu, quyết định) vào kênh nhóm; không ghi email hay tên người dùng.
+
+**Cách tính 1,2 USD/ngày:** lấy chi phí thật của lần chạy dev 26/10/2026 (prompt và tool v2): 0,35 USD cho 30 câu Haiku 4.5, khoảng 0,012 USD mỗi câu `complex` (`docs/api/contract.md`, mục giới hạn `POST /chat`; đơn giá tham chiếu ở ADR-0004). Giả định cả 100 lượt/ngày đều là câu `complex` gọi Haiku, mỗi câu có số token tương đương lần chạy đó: 100 × 0,012 ≈ 1,2 USD/ngày. Con số là ước tính từ chi phí đo được, chưa tách theo token đầu vào và đầu ra; câu dài hơn hoặc gọi nhiều tool hơn sẽ tốn hơn.
 
 Khi Data & Security Lead chọn, cập nhật trạng thái ADR này và các tài liệu liên quan (`docs/defense/kien-truc-trien-khai.md` 4.6, `docs/defense/trien-khai-van-hanh.md` §2.1, `docs/defense/security-and-cost.md`, `docs/defense/mo-dau.md`).
 
