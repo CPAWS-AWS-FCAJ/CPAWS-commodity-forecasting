@@ -15,11 +15,16 @@ interface Props {
 }
 
 /**
- * Ngăn kéo menu trên mobile (dưới lg): trượt từ trái, đóng bằng Esc hoặc bấm ra ngoài, giữ focus bên
- * trong khi mở, trả focus về nút mở khi đóng, khóa cuộn trang nền. Đóng thì `inert` để không Tab vào.
+ * Hành vi hộp thoại dùng chung (ngăn kéo menu, ngăn chatbot trên điện thoại): khi mở thì focus vào
+ * phần tử có data-autofocus (hoặc phần tử đầu tiên), giữ Tab trong panel, Esc để đóng, khóa cuộn trang
+ * nền; khi đóng thì trả focus về nút đã mở.
  */
-export function MobileDrawer({ id, open, onClose, returnFocusRef, label, children }: Props) {
-  const panelRef = useRef<HTMLDivElement>(null);
+export function useDialogBehavior(
+  panelRef: RefObject<HTMLElement | null>,
+  open: boolean,
+  onClose: () => void,
+  returnFocusRef: RefObject<HTMLElement | null>,
+) {
   const wasOpen = useRef(false);
 
   useEffect(() => {
@@ -61,7 +66,17 @@ export function MobileDrawer({ id, open, onClose, returnFocusRef, label, childre
       document.removeEventListener("keydown", onKeyDown);
       document.body.style.overflow = previousOverflow;
     };
-  }, [open, onClose, returnFocusRef]);
+  }, [open, onClose, returnFocusRef, panelRef]);
+}
+
+/**
+ * Ngăn kéo menu trên mobile (dưới lg): trượt từ trái, đóng bằng Esc hoặc bấm ra ngoài, giữ focus bên
+ * trong khi mở, trả focus về nút mở khi đóng, khóa cuộn trang nền (useDialogBehavior). Đóng thì `inert`
+ * để không Tab vào.
+ */
+export function MobileDrawer({ id, open, onClose, returnFocusRef, label, children }: Props) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  useDialogBehavior(panelRef, open, onClose, returnFocusRef);
 
   return (
     <div
@@ -72,7 +87,9 @@ export function MobileDrawer({ id, open, onClose, returnFocusRef, label, childre
       <div
         data-testid="drawer-backdrop"
         onClick={onClose}
-        className={`absolute inset-0 bg-canvas/80 transition-opacity duration-200 motion-reduce:transition-none ${
+        className={`absolute inset-0 bg-canvas/80 transition-opacity ease-standard motion-reduce:transition-none ${
+          open ? "duration-300" : "duration-200"
+        } ${
           open ? "opacity-100" : "opacity-0"
         }`}
       />
@@ -82,8 +99,9 @@ export function MobileDrawer({ id, open, onClose, returnFocusRef, label, childre
         role="dialog"
         aria-modal="true"
         aria-label={label}
-        className={`absolute inset-y-0 left-0 flex w-72 max-w-[85%] flex-col border-r border-line bg-surface transition-transform duration-200 ease-out motion-reduce:transition-none ${
-          open ? "translate-x-0" : "-translate-x-full"
+        // Mở 300ms (đường cong vào), đóng 200ms: đóng nhanh hơn mở để không cản thao tác tiếp theo
+        className={`absolute inset-y-0 left-0 flex w-72 max-w-[85%] flex-col border-r border-line bg-surface transition-transform motion-reduce:transition-none ${
+          open ? "translate-x-0 duration-300 ease-enter" : "-translate-x-full duration-200 ease-exit"
         }`}
       >
         {children}

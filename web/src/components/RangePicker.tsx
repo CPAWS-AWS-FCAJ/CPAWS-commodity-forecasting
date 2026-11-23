@@ -13,7 +13,8 @@ interface Props {
 }
 
 /**
- * Chọn mốc xem lịch sử giá. Mốc vượt dữ liệu vẫn hiện nhưng tắt (aria-disabled, vẫn focus được để đọc
+ * Chọn mốc xem lịch sử giá. Dưới sm các nút chia đều một hàng full chiều ngang (không rơi nút cuối
+ * xuống dòng 2); từ sm là nhóm nút gọn như cũ. Mốc vượt dữ liệu vẫn hiện nhưng tắt (aria-disabled, vẫn focus được để đọc
  * lý do), kèm dòng giải thích bên dưới: không ẩn im lặng.
  */
 export function RangePicker({ ranges, value, pointCount, onChange, label = "Khoảng thời gian" }: Props) {
@@ -21,8 +22,12 @@ export function RangePicker({ ranges, value, pointCount, onChange, label = "Kho�
   const unavailable = ranges.filter((range) => !isRangeAvailable(range, pointCount));
 
   return (
-    <div className="flex flex-col items-start gap-1 sm:items-end">
-      <div role="group" aria-label={label} className="inline-flex flex-wrap rounded-md border border-line bg-surface p-0.5">
+    <div className="flex w-full flex-col items-stretch gap-1 sm:w-auto sm:items-end">
+      <div
+        role="group"
+        aria-label={label}
+        className="grid auto-cols-fr grid-flow-col rounded-md border border-line bg-surface p-0.5 sm:inline-flex sm:flex-wrap"
+      >
         {ranges.map((range) => {
           const available = isRangeAvailable(range, pointCount);
           const active = available && range.id === value;
@@ -37,7 +42,7 @@ export function RangePicker({ ranges, value, pointCount, onChange, label = "Kho�
               onClick={() => {
                 if (available) onChange(range);
               }}
-              className={`rounded px-3 py-1.5 text-sm transition-colors ${
+              className={`whitespace-nowrap rounded px-1 py-1.5 text-sm transition-colors sm:px-3 pointer-coarse:min-h-11 ${
                 active
                   ? "bg-price text-on-price"
                   : available

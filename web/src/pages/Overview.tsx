@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 import { Link } from "react-router-dom";
 import { usePriceOverview } from "../api/hooks";
 import { ASSET_IDS } from "../api/types";
@@ -7,6 +8,7 @@ import { PriceTrendChart } from "../components/PriceTrendChart";
 import { ProbabilityBadge } from "../components/ProbabilityBadge";
 import { RangePicker } from "../components/RangePicker";
 import { SourceNote } from "../components/SourceNote";
+import { Swap } from "../components/Swap";
 import { EmptyBlock, ErrorBlock, LoadingBlock } from "../components/StateViews";
 import { BaselineBadge, SampleBadge, StaleBadge } from "../components/StatusBadges";
 import { CurrencyToggle } from "../components/Toggles";
@@ -26,6 +28,7 @@ import {
   sliceRange,
 } from "../lib/priceOverview";
 import type { HistoryRange, PriceChange } from "../lib/priceOverview";
+import { matchesMedia, REDUCED_MOTION } from "../lib/media";
 import { useSettings } from "../lib/settings";
 import { GOLD_VND_NOTE, METAL_PRICE_NOTE } from "../lib/source";
 import { convertPrice, displayUnit, isMetal } from "../lib/units";
@@ -73,7 +76,7 @@ function PriceTile({ asset, detail, isPending, isError, selected, currency, onSe
       type="button"
       aria-pressed={selected}
       onClick={() => onSelect(asset)}
-      className={`block h-full w-full rounded-lg border bg-surface p-4 text-left transition-colors ${
+      className={`lift block h-full w-full rounded-lg border bg-surface p-4 text-left ${
         selected ? SELECTED_BORDER[asset] : "border-line hover:border-muted"
       }`}
     >
@@ -82,7 +85,14 @@ function PriceTile({ asset, detail, isPending, isError, selected, currency, onSe
         {detail?.is_sample ? <SampleBadge /> : null}
         {detail && detail.stale_sources.length > 0 ? <StaleBadge sources={detail.stale_sources} /> : null}
       </span>
-      {isPending ? <span className="mt-3 block text-sm text-muted">Đang tải…</span> : null}
+      {isPending ? (
+        // Khung chờ cùng cỡ dòng giá; chữ "Đang tải…" giữ cho trình đọc màn hình
+        <span className="mt-2 block">
+          <span className="sr-only">Đang tải…</span>
+          <span aria-hidden="true" className="skeleton block h-8 w-32" />
+          <span aria-hidden="true" className="skeleton mt-2 block h-4 w-40 max-w-full" />
+        </span>
+      ) : null}
       {isError ? <span className="mt-3 block text-sm text-down">Không tải được dữ liệu</span> : null}
       {detail ? (
         <>
@@ -90,8 +100,10 @@ function PriceTile({ asset, detail, isPending, isError, selected, currency, onSe
             <span className="mt-3 block text-sm text-muted">Giá đang được ẩn, chỉ hiện % thay đổi</span>
           ) : (
             <span className="tabular mt-2 block text-2xl font-semibold">
-              {formatPrice(asset, price, currency)}{" "}
-              <span className="text-sm font-normal text-muted">{displayUnit(asset, currency)}</span>
+              <Swap value={currency}>
+                {formatPrice(asset, price, currency)}{" "}
+                <span className="text-sm font-normal text-muted">{displayUnit(asset, currency)}</span>
+              </Swap>
             </span>
           )}
           <span className="mt-1 block text-sm">
@@ -219,11 +231,11 @@ function ForecastAside({ asset, detail, currency }: { asset: AssetId; detail: Fo
           </div>
           <p className="tabular mt-4 text-sm">
             {hidden ? "Thay đổi 80% sau 7 phiên: " : "Khoảng giá 80% sau 7 phiên: "}
-            <span className="font-medium">
+            <Swap value={currency} className="font-medium">
               {hidden
                 ? `${formatReturnPercent(view.returnLow)} đến ${formatReturnPercent(view.returnHigh)}`
                 : `${formatPrice(asset, toDisplay(view.low), currency)}–${formatPrice(asset, toDisplay(view.high), currency)} ${unit}`}
-            </span>
+            </Swap>
           </p>
         </>
       ) : (
@@ -231,7 +243,7 @@ function ForecastAside({ asset, detail, currency }: { asset: AssetId; detail: Fo
       )}
       <Link
         to={`/asset/${asset}`}
-        className="mt-5 inline-block rounded-md border border-line px-3 py-1.5 text-sm font-medium text-forecast transition-colors hover:bg-surface-muted"
+        className="mt-5 inline-block rounded-md border border-line px-3 py-1.5 text-sm font-medium text-forecast transition-colors hover:bg-surface-muted pointer-coarse:inline-flex pointer-coarse:min-h-11 pointer-coarse:items-center"
       >
         Xem dự báo chi tiết
       </Link>
@@ -245,6 +257,18 @@ export default function Overview() {
   const defaultAsset: AssetId = isPriceHidden("gold") ? "brent" : "gold";
   const [selected, setSelected] = useState<AssetId>(defaultAsset);
   const [chosenRange, setChosenRange] = useState<HistoryRange["id"] | undefined>(undefined);
+  const chartRef = useRef<HTMLDivElement>(null);
+
+  // Điện thoại: 4 thẻ xếp dọc nên biểu đồ nằm dưới màn hình; chọn thẻ thì cuộn tới biểu đồ để thấy thay
+  // đổi. Máy tính (biểu đồ đã trong màn hình) không cuộn.
+  const selectAsset = (asset: AssetId) => {
+    setSelected(asset);
+    const chart = chartRef.current;
+    if (!chart) return;
+    const top = chart.getBoundingClientRect().top;
+    if (top >= 0 && top <= window.innerHeight * 0.6) return;
+    chart.scrollIntoView?.({ block: "start", behavior: matchesMedia(REDUCED_MOTION) ? "auto" : "smooth" });
+  };
 
   const byAsset = useMemo(() => {
     const map = new Map<AssetId, (typeof results)[number]>();
@@ -271,10 +295,10 @@ export default function Overview() {
       </div>
 
       <ul className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {ASSET_IDS.map((asset) => {
+        {ASSET_IDS.map((asset, index) => {
           const result = byAsset.get(asset);
           return (
-            <li key={asset} className="h-full">
+            <li key={asset} className="stagger-item h-full" style={{ "--i": index } as CSSProperties}>
               <PriceTile
                 asset={asset}
                 detail={result?.data}
@@ -282,20 +306,22 @@ export default function Overview() {
                 isError={result?.isError ?? false}
                 selected={asset === selected}
                 currency={currency}
-                onSelect={setSelected}
+                onSelect={selectAsset}
               />
             </li>
           );
         })}
       </ul>
 
-      <div className="mt-4">
-        {current?.isPending ? <LoadingBlock label="Đang tải giá…" /> : null}
+      <div ref={chartRef} data-testid="overview-chart" className="mt-4 scroll-mt-20 lg:scroll-mt-6">
+        {current?.isPending ? <LoadingBlock label="Đang tải giá…" shape="chart" /> : null}
         {current?.isError ? (
           <ErrorBlock message={current.error.message} onRetry={() => void current.refetch()} />
         ) : null}
         {detail ? (
-          isPriceHidden(selected) ? (
+          // Đổi sản phẩm: khối biểu đồ hiện lại (mờ dần) và đường giá vẽ lại một lần
+          <div key={selected} className="animate-fade-in">
+          {isPriceHidden(selected) ? (
             <div className="grid gap-4 lg:grid-cols-3">
               <div className="lg:col-span-2">
                 <EmptyBlock title={`Giá ${ASSETS[selected].name.toLowerCase()} đang được ẩn`}>
@@ -317,7 +343,8 @@ export default function Overview() {
               </div>
               <ForecastAside asset={selected} detail={detail} currency={currency} />
             </div>
-          )
+          )}
+          </div>
         ) : null}
       </div>
 

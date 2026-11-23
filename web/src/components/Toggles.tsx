@@ -19,7 +19,7 @@ export function Segmented<T extends string>({ label, value, options, onChange }:
             type="button"
             aria-pressed={active}
             onClick={() => onChange(option.value)}
-            className={`rounded px-3 py-1.5 text-sm transition-colors duration-150 ${
+            className={`rounded px-3 py-1.5 text-sm transition-colors duration-150 pointer-coarse:min-h-11 ${
               active ? "bg-price text-on-price" : "text-price hover:bg-surface-muted"
             }`}
           >

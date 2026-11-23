@@ -3,6 +3,7 @@ import { config } from "../api/config";
 import { ASSET_IDS } from "../api/types";
 import { signInPath } from "../auth/redirect";
 import { DISCLAIMER_TEXT } from "../components/Disclaimer";
+import { LockMark } from "../components/shell/LockMark";
 import { PRIMARY_BUTTON, PublicShell, SECONDARY_BUTTON } from "../components/shell/PublicChrome";
 import { ASSET_DOT_CLASS, ASSETS } from "../lib/assets";
 import { SOURCE_ATTRIBUTION } from "../lib/source";
@@ -79,7 +80,8 @@ function FanIllustration() {
           strokeWidth="1"
         />
       ))}
-      <g fontSize="13" fill="var(--color-muted)">
+      {/* Màn hẹp: hình thu nhỏ còn ~60%, nên tăng cỡ chữ trong hình để chữ hiển thị ~12 px */}
+      <g fontSize="13" fill="var(--color-muted)" className="max-sm:text-[20px]">
         <text x="272" y="270" textAnchor="middle">
           hôm nay
         </text>
@@ -93,12 +95,19 @@ function FanIllustration() {
         <text x="464" y="128">q50</text>
         <text x="464" y="210">q10</text>
       </g>
-      <g fontSize="13" fill="var(--color-price)">
+      <g fontSize="13" fill="var(--color-price)" className="max-sm:text-[20px]">
         <text x="24" y="132">Giá đã qua</text>
         <text x="368" y="168">Khoảng 80%</text>
-        <text x="384" y="116">Trung vị</text>
+        <text x="384" y="116" className="max-sm:hidden">
+          Trung vị
+        </text>
+        {/* Chữ to hơn trên màn hẹp: dời nhãn sang trái để không chạm "q50" */}
+        <text x="296" y="118" className="sm:hidden">
+          Trung vị
+        </text>
       </g>
-      <text x="24" y="292" fontSize="12" fill="var(--color-muted)">
+      {/* Màn hẹp: chú thích này chuyển ra figcaption HTML bên dưới hình (đủ cỡ chữ, không sát trục) */}
+      <text x="24" y="292" fontSize="12" fill="var(--color-muted)" className="max-sm:hidden">
         Hình minh họa, không phải dữ liệu thật
       </text>
     </svg>
@@ -146,6 +155,7 @@ export default function Landing() {
         </div>
         <figure className="rounded-lg border border-line bg-surface p-4 sm:p-6">
           <FanIllustration />
+          <figcaption className="mt-2 text-xs text-muted sm:hidden">Hình minh họa, không phải dữ liệu thật</figcaption>
         </figure>
       </section>
 
@@ -180,8 +190,13 @@ export default function Landing() {
             <h2 id="landing-steps" className="text-2xl font-semibold tracking-tight sm:text-3xl">
               Cách hệ thống tạo dự báo
             </h2>
-            <Link to="/guide" className="text-sm font-medium text-forecast underline-offset-4 hover:underline">
+            <Link
+              to="/guide"
+              className="inline-flex items-center gap-1.5 text-sm font-medium text-forecast underline-offset-4 hover:underline pointer-coarse:min-h-11"
+            >
               Xem cách đọc dự báo
+              {/* Landing chỉ hiện khi chưa đăng nhập; /guide cần đăng nhập */}
+              <LockMark />
             </Link>
           </div>
           <ol className="mt-8 grid gap-x-10 gap-y-8 md:grid-cols-2">

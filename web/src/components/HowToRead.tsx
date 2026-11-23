@@ -6,6 +6,10 @@ import { Link, useInRouterContext } from "react-router-dom";
  * trang sản phẩm link tới mà không kéo cả trang hướng dẫn vào bundle.
  */
 export const GUIDE_ANCHORS = {
+  // Mục mới của trang hướng dẫn (bản viết lại 11/2026); các id cũ bên dưới giữ nguyên vì trang khác link tới
+  quickStart: "doc-nhanh",
+  modes: "che-do",
+  glossary: "tu-dien",
   chart: "doc-bieu-do",
   logReturn: "log-return",
   horizon: "so-phien",
@@ -25,7 +29,8 @@ export function guideHref(anchor: GuideAnchor): string {
   return `/guide#${anchor}`;
 }
 
-const LINK_CLASS = "whitespace-nowrap text-forecast underline underline-offset-2";
+const LINK_CLASS =
+  "whitespace-nowrap text-forecast underline underline-offset-2 hover:decoration-2 motion-safe:transition-[text-decoration-thickness]";
 
 /**
  * Link "Tìm hiểu thêm" tới một mục của trang hướng dẫn; phần sau đọc cho trình đọc màn hình. Ngoài

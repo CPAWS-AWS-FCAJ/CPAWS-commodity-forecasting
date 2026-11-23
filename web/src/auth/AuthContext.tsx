@@ -10,6 +10,8 @@ export interface Account {
   name?: string;
   email?: string;
   username?: string;
+  /** `sub` của Cognito (getCurrentUser().userId): khóa lịch sử chat trong phiên theo người dùng. */
+  userId?: string;
 }
 
 export interface AuthState {

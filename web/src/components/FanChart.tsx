@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import type { CSSProperties } from "react";
 import {
   Area,
   Brush,
@@ -34,6 +35,8 @@ import {
   sliceRange,
 } from "../lib/priceOverview";
 import type { HistoryRange } from "../lib/priceOverview";
+import { COARSE_POINTER, useMediaQuery } from "../lib/media";
+import { useEntrance } from "../lib/motion";
 import { displayUnit } from "../lib/units";
 import { GUIDE_ANCHORS, HowToRead } from "./HowToRead";
 import { RangePicker } from "./RangePicker";
@@ -141,6 +144,9 @@ function medianDot(radius: number) {
     return (
       <circle
         key={key}
+        // Lần đầu vẽ: chấm hiện lần lượt h = 1…7 (CSS .chart-enter .median-dot)
+        className="median-dot"
+        style={{ "--i": payload.h } as CSSProperties}
         cx={cx}
         cy={cy}
         r={radius}
@@ -163,12 +169,34 @@ function medianDotFor(visiblePoints: number) {
 }
 
 /**
+ * Nhãn vạch "Phiên gần nhất": đặt ở lề trên, bên trái vạch, để không đè lên đường giá (đỉnh giá
+ * thường nằm sát mép trên vùng vẽ).
+ */
+function BaseDateLabel({ viewBox }: { viewBox?: { x?: number; y?: number } }) {
+  if (viewBox?.x == null || viewBox.y == null) return null;
+  return (
+    <text x={viewBox.x - 4} y={viewBox.y - 8} textAnchor="end" fill={CHART.muted} fontSize={12}>
+      Phiên gần nhất
+    </text>
+  );
+}
+
+/** Nút phóng to: 44 px trên màn cảm ứng. */
+const ZOOM_BUTTON =
+  "rounded-md border border-line px-3 py-1.5 text-sm text-price transition-colors hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-50 pointer-coarse:min-h-11";
+
+/**
  * "Giá thực tế và dự báo": giá cuối phiên theo mốc 1 tháng / 6 tháng / 1 năm / 2 năm + 7 phiên dự báo
  * (dải q10–q90, trung vị nét đứt, chấm đỏ trung vị từng phiên). Phóng to bằng thanh Brush, nút
  * Phóng to / Thu nhỏ (giữ mép phải) và Đặt lại (về cả mốc, luôn thấy phần dự báo).
  */
 export function FanChart({ asset, currency, detail, history, historyFailed = false }: Props) {
   const unit = displayUnit(asset, currency);
+  // Màn cảm ứng: đầu kéo Brush to hơn cho ngón tay, câu hướng dẫn không nói phím.
+  const coarse = useMediaQuery(COARSE_POINTER);
+  // Chỉ lần đầu mở biểu đồ: đường giá vẽ ~400ms, dải 80% hiện dần, chấm trung vị hiện lần lượt. Đổi mốc,
+  // phóng to, đổi đơn vị sau đó cập nhật tức thì (không vẽ lại, không giật).
+  const entering = useEntrance(1100);
   const closes = history ?? [];
   const pointCount = closes.length;
 
@@ -270,12 +298,14 @@ export function FanChart({ asset, currency, detail, history, historyFailed = fal
 
       <p className="mt-3 text-xs text-muted">Trục dọc: {unit}, không bắt đầu từ 0.</p>
       <div
-        className={`mt-1 h-80 w-full sm:h-[26rem] [&_.recharts-brush-traveller:focus-visible_rect]:fill-forecast`}
+        className={`mt-1 h-80 w-full sm:h-[26rem] [&_.recharts-brush-traveller:focus-visible_rect]:fill-forecast [&_.recharts-brush]:touch-none ${
+          entering ? "chart-enter" : ""
+        }`}
       >
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart
             data={data}
-            margin={{ top: 8, right: 16, bottom: 0, left: 0 }}
+            margin={{ top: 24, right: 16, bottom: 0, left: 0 }}
             title={`Giá thực tế và dự báo, ${unit}`}
             desc={desc}
           >
@@ -319,7 +349,9 @@ export function FanChart({ asset, currency, detail, history, historyFailed = fal
               strokeWidth={2}
               dot={false}
               activeDot={{ r: 4, fill: CHART.price, stroke: CHART.surface, strokeWidth: 2 }}
-              isAnimationActive={false}
+              isAnimationActive={entering}
+              animationDuration={400}
+              animationEasing="ease-out"
             />
             <Line
               dataKey="median"
@@ -327,6 +359,7 @@ export function FanChart({ asset, currency, detail, history, historyFailed = fal
               stroke={CHART.forecast}
               strokeWidth={2}
               strokeDasharray="6 4"
+              className="chart-median-line"
               dot={medianDotFor(visible)}
               activeDot={MEDIAN_DOT_ACTIVE}
               isAnimationActive={false}
@@ -335,14 +368,14 @@ export function FanChart({ asset, currency, detail, history, historyFailed = fal
               x={detail.base_date}
               stroke={CHART.muted}
               strokeDasharray="2 3"
-              label={{ value: "Phiên gần nhất", position: "insideTopRight", fill: CHART.muted, fontSize: 12 }}
+              label={<BaseDateLabel />}
             />
             {showBrush ? (
               <Brush
                 key={`${range?.id ?? "all"}-${brushToken}`}
                 dataKey="date"
-                height={36}
-                travellerWidth={10}
+                height={coarse ? 44 : 36}
+                travellerWidth={coarse ? 24 : 10}
                 startIndex={start}
                 endIndex={end}
                 onChange={(next) => setWin({ start: next.startIndex, end: next.endIndex })}
@@ -366,15 +399,16 @@ export function FanChart({ asset, currency, detail, history, historyFailed = fal
       {showBrush ? (
         <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
           <p className="text-xs text-muted">
-            Phóng to: kéo hai đầu thanh dưới biểu đồ, hoặc dùng nút bên cạnh. Bàn phím: Tab tới một đầu thanh rồi
-            dùng phím ← →.
+            {coarse
+              ? "Phóng to: kéo hai đầu thanh dưới biểu đồ, hoặc dùng các nút Phóng to, Thu nhỏ, Đặt lại."
+              : "Phóng to: kéo hai đầu thanh dưới biểu đồ, hoặc dùng nút bên cạnh. Bàn phím: Tab tới một đầu thanh rồi dùng phím ← →."}
           </p>
           <div role="group" aria-label="Phóng to biểu đồ" className="flex gap-1">
             <button
               type="button"
               onClick={zoomIn}
               disabled={visible <= MIN_WINDOW}
-              className="rounded-md border border-line px-3 py-1.5 text-sm text-price transition-colors hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-50"
+              className={ZOOM_BUTTON}
             >
               Phóng to
             </button>
@@ -382,7 +416,7 @@ export function FanChart({ asset, currency, detail, history, historyFailed = fal
               type="button"
               onClick={zoomOut}
               disabled={!zoomed}
-              className="rounded-md border border-line px-3 py-1.5 text-sm text-price transition-colors hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-50"
+              className={ZOOM_BUTTON}
             >
               Thu nhỏ
             </button>
@@ -390,7 +424,7 @@ export function FanChart({ asset, currency, detail, history, historyFailed = fal
               type="button"
               onClick={() => setWindowFromButton(null)}
               disabled={!zoomed}
-              className="rounded-md border border-line px-3 py-1.5 text-sm text-price transition-colors hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-50"
+              className={ZOOM_BUTTON}
             >
               Đặt lại
             </button>

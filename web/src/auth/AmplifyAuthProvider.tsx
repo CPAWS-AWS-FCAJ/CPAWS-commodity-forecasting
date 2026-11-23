@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo } from "react";
 import type { ReactNode } from "react";
 import { AuthContext } from "./AuthContext";
 import type { Account, AuthState, AuthStatus } from "./AuthContext";
+import { clearChatHistory } from "../lib/chatHistory";
 import { useUnauthorizedRedirect } from "./useUnauthorizedRedirect";
 import "./amplify";
 
@@ -15,7 +16,7 @@ async function loadAccount(): Promise<Account> {
   const user = await getCurrentUser();
   // Thiếu quyền đọc thuộc tính (hiếm) thì vẫn có tên đăng nhập để hiển thị.
   const attributes = await fetchUserAttributes().catch(() => ({}) as Record<string, string | undefined>);
-  return { username: user.username, name: attributes.name, email: attributes.email };
+  return { username: user.username, userId: user.userId, name: attributes.name, email: attributes.email };
 }
 
 function mapStatus(status: string): AuthStatus {
@@ -38,14 +39,23 @@ function AuthBridge({ children }: { children: ReactNode }) {
     retry: false,
   });
 
-  // Đăng xuất (hoặc phiên hết hạn): bỏ toàn bộ cache, kể cả dữ liệu giá và tên người dùng trước.
+  // Đăng xuất (hoặc phiên hết hạn): bỏ toàn bộ cache, kể cả dữ liệu giá và tên người dùng trước, và
+  // lịch sử chat của phiên (sessionStorage). Tải lại trang khi còn đăng nhập đi thẳng
+  // "configuring" → "authenticated" nên không xóa nhầm.
   useEffect(() => {
-    if (status === "unauthenticated") queryClient.removeQueries();
+    if (status === "unauthenticated") {
+      queryClient.removeQueries();
+      clearChatHistory();
+    }
   }, [status, queryClient]);
 
   const signOut = useCallback(async () => {
-    await amplifySignOut();
-    queryClient.removeQueries();
+    try {
+      await amplifySignOut();
+    } finally {
+      clearChatHistory();
+      queryClient.removeQueries();
+    }
   }, [queryClient]);
 
   useUnauthorizedRedirect(signOut);

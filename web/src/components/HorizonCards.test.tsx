@@ -65,4 +65,25 @@ describe("HorizonCards", () => {
     fireEvent.click(cards()[2]);
     expect(onSelect).toHaveBeenCalledWith(3);
   });
+
+  it("điện thoại: 7 thẻ trên một dải cuộn ngang có snap; đổi số phiên thì dải cuộn tới thẻ đang chọn", () => {
+    const detail = sampleDetail("wti");
+    const props = { asset: "wti" as const, detail, currency: "USD" as const, hidePrice: false, onSelect: () => {} };
+    const { rerender } = render(<HorizonCards {...props} selected={1} />);
+    const strip = screen.getByRole("list", { name: "7 phiên tới" });
+    expect(strip).toHaveClass("grid-flow-col", "overflow-x-auto", "snap-x", "sm:grid-flow-row");
+    expect(within(strip).getAllByRole("listitem")).toHaveLength(7);
+
+    // jsdom không tính bố cục: giả lập dải hẹp hơn nội dung
+    Object.defineProperty(strip, "scrollWidth", { configurable: true, value: 2000 });
+    Object.defineProperty(strip, "clientWidth", { configurable: true, value: 300 });
+    const scrollTo = vi.fn();
+    strip.scrollTo = scrollTo as unknown as typeof strip.scrollTo;
+    const seventh = strip.querySelector<HTMLElement>('[data-h="7"]')!;
+    Object.defineProperty(seventh, "offsetLeft", { configurable: true, value: 1700 });
+    Object.defineProperty(seventh, "offsetWidth", { configurable: true, value: 240 });
+
+    rerender(<HorizonCards {...props} selected={7} />);
+    expect(scrollTo).toHaveBeenCalledWith({ left: 1684, behavior: "smooth" });
+  });
 });

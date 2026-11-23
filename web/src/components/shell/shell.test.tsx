@@ -6,6 +6,7 @@ import type { Account, AuthState } from "../../auth/AuthContext";
 import { ThemeProvider } from "../../lib/theme";
 import { Layout } from "../Layout";
 import { AccountBlock } from "./AccountBlock";
+import { PublicShell } from "./PublicChrome";
 import { ThemeToggle } from "./ThemeToggle";
 
 const flags = vi.hoisted(() => ({ allowSignUp: true }));
@@ -194,5 +195,139 @@ describe("Layout: sidebar và ngăn kéo mobile", () => {
     focusables[focusables.length - 1].focus();
     fireEvent.keyDown(document, { key: "Tab" });
     expect(focusables[0]).toHaveFocus();
+  });
+});
+
+describe("Layout: thu gọn sidebar desktop", () => {
+  const mount = (state: AuthState) =>
+    render(
+      wrap(
+        <Routes>
+          <Route element={<Layout />}>
+            <Route path="*" element={<h1>Nội dung</h1>} />
+          </Route>
+        </Routes>,
+        state,
+      ),
+    );
+  const sidebar = () => document.getElementById("sidebar-dieu-huong") as HTMLElement;
+
+  it("mặc định mở; thu gọn thành dải hẹp cùng mục, tooltip và ổ khóa; nhớ trong localStorage", () => {
+    mount(authState({ status: "unauthenticated" }));
+    const toggle = within(sidebar()).getByRole("button", { name: "Thu gọn menu" });
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(toggle).toHaveAttribute("aria-controls", "sidebar-dieu-huong");
+    fireEvent.click(toggle);
+
+    const open = within(sidebar()).getByRole("button", { name: "Mở menu" });
+    expect(open).toHaveAttribute("aria-expanded", "false");
+    expect(window.localStorage.getItem("cpaws.sidebar")).toBe("collapsed");
+    const nav = within(sidebar()).getByRole("navigation", { name: "Điều hướng chính" });
+    const guide = within(nav).getByRole("link", { name: "Cách đọc dự báo (cần đăng nhập)" });
+    expect(guide).toHaveAttribute("title", "Cách đọc dự báo (cần đăng nhập)");
+    expect(within(nav).getByRole("link", { name: "Giới thiệu" })).toHaveAttribute("title", "Giới thiệu");
+    expect(within(nav).getAllByRole("link")).toHaveLength(9);
+    // Khối tài khoản thu gọn vẫn có Đăng nhập, Tạo tài khoản, giao diện tối
+    expect(within(sidebar()).getByRole("link", { name: "Đăng nhập" })).toHaveAttribute("title", "Đăng nhập");
+    expect(within(sidebar()).getByRole("link", { name: "Tạo tài khoản" })).toBeInTheDocument();
+    expect(within(sidebar()).getByRole("switch", { name: "Giao diện tối" })).toBeInTheDocument();
+
+    fireEvent.click(open);
+    expect(within(sidebar()).getByRole("button", { name: "Thu gọn menu" })).toBeInTheDocument();
+    expect(window.localStorage.getItem("cpaws.sidebar")).toBe("expanded");
+  });
+
+  it("đọc lựa chọn đã lưu; đã đăng nhập thì dải hẹp có chữ cái đầu tên và nút Đăng xuất", () => {
+    window.localStorage.setItem("cpaws.sidebar", "collapsed");
+    mount(authState({ account: { name: "Lan" } }));
+    expect(within(sidebar()).getByRole("button", { name: "Mở menu" })).toBeInTheDocument();
+    expect(within(sidebar()).getByRole("img", { name: "Lan" })).toHaveAttribute("title", "Lan");
+    expect(within(sidebar()).getByRole("button", { name: "Đăng xuất" })).toBeInTheDocument();
+    expect(within(sidebar()).queryByText("(cần đăng nhập)")).toBeNull();
+    // Ngăn kéo mobile không bị ảnh hưởng: vẫn đủ chữ
+    fireEvent.click(screen.getAllByRole("button", { name: "Mở menu" }).find((b) => b.classList.contains("lg:hidden"))!);
+    const dialog = screen.getByRole("dialog", { name: "Menu điều hướng" });
+    expect(within(dialog).getByText("Tổng quan giá")).toBeInTheDocument();
+  });
+
+  it("localStorage bị chặn: vẫn mở mặc định và thu gọn được", () => {
+    const get = vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new Error("blocked");
+    });
+    const set = vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("blocked");
+    });
+    try {
+      mount(authState({ account: { name: "Lan" } }));
+      fireEvent.click(within(sidebar()).getByRole("button", { name: "Thu gọn menu" }));
+      expect(within(sidebar()).getByRole("button", { name: "Mở menu" })).toBeInTheDocument();
+    } finally {
+      get.mockRestore();
+      set.mockRestore();
+    }
+  });
+});
+
+describe("Trang công khai (landing, /dang-nhap): cùng menu ngăn kéo như trang trong app", () => {
+  const mountPublic = (path = "/", showAuthActions = true) =>
+    render(
+      wrap(
+        <PublicShell showAuthActions={showAuthActions}>
+          <h1>Nội dung</h1>
+        </PublicShell>,
+        authState({ status: "unauthenticated" }),
+        path,
+      ),
+    );
+
+  it("có nút Mở menu (dưới lg); ngăn kéo có đủ mục, ổ khóa, Đăng nhập/Tạo tài khoản, giao diện tối", () => {
+    mountPublic();
+    const openButton = screen.getByRole("button", { name: "Mở menu" });
+    expect(openButton).toHaveClass("lg:hidden");
+    expect(openButton).toHaveAttribute("aria-controls", "menu-dieu-huong");
+    fireEvent.click(openButton);
+    const dialog = screen.getByRole("dialog", { name: "Menu điều hướng" });
+    const nav = within(dialog).getByRole("navigation", { name: "Điều hướng chính" });
+    for (const label of [
+      "Tổng quan giá",
+      "Dự báo",
+      "Vàng",
+      "Bạc",
+      "Dầu Brent",
+      "Dầu WTI",
+      "Độ chính xác",
+      "Cách đọc dự báo",
+    ]) {
+      expect(within(nav).getByRole("link", { name: new RegExp(label) })).toHaveTextContent("(cần đăng nhập)");
+    }
+    expect(within(nav).getByRole("link", { name: "Giới thiệu" })).not.toHaveTextContent("(cần đăng nhập)");
+    expect(within(dialog).getByRole("link", { name: "Đăng nhập" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("link", { name: "Tạo tài khoản" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("switch", { name: "Giao diện tối" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Đóng menu" })).toHaveFocus();
+    expect(document.body.style.overflow).toBe("hidden");
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "Menu điều hướng" })).toBeNull();
+    expect(openButton).toHaveFocus();
+  });
+
+  it("chọn một mục trong ngăn kéo thì chuyển trang và đóng menu", () => {
+    mountPublic();
+    fireEvent.click(screen.getByRole("button", { name: "Mở menu" }));
+    const dialog = screen.getByRole("dialog", { name: "Menu điều hướng" });
+    fireEvent.click(within(dialog).getByRole("link", { name: "Giới thiệu" }));
+    expect(screen.getByTestId("location")).toHaveTextContent("/about");
+    expect(screen.getByRole("button", { name: "Mở menu" })).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("trên /dang-nhap, Tạo tài khoản trong ngăn kéo giữ trang đích cũ (next), không trỏ về chính nó", () => {
+    mountPublic("/dang-nhap?next=%2Foverview", false);
+    fireEvent.click(screen.getByRole("button", { name: "Mở menu" }));
+    const dialog = screen.getByRole("dialog", { name: "Menu điều hướng" });
+    expect(within(dialog).getByRole("link", { name: "Tạo tài khoản" })).toHaveAttribute(
+      "href",
+      "/dang-nhap?next=%2Foverview&tab=dang-ky",
+    );
   });
 });

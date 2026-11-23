@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { sampleDetail, sampleList } from "../api/sample";
 import { formatReturnPercent } from "../lib/format";
@@ -212,6 +212,23 @@ describe("ReturnRange", () => {
 describe("QuantileTable", () => {
   const detail = sampleDetail("gold");
 
+  it("điện thoại: danh sách 7 thẻ phiên đủ q10/q50/q90, khoảng giá và xác suất tăng (không cuộn ngang)", () => {
+    render(<QuantileTable asset="gold" detail={detail} currency="USD" />);
+    const list = screen.getByRole("list", { name: "Bảng chi tiết theo từng phiên" });
+    expect(list).toHaveClass("sm:hidden");
+    const items = within(list).getAllByRole("listitem");
+    expect(items).toHaveLength(7);
+    const first = items[0];
+    expect(within(first).getByText("Sau 1 phiên")).toBeInTheDocument();
+    for (const label of ["q10", "q50", "q90", "Xác suất tăng"]) {
+      expect(within(first).getByText(label)).toBeInTheDocument();
+    }
+    expect(within(first).getByText(/^Giá q10–q90 \(USD\/oz\)$/)).toBeInTheDocument();
+    // Bảng vẫn còn cho màn từ sm, cột "Sau" không xuống dòng
+    expect(screen.getByRole("table").parentElement).toHaveClass("hidden", "sm:block");
+    expect(screen.getByRole("columnheader", { name: "Sau" })).toHaveClass("whitespace-nowrap");
+  });
+
   it("mặc định có cột giá", () => {
     render(<QuantileTable asset="gold" detail={detail} currency="USD" />);
     expect(screen.getByText("Giá q10–q90")).toBeInTheDocument();
@@ -220,7 +237,9 @@ describe("QuantileTable", () => {
   it("bỏ cột giá khi showPrices = false nhưng vẫn giữ phân vị return", () => {
     render(<QuantileTable asset="gold" detail={detail} currency="USD" showPrices={false} />);
     expect(screen.queryByText("Giá q10–q90")).not.toBeInTheDocument();
-    expect(screen.getByText("q50")).toBeInTheDocument();
+    // Tiêu đề cột của bảng (từ sm) + 7 thẻ phiên (điện thoại)
+    expect(screen.getAllByText("q50")).toHaveLength(1 + 7);
+    expect(screen.queryByText(/^Giá q10–q90 \(/)).not.toBeInTheDocument();
     expect(screen.getByText("Phân vị của log return")).toBeInTheDocument();
   });
 });

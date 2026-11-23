@@ -1,61 +1,37 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useRef } from "react";
 import type { ReactNode } from "react";
 import { Outlet, useLocation } from "react-router-dom";
+import { usePageEnter } from "../lib/motion";
 import { Disclaimer } from "./Disclaimer";
-import { AccountBlock } from "./shell/AccountBlock";
-import { CloseIcon, MenuIcon } from "./shell/icons";
-import { MobileDrawer } from "./shell/MobileDrawer";
-import { SidebarNav } from "./shell/SidebarNav";
+import { MenuButton, NavDrawer, SIDEBAR_ID, SidebarContent, useMobileMenu } from "./shell/MobileMenu";
+import { useSidebarCollapsed } from "./shell/sidebarPreference";
 import { ThemeToggle } from "./shell/ThemeToggle";
 import { Wordmark } from "./shell/Wordmark";
 
-const DRAWER_ID = "menu-dieu-huong";
-
-/** Nội dung dùng chung cho sidebar desktop và ngăn kéo mobile. */
-function SidebarContent({ onNavigate, onClose }: { onNavigate?: () => void; onClose?: () => void }) {
-  return (
-    <>
-      <div className="flex h-16 shrink-0 items-center justify-between gap-2 px-5">
-        <Wordmark onClick={onNavigate} withTagline />
-        {onClose ? (
-          <button
-            type="button"
-            data-autofocus
-            onClick={onClose}
-            aria-label="Đóng menu"
-            className="inline-flex size-9 items-center justify-center rounded-md text-muted transition-colors duration-150 hover:bg-surface-muted hover:text-price active:bg-line"
-          >
-            <CloseIcon />
-          </button>
-        ) : null}
-      </div>
-      <nav aria-label="Điều hướng chính" className="min-h-0 flex-1 overflow-y-auto px-3 pb-6 pt-2">
-        <SidebarNav onNavigate={onNavigate} />
-      </nav>
-      <div className="shrink-0 border-t border-line p-3">
-        <AccountBlock onNavigate={onNavigate} />
-      </div>
-    </>
-  );
-}
-
 /**
- * Khung app: sidebar dọc bên trái từ lg, dưới lg là thanh trên + nút mở menu dạng ngăn kéo.
+ * Khung app: sidebar dọc bên trái từ lg, dưới lg là thanh trên + nút mở menu dạng ngăn kéo (dùng chung
+ * với trang công khai, xem shell/MobileMenu.tsx). Sidebar desktop thu gọn được thành dải hẹp 4.5rem
+ * (nhớ trong localStorage `cpaws.sidebar`); nội dung chính giãn ra theo. Cột đổi một lần (không animate
+ * grid nên chữ không nhảy dòng từng khung hình); trình duyệt có View Transitions thì sidebar và nội dung
+ * chuyển mượt bằng ảnh chụp (xem index.css, sidebarPreference.ts). Đổi trang: nội dung hiện dần.
  * `children` dùng khi trang không đi qua route lồng (trang chủ đã đăng nhập), còn lại là <Outlet />.
  */
 export function Layout({ children }: { children?: ReactNode }) {
-  const [menuOpen, setMenuOpen] = useState(false);
-  const menuButtonRef = useRef<HTMLButtonElement>(null);
-  const location = useLocation();
-  const closeMenu = useCallback(() => setMenuOpen(false), []);
-
-  // Đổi trang (kể cả nút Quay lại của trình duyệt) thì đóng menu.
-  useEffect(() => {
-    setMenuOpen(false);
-  }, [location.pathname]);
+  const menu = useMobileMenu();
+  const sidebar = useSidebarCollapsed();
+  const mainRef = useRef<HTMLElement>(null);
+  usePageEnter(mainRef, useLocation().pathname);
+  // Thu gọn sidebar thì nới giới hạn bề rộng để nội dung thật sự giãn ra (trang chữ tự giới hạn max-w-prose)
+  const width = sidebar.collapsed ? "max-w-6xl lg:max-w-[88rem]" : "max-w-6xl 2xl:max-w-7xl";
 
   return (
-    <div className="min-h-dvh lg:grid lg:grid-cols-[15.5rem_minmax(0,1fr)]">
+    <div
+      // data-sidebar + group/app: trang con (cột chat của AssetPage) giãn thêm khi sidebar thu gọn
+      data-sidebar={sidebar.collapsed ? "collapsed" : "expanded"}
+      className={`group/app min-h-dvh lg:grid ${
+        sidebar.collapsed ? "lg:grid-cols-[4.5rem_minmax(0,1fr)]" : "lg:grid-cols-[15.5rem_minmax(0,1fr)]"
+      }`}
+    >
       <a
         href="#main"
         className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-50 focus:rounded-md focus:bg-surface focus:px-3 focus:py-2 focus:text-sm focus:text-price focus:ring-1 focus:ring-line"
@@ -64,45 +40,32 @@ export function Layout({ children }: { children?: ReactNode }) {
       </a>
 
       {/* Cột nền kéo hết chiều cao trang; phần trong dính ở đầu màn hình khi cuộn */}
-      <aside className="hidden border-r border-line bg-surface lg:block">
+      <aside id={SIDEBAR_ID} className="hidden border-r border-line bg-surface lg:block">
         <div className="sticky top-0 flex h-dvh flex-col">
-          <SidebarContent />
+          <SidebarContent sidebarToggle={{ collapsed: sidebar.collapsed, onToggle: sidebar.toggle }} />
         </div>
       </aside>
 
       <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-line bg-surface px-3 lg:hidden">
-        <button
-          ref={menuButtonRef}
-          type="button"
-          onClick={() => setMenuOpen(true)}
-          aria-expanded={menuOpen}
-          aria-controls={DRAWER_ID}
-          aria-label="Mở menu"
-          className="inline-flex size-9 items-center justify-center rounded-md text-price transition-colors duration-150 hover:bg-surface-muted active:bg-line"
-        >
-          <MenuIcon />
-        </button>
+        <MenuButton menu={menu} />
         <Wordmark />
         <div className="ml-auto">
           <ThemeToggle variant="icon" />
         </div>
       </header>
 
-      <MobileDrawer
-        id={DRAWER_ID}
-        open={menuOpen}
-        onClose={closeMenu}
-        returnFocusRef={menuButtonRef}
-        label="Menu điều hướng"
-      >
-        <SidebarContent onNavigate={closeMenu} onClose={closeMenu} />
-      </MobileDrawer>
+      <NavDrawer menu={menu} />
 
-      <div className="flex min-w-0 flex-col">
-        <main id="main" tabIndex={-1} className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6 lg:px-10 lg:py-10">
+      <div id="app-content" className="flex min-w-0 flex-col">
+        <main
+          ref={mainRef}
+          id="main"
+          tabIndex={-1}
+          className={`mx-auto w-full flex-1 px-4 py-6 sm:px-6 lg:px-10 lg:py-10 ${width}`}
+        >
           {children ?? <Outlet />}
         </main>
-        <footer className="mx-auto w-full max-w-6xl px-4 pb-6 sm:px-6 lg:px-10">
+        <footer className={`mx-auto w-full px-4 pb-6 sm:px-6 lg:px-10 ${width}`}>
           <div className="border-t border-line pt-4">
             <Disclaimer />
           </div>
