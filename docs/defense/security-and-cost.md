@@ -68,7 +68,7 @@ Không đưa API key, mật khẩu, mã MFA, access token hoặc thông tin đă
 
 ### 3.3. API và người dùng
 
-- Cognito User Pool quản lý tài khoản bằng xác thực Cognito. Theo ADR-0014, nhóm dự kiến mở tự đăng ký tạm thời trong thời gian chấm, yêu cầu xác minh email và đóng lại sau khi chấm. Tại thời điểm cập nhật tài liệu, cấu hình thực tế vẫn tắt tự đăng ký. `VITE_ALLOW_SIGNUP` chỉ điều khiển giao diện, không phải biện pháp bảo mật.
+- Cognito User Pool quản lý tài khoản bằng xác thực Cognito. Theo ADR-0014, tự đăng ký (có xác minh email) đang mở từ 22/11/2026 21:07, muộn hơn điều kiện "mở trước 21/11" của ADR; bản sửa đổi 23/11 của ADR-0014 ghi nhận sai lệch này và hai phương án (đóng ngay hoặc giữ mở có thời hạn), chờ Data & Security Lead chọn. `VITE_ALLOW_SIGNUP` chỉ điều khiển giao diện, không phải biện pháp bảo mật.
 - API Gateway dùng Cognito authorizer cho các route nghiệp vụ, ngoại trừ `/health`.
 - API có throttling 10 request/giây, burst 20.
 - CORS giới hạn một origin web được cấu hình.

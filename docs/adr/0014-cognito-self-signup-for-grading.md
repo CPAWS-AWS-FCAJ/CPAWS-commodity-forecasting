@@ -1,7 +1,7 @@
 # ADR-0014: Mở tự đăng ký Cognito trong thời gian chấm đồ án
 
 - Ngày: 2026-11-16
-- Trạng thái: Đề xuất
+- Trạng thái: Đề xuất; bản sửa đổi 23/11/2026 chờ Data & Security Lead (Tuấn) duyệt
 - Người viết: Tuấn; người duyệt: Khải (chờ review PR)
 
 ## Bối cảnh
@@ -38,6 +38,23 @@ Chọn phương án 2, với các điều kiện:
 - **Giới hạn email:** Cognito có quota gửi email phụ thuộc cấu hình và phạm vi áp dụng của dịch vụ. Trước khi mở đăng ký, kiểm tra quota thực tế trong AWS Service Quotas và cấu hình email của User Pool; nếu không đủ khả năng gửi email xác minh cho người chấm, không mở đăng ký.
 - **Đóng đăng ký:** trong vòng một ngày sau khi mentor xác nhận hoàn tất chấm, phải tắt tự đăng ký ở Cognito, build lại web với `VITE_ALLOW_SIGNUP=false`, sau đó vô hiệu hóa/xóa các tài khoản tự đăng ký; giữ lại tài khoản của nhóm và tài khoản grader.
 - **Hạn chót đóng:** nếu chưa có thông báo hoàn tất chấm, ngày 10/12/2026 là hạn chót tuyệt đối để đóng tự đăng ký.
+
+## Cập nhật 23/11/2026: mở sau thời hạn và đề xuất xử lý
+
+**Diễn biến thực tế.** PR CDK `CpawsAuth` (#141) merge ngày 19/11/2026, nhưng deploy (Tiến, từ `production` tag `v1.0.0`) diễn ra lúc 21:07 ngày 22/11/2026, cùng lượt release v1.0.0; web Amplify Deployment 6 build với `VITE_ALLOW_SIGNUP=true` lúc 21:27. Mục "Quyết định" ở trên yêu cầu mở trước 21/11 và không mở nếu chưa xong trước freeze 22/11, nên đây là **sai lệch so với điều kiện đã thống nhất**, không phải ngoại lệ đã được duyệt. Ngày 23/11 Data & Security Lead đã nêu sai lệch này trong review PR #145.
+
+**Tác động đã biết tới 23/11:** nhóm đã đăng ký thử tài khoản mới ngày 23/11; chưa có số liệu đầy đủ về số tài khoản tự tạo, cần Data & Security Lead kiểm trong Cognito. Chi phí: Cognito Lite/Essentials miễn phí tới 10.000 MAU/tháng; chatbot bị chặn ở 100 lượt/ngày toàn hệ thống (ước tính khoảng 1,2 USD/ngày nếu dùng hết, xem `docs/api/contract.md`); email xác minh dùng `COGNITO_DEFAULT` nên số email mỗi ngày bị giới hạn ở mức thấp.
+
+**Hai phương án, chờ Data & Security Lead chọn:**
+
+1. **Đóng ngay** (đề nghị của Data & Security Lead ngày 23/11): PR CDK tắt `self_sign_up_enabled` → deploy `CpawsAuth` → build web với `VITE_ALLOW_SIGNUP=false` → giữ tài khoản nhóm và grader; người chấm và người dùng thử dùng tài khoản do Data & Security Lead tạo tay, gửi qua kênh riêng.
+2. **Giữ mở có thời hạn, hợp thức hóa bằng bản sửa đổi này:** giữ tự đăng ký cho người chấm và đợt dùng thử của bạn bè, người thân nhóm, kèm các biện pháp:
+   - Data & Security Lead kiểm số tài khoản tự tạo và mức dùng chatbot mỗi ngày tới khi đóng;
+   - **đóng sớm** (theo đúng thứ tự ở mục "Đóng đăng ký") nếu: số tài khoản tự tạo vượt 50, có dấu hiệu lạm dụng (đăng ký hàng loạt, cạn quota chatbot trước 12:00 hai ngày liên tiếp), lỗi hết hạn mức email lặp lại, hoặc Yahoo, mentor hay hội đồng yêu cầu;
+   - giữ nguyên mốc đóng: trong 1 ngày sau khi mentor xác nhận chấm xong, chậm nhất 10/12/2026;
+   - vẫn tạo riêng tài khoản grader, phòng khi hết hạn mức email.
+
+Khi Data & Security Lead chọn, cập nhật trạng thái ADR này và các tài liệu liên quan (`docs/defense/kien-truc-trien-khai.md` 4.6, `docs/defense/trien-khai-van-hanh.md` §2.1, `docs/defense/security-and-cost.md`, `docs/defense/mo-dau.md`).
 
 ## Hệ quả
 
