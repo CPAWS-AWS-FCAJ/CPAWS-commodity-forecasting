@@ -174,7 +174,7 @@ export const GLOSSARY: GlossaryGroup[] = [
       },
       {
         term: "Chưa có kết quả đánh giá",
-        definition: "Chưa có ngày dự báo nào đủ điều kiện để chấm.",
+        definition: "Hệ thống chưa có lượt chấm hoàn chỉnh nào cho cách dự báo đang dùng, nên chưa có số để hiện.",
         anchor: GUIDE_ANCHORS.reliability,
       },
       {

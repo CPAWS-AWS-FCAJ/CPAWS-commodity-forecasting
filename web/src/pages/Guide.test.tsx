@@ -101,7 +101,7 @@ describe("trang Cách đọc dự báo", () => {
     const section = document.getElementById(GUIDE_ANCHORS.reliability)!;
     const text = section.textContent ?? "";
     expect(text).toContain("Trong khoảng 80%");
-    expect(text).toMatch(/Y nhỏ dần khi h lớn dần/);
+    expect(text).toMatch(/Y thường ít hơn ở h lớn, nhưng không nhất thiết giảm đều/);
     expect(text).toContain("khoảng 8 phần 10");
     expect(text).toContain("10/16");
     expect(text).toContain("Đang thu thập (16/20)");

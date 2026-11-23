@@ -57,8 +57,9 @@ export function HorizonCountExplainer() {
             Mục tiêu là X bằng <strong>khoảng 8 phần 10</strong> của Y. Với 16 lần, mục tiêu là khoảng 13 lần.
           </li>
           <li>
-            <strong>Y nhỏ dần khi h lớn dần</strong>: dự báo cho 7 phiên tới phải chờ đủ 7 phiên mới có giá thật để
-            chấm, nên những dự báo mới nhất chưa kịp vào hàng h = 7.
+            <strong>Y thường ít hơn ở h lớn, nhưng không nhất thiết giảm đều</strong>: dự báo cho 7 phiên tới phải
+            chờ đủ 7 phiên mới có giá thật để chấm, nên những dự báo mới nhất chưa kịp vào hàng h = 7. Số lần chấm
+            được ở mỗi hàng còn tùy ngày nào có đủ giá hợp lệ.
           </li>
           <li>Ô “—” nghĩa là chưa có lần nào chấm được ở số phiên đó.</li>
         </ul>
@@ -136,8 +137,8 @@ export function CollectingExplainer() {
           <strong>chưa đủ ngày nên chưa kết luận</strong>; quay lại sau vài phiên nữa.
         </p>
         <p>
-          “Chưa có kết quả đánh giá” nghĩa là chưa có ngày nào chấm được. Dòng “Kể từ” cho biết ngày dự báo đầu tiên
-          được tính.
+          “Chưa có kết quả đánh giá” nghĩa là hệ thống chưa có lượt chấm hoàn chỉnh nào cho cách dự báo đang dùng,
+          nên chưa có số để hiện. Dòng “Kể từ” cho biết ngày dự báo đầu tiên được tính.
         </p>
       </div>
       <Example>

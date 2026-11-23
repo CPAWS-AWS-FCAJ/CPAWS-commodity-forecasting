@@ -24,9 +24,9 @@ const METRIC_KEYS = ["coverage_80", "width_80", "width_80_pct", "sign_accuracy",
 export const ACCURACY_METRIC_TEXT = {
   coverage: {
     name: "Giá thật nằm trong khoảng 80%",
-    hint: "Mục tiêu là gần 80%: thấp hơn hẳn là khoảng quá hẹp, cao hơn hẳn là khoảng quá rộng.",
+    hint: "Mục tiêu là gần 80%: thấp hơn hẳn có thể cho thấy khoảng đang hẹp, cao hơn hẳn có thể cho thấy khoảng đang rộng.",
     meaning:
-      "Trong các lần đã có giá thật để so, bao nhiêu phần trăm số lần giá thật rơi vào khoảng 80% của dự báo; ghi kèm số lần đếm được. Gần 80% là khoảng rộng vừa phải; thấp hơn hẳn nghĩa là khoảng đang quá hẹp, cao hơn hẳn nghĩa là khoảng đang quá rộng.",
+      "Trong các lần đã có giá thật để so, bao nhiêu phần trăm số lần giá thật rơi vào khoảng 80% của dự báo; ghi kèm số lần đếm được. Gần 80% là khoảng rộng vừa phải; thấp hơn hẳn có thể cho thấy khoảng đang hẹp, cao hơn hẳn có thể cho thấy khoảng đang rộng. Khi số lần còn ít, chênh lệch có thể chỉ do ngẫu nhiên.",
   },
   width: {
     name: "Độ rộng khoảng 80% (% giá)",
