@@ -23,6 +23,8 @@ export const PASSWORD_HINT =
 export const SIGN_UP_ATTRIBUTES = ["email", "name"] as const;
 
 export const NAME_REQUIRED_MESSAGE = "Vui lòng nhập họ và tên.";
+/** Cognito từ chối tên đăng nhập có khoảng trắng; báo trước để người dùng không thấy lỗi tiếng Anh. */
+export const USERNAME_SPACE_MESSAGE = "Tên đăng nhập không được có khoảng trắng.";
 
 interface FieldOptions {
   label: string;
@@ -143,6 +145,24 @@ export function validateSignUpName(
   return (formData.name ?? "").trim() ? null : { name: NAME_REQUIRED_MESSAGE };
 }
 
+/** Tên đăng nhập không được có khoảng trắng (Cognito báo lỗi tiếng Anh nếu gửi lên). */
+export function validateSignUpUsername(
+  formData: Record<string, string | undefined>,
+  touchData: Record<string, boolean | undefined>,
+): { username: string } | null {
+  if (!touchData.username) return null;
+  return /\s/.test(formData.username ?? "") ? { username: USERNAME_SPACE_MESSAGE } : null;
+}
+
+/** Gộp các kiểm tra của form đăng ký cho `services.validateCustomSignUp`. */
+export function validateSignUpFields(
+  formData: Record<string, string | undefined>,
+  touchData: Record<string, boolean | undefined>,
+): Record<string, string> | null {
+  const errors = { ...validateSignUpName(formData, touchData), ...validateSignUpUsername(formData, touchData) };
+  return Object.keys(errors).length ? errors : null;
+}
+
 /**
  * Chuẩn hóa họ tên trước khi gửi Cognito: bỏ khoảng trắng thừa. Trả null khi rỗng để chặn gửi
  * (lớp chặn thứ hai, phòng khi người dùng bấm Enter trước khi rời ô).
@@ -243,4 +263,15 @@ export const VI_VOCABULARY: Record<string, string> = {
   "The verification code you entered is incorrect. Please try again.":
     "Mã xác minh không đúng, vui lòng thử lại.",
   "Network error": "Lỗi mạng, vui lòng thử lại.",
+  "1 validation error detected: Value at 'username' failed to satisfy constraint: Member must satisfy regular expression pattern: [\\p{L}\\p{M}\\p{S}\\p{N}\\p{P}]+":
+    USERNAME_SPACE_MESSAGE,
+  "An account with the given email already exists.": "Email này đã được dùng cho một tài khoản khác.",
+  "Username/client id combination not found.": "Sai tên đăng nhập hoặc mật khẩu.",
+  "Password did not conform with policy: Password not long enough": "Mật khẩu cần tối thiểu 8 ký tự.",
+  "Password did not conform with policy: Password must have uppercase characters": "Mật khẩu cần có chữ hoa.",
+  "Password did not conform with policy: Password must have lowercase characters": "Mật khẩu cần có chữ thường.",
+  "Password did not conform with policy: Password must have numeric characters": "Mật khẩu cần có chữ số.",
+  "Password did not conform with policy: Password must have symbol characters": "Mật khẩu cần có ký tự đặc biệt.",
+  "Cannot reset password for the user as there is no registered/verified email or phone_number":
+    "Tài khoản chưa có email đã xác minh nên không đặt lại được mật khẩu.",
 };

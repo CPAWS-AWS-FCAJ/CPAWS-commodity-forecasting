@@ -10,7 +10,8 @@ import {
   normalizeName,
   PASSWORD_HINT,
   SIGN_UP_ATTRIBUTES,
-  validateSignUpName,
+  validateSignUpFields,
+  USERNAME_SPACE_MESSAGE,
   VI_VOCABULARY,
 } from "./authForm";
 import "./amplify";
@@ -25,6 +26,8 @@ const handleSignUp = (async (input: SignUpInput) => {
   const attributes = input.options?.userAttributes ?? {};
   const name = normalizeName(attributes.name);
   if (!name) throw new Error(NAME_REQUIRED_MESSAGE);
+  // Lớp chặn thứ hai: Cognito báo lỗi tiếng Anh nếu tên đăng nhập có khoảng trắng.
+  if (/\s/.test(input.username ?? "")) throw new Error(USERNAME_SPACE_MESSAGE);
   return signUp({
     ...input,
     options: { ...input.options, userAttributes: { ...attributes, name } },
@@ -34,7 +37,7 @@ const handleSignUp = (async (input: SignUpInput) => {
 
 export const SIGN_IN_SERVICES = {
   async validateCustomSignUp(formData: Record<string, string>, touchData: Record<string, boolean>) {
-    return validateSignUpName(formData, touchData) ?? undefined;
+    return validateSignUpFields(formData, touchData) ?? undefined;
   },
   handleSignUp,
 };

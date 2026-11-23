@@ -9,7 +9,10 @@ import {
   normalizeName,
   PASSWORD_POLICY,
   SIGN_UP_ATTRIBUTES,
+  USERNAME_SPACE_MESSAGE,
+  validateSignUpFields,
   validateSignUpName,
+  validateSignUpUsername,
   VI_VOCABULARY,
 } from "./authForm";
 import { safeNextPath, signInPath } from "./redirect";
@@ -106,6 +109,27 @@ describe("cấu hình form đăng ký", () => {
     expect(validateSignUpName({ name: "" }, {})).toBeNull();
     expect(normalizeName("  Nguyễn   Thị  Lan ")).toBe("Nguyễn Thị Lan");
     expect(normalizeName(" \t ")).toBeNull();
+  });
+
+  it("tên đăng nhập có khoảng trắng bị chặn trước khi gửi Cognito", () => {
+    expect(validateSignUpUsername({ username: "lan 01" }, { username: true })).toEqual({
+      username: USERNAME_SPACE_MESSAGE,
+    });
+    expect(validateSignUpUsername({ username: "lan01" }, { username: true })).toBeNull();
+    expect(validateSignUpUsername({ username: "lan 01" }, {})).toBeNull();
+    expect(validateSignUpFields({ name: " ", username: "a b" }, { name: true, username: true })).toEqual({
+      name: NAME_REQUIRED_MESSAGE,
+      username: USERNAME_SPACE_MESSAGE,
+    });
+    expect(validateSignUpFields({ name: "Lan", username: "lan01" }, { name: true, username: true })).toBeNull();
+  });
+
+  it("dịch lỗi tiếng Anh của Cognito khi tên đăng nhập sai mẫu và lỗi mật khẩu", () => {
+    const cognito =
+      "1 validation error detected: Value at 'username' failed to satisfy constraint: Member must satisfy regular expression pattern: [\\p{L}\\p{M}\\p{S}\\p{N}\\p{P}]+";
+    expect(VI_VOCABULARY[cognito]).toBe(USERNAME_SPACE_MESSAGE);
+    expect(VI_VOCABULARY["An account with the given email already exists."]).toMatch(/Email này/);
+    expect(VI_VOCABULARY["Password did not conform with policy: Password not long enough"]).toMatch(/8 ký tự/);
   });
 
   it("có bản dịch cho tab, nút và lỗi mật khẩu", () => {
