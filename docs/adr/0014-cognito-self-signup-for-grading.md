@@ -67,19 +67,25 @@ Hai phương án đã xem xét:
    - mốc đóng: trong 1 ngày sau khi mentor xác nhận chấm xong, **chậm nhất 10/12/2026**; khi đóng làm đủ bước 1–3 của phương án 1;
    - vẫn tạo riêng tài khoản grader, phòng khi hết hạn mức email.
 
-**Cách tính ngưỡng 50 tài khoản.** Chỉ đếm **tài khoản tự đăng ký của người ngoài nhóm**: user có `UserCreateDate` sau 22/11/2026 21:07 **và không thuộc danh sách được phép**. Danh sách được phép gồm tài khoản 5 thành viên (kể cả tài khoản thử thành viên tự tạo) và tài khoản grader; danh sách này do Data & Security Lead giữ ngoài repo. Tài khoản tạo trước 22/11 21:07 (do nhóm tạo khi pool còn đóng) không tính. Với hạn mức mời 40 người, ngưỡng 50 chừa chỗ cho người được mời tạo lại tài khoản khi nhập sai email.
+**Cách tính ngưỡng 50 tài khoản.** Chỉ đếm **tài khoản tự đăng ký của người ngoài nhóm**: user được tạo bằng **tự đăng ký** sau 22/11/2026 21:07 giờ Việt Nam **và không thuộc danh sách được phép**. Lưu ý múi giờ: `UserCreateDate` của Cognito và thời gian sự kiện CloudTrail trả theo UTC, nên mốc này là `2026-11-22T14:07:00Z`. `ListUsers` không cho biết tài khoản được tạo bằng cách nào; nguồn tạo xác định bằng CloudTrail: tự đăng ký là sự kiện `SignUp` (không có `errorCode`), tài khoản do nhóm tạo là `AdminCreateUser`. CloudTrail ghi `UserSub` thay cho username, nên đối chiếu với `ListUsers` theo thuộc tính `sub`. Danh sách được phép gồm tài khoản 5 thành viên (kể cả tài khoản thử thành viên tự tạo) và tài khoản grader; danh sách này do Data & Security Lead giữ ngoài repo. Tài khoản tạo trước 22/11 21:07 (do nhóm tạo khi pool còn đóng) không tính. Với hạn mức mời 40 người, ngưỡng 50 chừa chỗ cho người được mời tạo lại tài khoản khi nhập sai email.
 
 **Giám sát** (người phụ trách: Data & Security Lead; giờ Việt Nam, UTC+7):
 
 | Chỉ số | Nguồn dữ liệu | Chu kỳ | Ngưỡng đóng sớm |
 |---|---|---|---|
-| Số tài khoản tự đăng ký | Cognito `ListUsers` trên `cpaws-dev-users`, đếm theo cách tính ở trên | Mỗi ngày lúc 09:00 | Vượt 50 tài khoản |
-| Tài khoản ngoài danh sách mời | Cùng nguồn; đối chiếu email hoặc tên gọi với danh sách mời của 5 thành viên | Mỗi ngày lúc 09:00 | Có **một** tài khoản tự đăng ký không thuộc danh sách mời |
+| Số tài khoản tự đăng ký | CloudTrail Event history, sự kiện `SignUp` thành công của `cognito-idp` từ `2026-11-22T14:07:00Z`, đối chiếu `UserSub` với `ListUsers` (thuộc tính `sub`) để loại tài khoản trong danh sách được phép | Mỗi ngày lúc 09:00, 13:00 và 21:00 | Vượt 50 tài khoản |
+| Tài khoản ngoài danh sách mời | `ListUsers`, so thuộc tính `email` của các tài khoản tự đăng ký với danh sách mời (cách đối chiếu ở dưới) | Mỗi ngày lúc 09:00, 13:00 và 21:00; và ngay khi nhận thông báo đăng ký mới | Có **một** tài khoản tự đăng ký không thuộc danh sách mời |
 | Dùng chatbot | Bảng DynamoDB `cpaws-dev-chat-usage`, dòng `pk = global`, `sk = day#<ngày>`: `request_count` và `updated_at` lúc đạt 100 | Mỗi ngày lúc 09:00 (xem ngày hôm trước) | Đạt 100 lượt trước 12:00 hai ngày liên tiếp |
 | Lỗi hạn mức email | CloudTrail Event history của Cognito, sự kiện `SignUp`/`ResendConfirmationCode` có `errorCode = LimitExceededException` | Mỗi ngày lúc 09:00 | Xuất hiện ở 2 ngày trở lên |
 | Đăng ký bất thường | Cùng nguồn với dòng đầu: số tài khoản tạo trong 1 giờ | Mỗi ngày lúc 09:00 | Từ 10 tài khoản trong 1 giờ |
 
 Kết quả mỗi lần kiểm ghi ngắn (ngày, số liệu, quyết định) vào kênh nhóm; không ghi email hay tên người dùng.
+
+**Đối chiếu danh sách mời mà không đưa thông tin cá nhân lên repo.** Mỗi thành viên gửi riêng cho người giám sát **email** mà người được mời dùng để đăng ký (không cần tên thật), qua tin nhắn cá nhân. Người giám sát giữ danh sách trong một file riêng ngoài repo, chỉ nhóm truy cập được, và xóa file khi đóng đăng ký. Đối chiếu theo thuộc tính `email` trả về từ `ListUsers` (Cognito username do người dùng tự đặt nên không dùng để đối chiếu). Repo và kênh chung chỉ ghi **số lượng** (đã mời, đã đăng ký, ngoài danh sách), không ghi email hay username.
+
+**Phát hiện sớm tài khoản ngoài danh sách.** Kiểm định kỳ chỉ phát hiện sau tối đa vài giờ. Để đáp ứng điều kiện "đóng ngay", thêm hai lớp:
+- **Ngay lập tức (đề xuất PR riêng):** thêm Cognito trigger *Post confirmation* (Lambda nhỏ) gửi thông báo có `sub` của tài khoản vừa xác minh lên SNS topic cảnh báo hiện có, để người giám sát nhận email ngay khi có người đăng ký xong. Đây là thay đổi CDK `CpawsAuth`/`CpawsOps`, phải qua PR riêng có Tiến review và Data & Security Lead approve; ADR này không thay thế PR đó.
+- **Trong lúc chưa có trigger:** kiểm 3 lần mỗi ngày (09:00, 13:00, 21:00) như bảng trên, và mỗi thành viên báo người giám sát khi người mình mời đăng ký xong.
 
 **Quy trình khi chạm ngưỡng hoặc tới hạn đóng:** Data & Security Lead báo nhóm và quyết định đóng → mở PR CDK tắt `self_sign_up_enabled` (Tiến review) → merge, release → Tiến deploy `CpawsAuth` (ngoài 19:05–19:35 và 20:40–21:00) → build web `VITE_ALLOW_SIGNUP=false` → kiểm kê và vô hiệu hóa tài khoản ngoài danh sách được phép theo bước 3 của phương án 1 → ghi lại ngày, số tài khoản đã vô hiệu hóa vào Chương 4. Nếu cần chặn gấp trước khi PR kịp merge, Data & Security Lead quyết định và ghi lại lý do; thay đổi tay phải được đưa về CDK bằng PR ngay sau đó để `cdk diff` không lệch.
 
@@ -89,7 +95,6 @@ Kết quả mỗi lần kiểm ghi ngắn (ngày, số liệu, quyết định) 
 
 **Cách tính 1,2 USD/ngày:** lấy chi phí thật của lần chạy dev 26/10/2026 (prompt và tool v2): 0,35 USD cho 30 câu Haiku 4.5, khoảng 0,012 USD mỗi câu `complex` (`docs/api/contract.md`, mục giới hạn `POST /chat`; đơn giá tham chiếu ở ADR-0004). Giả định cả 100 lượt/ngày đều là câu `complex` gọi Haiku, mỗi câu có số token tương đương lần chạy đó: 100 × 0,012 ≈ 1,2 USD/ngày. Con số là ước tính từ chi phí đo được, chưa tách theo token đầu vào và đầu ra; câu dài hơn hoặc gọi nhiều tool hơn sẽ tốn hơn.
 
-Khi Data & Security Lead chọn, cập nhật trạng thái ADR này và các tài liệu liên quan (`docs/defense/kien-truc-trien-khai.md` 4.6, `docs/defense/trien-khai-van-hanh.md` §2.1, `docs/defense/security-and-cost.md`, `docs/defense/mo-dau.md`).
 
 ## Hệ quả
 
