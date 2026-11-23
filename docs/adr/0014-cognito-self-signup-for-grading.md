@@ -59,6 +59,7 @@ Chọn phương án 2, với các điều kiện:
       - ghi số lượng tài khoản đã vô hiệu hóa và ngày thực hiện vào Chương 4 (không ghi email hay tên người dùng).
    4. Người chấm và người dùng thử dùng tài khoản do Data & Security Lead tạo tay (`AdminCreateUser`), gửi qua kênh riêng.
 2. **Đề xuất: giữ mở có thời hạn** cho người chấm và đợt dùng thử của bạn bè, người thân nhóm. Chỉ có hiệu lực từ ngày Data & Security Lead chấp thuận; giai đoạn từ 22/11 21:07 tới ngày đó vẫn ghi là sai lệch. Điều kiện:
+   - **giới hạn người dùng thử theo từng thành viên:** mỗi thành viên mời tối đa 8 người (5 thành viên, tối đa 40 người), gửi link riêng qua tin nhắn cá nhân, không đăng công khai (mạng xã hội, nhóm đông người, README, trang Hugo); mỗi thành viên giữ danh sách người mình đã mời (chỉ tên gọi, không ghi lên repo) để đối chiếu khi Data & Security Lead kiểm số tài khoản;
    - giám sát theo bảng bên dưới;
    - **đóng sớm** theo các bước của phương án 1 khi chạm một ngưỡng trong bảng, hoặc khi Yahoo, mentor hay hội đồng yêu cầu;
    - mốc đóng: trong 1 ngày sau khi mentor xác nhận chấm xong, chậm nhất 10/12/2026; khi đóng làm đủ bước 1–3 của phương án 1;
@@ -68,7 +69,7 @@ Chọn phương án 2, với các điều kiện:
 
 | Chỉ số | Nguồn dữ liệu | Chu kỳ | Ngưỡng đóng sớm |
 |---|---|---|---|
-| Số tài khoản tự tạo | Cognito `ListUsers` trên `cpaws-dev-users`, đếm user có `UserCreateDate` sau 22/11/2026 21:07 và không thuộc danh sách nhóm/grader | Mỗi ngày lúc 09:00 | Vượt 50 tài khoản |
+| Số tài khoản tự tạo | Cognito `ListUsers` trên `cpaws-dev-users`, đếm user có `UserCreateDate` sau 22/11/2026 21:07 và không thuộc danh sách nhóm/grader; đối chiếu với tổng danh sách mời của 5 thành viên | Mỗi ngày lúc 09:00 | Vượt 50 tài khoản, hoặc vượt tổng số người đã mời từ 10 trở lên (có người ngoài danh sách tự đăng ký) |
 | Dùng chatbot | Bảng DynamoDB `cpaws-dev-chat-usage`, dòng `pk = global`, `sk = day#<ngày>`: `request_count` và `updated_at` lúc đạt 100 | Mỗi ngày lúc 09:00 (xem ngày hôm trước) | Đạt 100 lượt trước 12:00 hai ngày liên tiếp |
 | Lỗi hạn mức email | CloudTrail Event history của Cognito, sự kiện `SignUp`/`ResendConfirmationCode` có `errorCode = LimitExceededException` | Mỗi ngày lúc 09:00 | Xuất hiện ở 2 ngày trở lên |
 | Đăng ký bất thường | Cùng nguồn với dòng đầu: số tài khoản tạo trong 1 giờ | Mỗi ngày lúc 09:00 | Từ 10 tài khoản trong 1 giờ |
