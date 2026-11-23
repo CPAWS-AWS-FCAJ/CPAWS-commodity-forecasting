@@ -1,7 +1,7 @@
 # ADR-0014: Mở tự đăng ký Cognito trong thời gian chấm đồ án
 
 - Ngày: 2026-11-16
-- Trạng thái: Đề xuất. Bản sửa đổi 23/11/2026 chưa có quyết định.
+- Trạng thái: Chấp nhận phương án 2 (giữ tự đăng ký có thời hạn) từ 23/11/2026 16:44 giờ Việt Nam, theo quyết định của Data & Security Lead trên PR #148; không áp dụng hồi tố. Việc mở ngày 22/11/2026 21:07 vẫn là sai lệch.
 - Người có thẩm quyền quyết định: Data & Security Lead (Tuấn).
 - Người viết: Tuấn (bản gốc 16/11/2026); Khải (mục "Cập nhật 23/11/2026").
 - Người review: Khải (bản gốc); Data & Security Lead (bản sửa đổi); Tiến (mọi PR CDK `CpawsAuth` đi kèm).
@@ -41,13 +41,15 @@ Chọn phương án 2, với các điều kiện:
 - **Đóng đăng ký:** trong vòng một ngày sau khi mentor xác nhận hoàn tất chấm, phải tắt tự đăng ký ở Cognito, build lại web với `VITE_ALLOW_SIGNUP=false`, sau đó vô hiệu hóa/xóa các tài khoản tự đăng ký; giữ lại tài khoản của nhóm và tài khoản grader.
 - **Hạn chót đóng:** nếu chưa có thông báo hoàn tất chấm, ngày 10/12/2026 là hạn chót tuyệt đối để đóng tự đăng ký.
 
-## Cập nhật 23/11/2026: mở sau thời hạn và đề xuất xử lý
+## Cập nhật 23/11/2026: mở sau thời hạn và quyết định xử lý
 
 **Diễn biến thực tế.** PR CDK `CpawsAuth` (#141) merge ngày 19/11/2026, nhưng deploy (Tiến, từ `production` tag `v1.0.0`) diễn ra lúc 21:07 ngày 22/11/2026, cùng lượt release v1.0.0; web Amplify Deployment 6 build với `VITE_ALLOW_SIGNUP=true` lúc 21:27. Mục "Quyết định" ở trên yêu cầu mở trước 21/11 và không mở nếu chưa xong trước freeze 22/11, nên đây là **sai lệch so với điều kiện đã thống nhất**, không phải ngoại lệ đã được duyệt. Ngày 23/11 Data & Security Lead đã nêu sai lệch này trong review PR #145.
 
 **Tác động đã biết tới 23/11:** nhóm đã đăng ký thử tài khoản mới ngày 23/11; chưa có số liệu đầy đủ về số tài khoản tự tạo, cần Data & Security Lead kiểm trong Cognito. Chi phí: Cognito Lite/Essentials miễn phí tới 10.000 MAU/tháng; chatbot bị chặn ở 100 lượt/ngày toàn hệ thống (ước tính khoảng 1,2 USD/ngày nếu dùng hết; xem cách tính ở bảng giám sát bên dưới); email xác minh dùng `COGNITO_DEFAULT` nên số email mỗi ngày bị giới hạn ở mức thấp.
 
-**Hai phương án, chờ Data & Security Lead chọn.** Cả hai đều là đề xuất cho tới khi có quyết định chính thức; cập nhật tài liệu này không phải là chấp thuận hồi tố cho việc đã mở sau freeze.
+**Quyết định (23/11/2026 16:44 giờ Việt Nam, Data & Security Lead, comment trên PR #148):** chấp thuận **phương án 2** với các điều kiện ở dưới. Quyết định có hiệu lực từ thời điểm đó, **không áp dụng hồi tố**: khoảng từ 22/11/2026 21:07 tới 23/11/2026 16:44 vẫn ghi là sai lệch so với điều kiện "mở trước 21/11". Chấp thuận quyết định không thay thế review, approve và merge các PR liên quan.
+
+Hai phương án đã xem xét:
 
 1. **Đóng ngay** (đề nghị của Data & Security Lead ngày 23/11), mỗi bước qua PR riêng có review:
    1. PR CDK tắt `self_sign_up_enabled` (Tiến review CDK, Data & Security Lead duyệt) → merge → release → deploy `CpawsAuth`, kiểm `cdk diff` chỉ sửa tại chỗ.
@@ -58,23 +60,32 @@ Chọn phương án 2, với các điều kiện:
       - tài khoản ngoài danh sách: vô hiệu hóa ngay (`AdminDisableUser`), xóa sau khi nhóm xác nhận không còn cần (`AdminDeleteUser`); không xóa tài khoản nhóm hay grader;
       - ghi số lượng tài khoản đã vô hiệu hóa và ngày thực hiện vào Chương 4 (không ghi email hay tên người dùng).
    4. Người chấm và người dùng thử dùng tài khoản do Data & Security Lead tạo tay (`AdminCreateUser`), gửi qua kênh riêng.
-2. **Đề xuất: giữ mở có thời hạn** cho người chấm và đợt dùng thử của bạn bè, người thân nhóm. Chỉ có hiệu lực từ ngày Data & Security Lead chấp thuận; giai đoạn từ 22/11 21:07 tới ngày đó vẫn ghi là sai lệch. Điều kiện:
+2. **Giữ mở có thời hạn (được chọn)** cho người chấm và đợt dùng thử của bạn bè, người thân nhóm. Điều kiện:
    - **giới hạn người dùng thử theo từng thành viên:** mỗi thành viên mời tối đa 8 người (5 thành viên, tối đa 40 người), gửi link riêng qua tin nhắn cá nhân, không đăng công khai (mạng xã hội, nhóm đông người, README, trang Hugo); mỗi thành viên giữ danh sách người mình đã mời (chỉ tên gọi, không ghi lên repo) để đối chiếu khi Data & Security Lead kiểm số tài khoản;
    - giám sát theo bảng bên dưới;
-   - **đóng sớm** theo các bước của phương án 1 khi chạm một ngưỡng trong bảng, hoặc khi Yahoo, mentor hay hội đồng yêu cầu;
-   - mốc đóng: trong 1 ngày sau khi mentor xác nhận chấm xong, chậm nhất 10/12/2026; khi đóng làm đủ bước 1–3 của phương án 1;
+   - **đóng ngay** theo các bước của phương án 1 khi chạm một ngưỡng trong bảng, hoặc khi Yahoo, mentor hay hội đồng yêu cầu;
+   - mốc đóng: trong 1 ngày sau khi mentor xác nhận chấm xong, **chậm nhất 10/12/2026**; khi đóng làm đủ bước 1–3 của phương án 1;
    - vẫn tạo riêng tài khoản grader, phòng khi hết hạn mức email.
 
-**Giám sát nếu chọn phương án 2** (người phụ trách: Data & Security Lead; giờ Việt Nam, UTC+7):
+**Cách tính ngưỡng 50 tài khoản.** Chỉ đếm **tài khoản tự đăng ký của người ngoài nhóm**: user có `UserCreateDate` sau 22/11/2026 21:07 **và không thuộc danh sách được phép**. Danh sách được phép gồm tài khoản 5 thành viên (kể cả tài khoản thử thành viên tự tạo) và tài khoản grader; danh sách này do Data & Security Lead giữ ngoài repo. Tài khoản tạo trước 22/11 21:07 (do nhóm tạo khi pool còn đóng) không tính. Với hạn mức mời 40 người, ngưỡng 50 chừa chỗ cho người được mời tạo lại tài khoản khi nhập sai email.
+
+**Giám sát** (người phụ trách: Data & Security Lead; giờ Việt Nam, UTC+7):
 
 | Chỉ số | Nguồn dữ liệu | Chu kỳ | Ngưỡng đóng sớm |
 |---|---|---|---|
-| Số tài khoản tự tạo | Cognito `ListUsers` trên `cpaws-dev-users`, đếm user có `UserCreateDate` sau 22/11/2026 21:07 và không thuộc danh sách nhóm/grader; đối chiếu với tổng danh sách mời của 5 thành viên | Mỗi ngày lúc 09:00 | Vượt 50 tài khoản, hoặc vượt tổng số người đã mời từ 10 trở lên (có người ngoài danh sách tự đăng ký) |
+| Số tài khoản tự đăng ký | Cognito `ListUsers` trên `cpaws-dev-users`, đếm theo cách tính ở trên | Mỗi ngày lúc 09:00 | Vượt 50 tài khoản |
+| Tài khoản ngoài danh sách mời | Cùng nguồn; đối chiếu email hoặc tên gọi với danh sách mời của 5 thành viên | Mỗi ngày lúc 09:00 | Có **một** tài khoản tự đăng ký không thuộc danh sách mời |
 | Dùng chatbot | Bảng DynamoDB `cpaws-dev-chat-usage`, dòng `pk = global`, `sk = day#<ngày>`: `request_count` và `updated_at` lúc đạt 100 | Mỗi ngày lúc 09:00 (xem ngày hôm trước) | Đạt 100 lượt trước 12:00 hai ngày liên tiếp |
 | Lỗi hạn mức email | CloudTrail Event history của Cognito, sự kiện `SignUp`/`ResendConfirmationCode` có `errorCode = LimitExceededException` | Mỗi ngày lúc 09:00 | Xuất hiện ở 2 ngày trở lên |
 | Đăng ký bất thường | Cùng nguồn với dòng đầu: số tài khoản tạo trong 1 giờ | Mỗi ngày lúc 09:00 | Từ 10 tài khoản trong 1 giờ |
 
 Kết quả mỗi lần kiểm ghi ngắn (ngày, số liệu, quyết định) vào kênh nhóm; không ghi email hay tên người dùng.
+
+**Quy trình khi chạm ngưỡng hoặc tới hạn đóng:** Data & Security Lead báo nhóm và quyết định đóng → mở PR CDK tắt `self_sign_up_enabled` (Tiến review) → merge, release → Tiến deploy `CpawsAuth` (ngoài 19:05–19:35 và 20:40–21:00) → build web `VITE_ALLOW_SIGNUP=false` → kiểm kê và vô hiệu hóa tài khoản ngoài danh sách được phép theo bước 3 của phương án 1 → ghi lại ngày, số tài khoản đã vô hiệu hóa vào Chương 4. Nếu cần chặn gấp trước khi PR kịp merge, Data & Security Lead quyết định và ghi lại lý do; thay đổi tay phải được đưa về CDK bằng PR ngay sau đó để `cdk diff` không lệch.
+
+**Bằng chứng kiểm tra (đọc, không đổi cấu hình):**
+- Giới hạn chatbot: `infra/stacks/cpaws_api_stack.py` đặt biến môi trường `CHAT_USER_DAILY_LIMIT=20` và `CHAT_GLOBAL_DAILY_LIMIT=100` cho Lambda `cpaws-<env>-chat-api`; `tests/test_infra_chat_api.py` khóa hai giá trị này. Kiểm trên AWS: `aws lambda get-function-configuration --function-name cpaws-dev-chat-api --query "Environment.Variables.[CHAT_USER_DAILY_LIMIT,CHAT_GLOBAL_DAILY_LIMIT]"` phải ra `20` và `100`. Bộ đếm: `src/chatbot/quota.py`, bảng `cpaws-dev-chat-usage`.
+- Số tài khoản: `aws cognito-idp list-users --user-pool-id <id pool cpaws-dev-users> --query "Users[].[Username,UserCreateDate,UserStatus,Enabled]" --output table` (lấy id bằng `aws cognito-idp list-user-pools --max-results 20`); không dán kết quả có email hay tên người dùng vào repo hay kênh chung.
 
 **Cách tính 1,2 USD/ngày:** lấy chi phí thật của lần chạy dev 26/10/2026 (prompt và tool v2): 0,35 USD cho 30 câu Haiku 4.5, khoảng 0,012 USD mỗi câu `complex` (`docs/api/contract.md`, mục giới hạn `POST /chat`; đơn giá tham chiếu ở ADR-0004). Giả định cả 100 lượt/ngày đều là câu `complex` gọi Haiku, mỗi câu có số token tương đương lần chạy đó: 100 × 0,012 ≈ 1,2 USD/ngày. Con số là ước tính từ chi phí đo được, chưa tách theo token đầu vào và đầu ra; câu dài hơn hoặc gọi nhiều tool hơn sẽ tốn hơn.
 
