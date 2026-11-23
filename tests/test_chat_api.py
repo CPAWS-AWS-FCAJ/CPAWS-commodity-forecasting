@@ -100,16 +100,25 @@ def _tool_use(*uses, text=None):
     }
 
 
+# Thời điểm lỗi production: 23/11/2026 01:50 giờ VN = 22/11/2026 18:50 UTC (UTC chưa sang ngày mới)
+FIXED_NOW = dt.datetime(2026, 11, 22, 18, 50, tzinfo=dt.UTC)
+TIME_BLOCK_TEXT = (
+    "Thời điểm hiện tại: thứ Hai, 23/11/2026 01:50 (giờ Việt Nam, UTC+7). "
+    '"Hôm nay", "năm nay" tính theo mốc này. '
+    "Ngày cơ sở trong dữ liệu dự báo là phiên giá gần nhất, có thể sớm hơn hôm nay."
+)
+
+
 def deps(responses, **kw):
     files = {a: FIX / "forecasts" / f"{a}.json" for a in T.ASSETS}
     clock = kw.pop("clock", None)
+    kw.setdefault("now", lambda: FIXED_NOW)
     news = kw.pop("news", None) or N.StaticNewsRepository({"wti": NEWS})
     d = C.ChatDeps(
         client=FakeClient(responses),
         forecasts=T.JsonFileForecastRepository(files),
         news=news,
-        prompts={"simple": "PROMPT SIMPLE", "complex": "PROMPT COMPLEX"},
-        **kw,
+        **{"prompts": {"simple": "PROMPT SIMPLE", "complex": "PROMPT COMPLEX"}, **kw},
     )
     if clock:
         d.clock = clock
@@ -208,7 +217,7 @@ def test_complex_answer_with_tools_builds_forecasts_used_and_citations():
     assert res.input_tokens == 150 and not res.truncated
     first, second = d.client.calls
     assert first["modelId"] == C.MODEL_IDS["complex"]
-    assert first["system"] == [{"text": "PROMPT COMPLEX"}]
+    assert first["system"] == [{"text": "PROMPT COMPLEX"}, {"text": TIME_BLOCK_TEXT}]
     assert [t["toolSpec"]["name"] for t in first["toolConfig"]["tools"]] == [
         "get_forecast",
         "get_news",
@@ -233,6 +242,96 @@ def test_history_and_context_become_messages():
     assert [m["role"] for m in msgs] == ["user", "assistant", "user"]
     assert msgs[-1]["content"][0] == {"text": "Nó có tăng không?"}
     assert "gold" in msgs[-1]["content"][1]["text"]
+
+
+# ---------- ngày giờ hiện tại (v1.0.1, lỗi production 23/11/2026) ----------
+
+
+@pytest.mark.parametrize("branch", C.BRANCHES)
+def test_time_block_is_second_system_block_for_both_branches(branch):
+    d = deps([_text("Trả lời.")])
+    C.answer(C.parse_request({"question": "Năm nay là năm bao nhiêu?"}), d, branch=branch)
+    (call,) = d.client.calls
+    assert call["modelId"] == C.MODEL_IDS[branch]
+    prompt = {"simple": "PROMPT SIMPLE", "complex": "PROMPT COMPLEX"}[branch]
+    # prompt khóa đứng đầu, nguyên văn; khối thời gian đứng sau; không có cachePoint
+    assert call["system"] == [{"text": prompt}, {"text": TIME_BLOCK_TEXT}]
+    # ngày giờ chỉ ở system, không trộn vào câu hỏi của người dùng
+    assert call["messages"][-1]["content"] == [{"text": "Năm nay là năm bao nhiêu?"}]
+
+
+def test_time_block_same_in_every_tool_round():
+    d = deps([_tool_use(("get_forecast", {"asset": "gold"})), _text("x")])
+    C.answer(C.parse_request({"question": "Vàng?"}), d)
+    assert [c["system"][1]["text"] for c in d.client.calls] == [TIME_BLOCK_TEXT] * 2
+
+
+@pytest.mark.parametrize(
+    ("now", "stamp"),
+    [
+        # UTC còn ngày 22/11, giờ VN đã sang 23/11
+        (dt.datetime(2026, 11, 22, 18, 50, tzinfo=dt.UTC), "thứ Hai, 23/11/2026 01:50"),
+        # mốc chuyển ngày giờ VN = 17:00 UTC
+        (dt.datetime(2026, 11, 23, 16, 59, tzinfo=dt.UTC), "thứ Hai, 23/11/2026 23:59"),
+        (dt.datetime(2026, 11, 23, 17, 0, tzinfo=dt.UTC), "thứ Ba, 24/11/2026 00:00"),
+        # UTC và giờ VN cùng ngày
+        (dt.datetime(2026, 11, 29, 3, 5, tzinfo=dt.UTC), "Chủ nhật, 29/11/2026 10:05"),
+        # sang năm mới theo giờ VN khi UTC vẫn là 31/12 ("năm nay" phải là 2027)
+        (dt.datetime(2026, 12, 31, 17, 30, tzinfo=dt.UTC), "thứ Sáu, 01/01/2027 00:30"),
+        # đầu vào có múi giờ khác UTC vẫn đổi đúng về giờ VN
+        (
+            dt.datetime(2026, 11, 23, 3, 50, tzinfo=dt.timezone(dt.timedelta(hours=9))),
+            "thứ Hai, 23/11/2026 01:50",
+        ),
+    ],
+)
+def test_current_time_block_uses_vietnam_time(now, stamp):
+    text = C.current_time_block(now)["text"]
+    assert text.startswith(f"Thời điểm hiện tại: {stamp} (giờ Việt Nam, UTC+7). ")
+
+
+def test_current_time_block_rejects_naive_datetime():
+    with pytest.raises(ValueError, match="timezone-aware"):
+        C.current_time_block(dt.datetime(2026, 11, 23, 1, 50))  # noqa: DTZ001 (cố ý không múi giờ)
+
+
+def test_default_now_is_timezone_aware_utc():
+    d = C.ChatDeps(client=None, forecasts=None, news=None, prompts={})
+    now = d.now()
+    assert now.utcoffset() == dt.timedelta(0)
+    assert C.current_time_block(now)["text"].startswith("Thời điểm hiện tại: ")
+
+
+def test_get_news_default_to_date_follows_vietnam_day_of_injected_now():
+    # 22/11 18:50 UTC = 23/11 giờ VN: to_date mặc định của get_news là 23/11, khớp khối thời gian
+    d = deps([_tool_use(("get_news", {"asset": "wti"})), _text("x")])
+    C.answer(C.parse_request({"question": "Tin WTI?"}), d)
+    out = d.client.calls[1]["messages"][-1]["content"][0]["toolResult"]["content"][0]["json"]
+    assert (out["from_date"], out["to_date"]) == ("2026-11-16", "2026-11-23")
+
+
+def test_locked_prompts_unchanged_and_sent_byte_for_byte():
+    """Prompt v2 giữ nguyên SHA-256 đã khóa 29/10 và được gửi nguyên văn ở khối system đầu."""
+    import hashlib
+
+    spec = importlib.util.spec_from_file_location(
+        "chatbot_benchmark_config", ROOT / "configs" / "chatbot_benchmark.py"
+    )
+    cfg = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(cfg)
+    locked = cfg.QUESTION_SETS["v2"]["locked_sha256"]
+    prompts = {}
+    for branch, name in H.PROMPT_FILES.items():
+        path = ROOT / "docs" / "prompts" / name
+        assert hashlib.sha256(path.read_bytes()).hexdigest() == locked[f"prompt_{branch}"]
+        prompts[branch] = C.load_system_prompt(path)
+    for branch in C.BRANCHES:
+        d = deps([_text("x")], prompts=prompts)
+        C.answer(C.parse_request({"question": "Chào"}), d, branch=branch)
+        system = d.client.calls[0]["system"]
+        assert system[0] == {"text": prompts[branch]}
+        assert system[1] == {"text": TIME_BLOCK_TEXT}
+        assert len(system) == 2
 
 
 def test_answer_text_excludes_history():

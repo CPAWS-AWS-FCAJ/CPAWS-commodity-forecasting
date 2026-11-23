@@ -243,6 +243,7 @@ Cùng đợt, 8 câu loại bài A (chào hỏi, khái niệm, ngoài phạm vi,
 - Bedrock Guardrails vẫn ở trạng thái `DRAFT`, chưa bật hoặc gắn vào Lambda nên không phải lớp bảo vệ đang hoạt động. Lớp chống prompt injection hiện gồm prompt, kiểm soát `citations` phía server và log link lạ ([#104](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/104)). Log này chạy trên Lambda từ 10/11, chỉ ghi, không chặn và chưa có alarm (mục 6.2).
 - Tin tức phụ thuộc một người gắn nhãn tay, 2–3 bài mỗi tuần, có độ trễ; ngoài khoảng đó `get_news` trả rỗng và chatbot nói không tìm thấy tin đáng kể.
 - Mặc định khoảng ngày của `get_news` lệch giữa prompt ("7 ngày đến ngày cơ sở") và code ("7 ngày đến hôm nay theo giờ Việt Nam"); đã ghi ở mục 6 issue #84.
+- Đến v1.0.0, model không biết ngày hiện tại: ngày 23/11/2026, câu "từ 9/11 đến 20/11 năm nay" bị hiểu là năm 2024 và "hôm nay" bị nhầm với ngày cơ sở. Từ v1.0.1, Lambda gửi thêm một khối `system` thứ hai nêu ngày giờ hiện tại theo giờ Việt Nam; prompt v2 đã khóa không đổi ([contract](../api/contract.md), mục `POST /chat`). Thay đổi này có sau benchmark nên chưa được benchmark đo; chỉ kiểm bằng unit test và hỏi thử sau deploy.
 - Không streaming: người dùng chờ cả câu, trung vị khoảng 4 giây trên benchmark.
 - Haiku gọi qua global inference profile, không cam kết xử lý dữ liệu chỉ trong Singapore.
 
