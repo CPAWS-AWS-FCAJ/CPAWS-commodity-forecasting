@@ -2,6 +2,7 @@ import type { AssetId, Currency } from "../api/types";
 import { formatNumber, formatPrice } from "../lib/format";
 import { GOLD_VND_NOTE } from "../lib/source";
 import { convertPrice, displayUnit } from "../lib/units";
+import { Swap } from "./Swap";
 
 interface Props {
   asset: AssetId;
@@ -26,11 +27,13 @@ export function PriceRange({ asset, currency, usdVnd, low, mid, high, horizonDay
   return (
     <div>
       <p className="text-sm text-muted">Sau {horizonDays} phiên, nhiều khả năng trong khoảng (khoảng 80%, q10–q90)</p>
-      <p className="tabular mt-1 text-xl font-semibold">{range(asset, currency, usdVnd, low, high)}</p>
-      <p className="tabular mt-1 text-sm text-muted">
-        Mức giữa (trung vị): {formatPrice(asset, convertPrice(asset, mid, currency, usdVnd), currency)}{" "}
-        {displayUnit(asset, currency)}. Cùng khoảng theo {other}: {range(asset, other, usdVnd, low, high)}
-      </p>
+      <Swap value={`${currency}-${horizonDays}`} className="block">
+        <p className="tabular mt-1 text-xl font-semibold">{range(asset, currency, usdVnd, low, high)}</p>
+        <p className="tabular mt-1 text-sm text-muted">
+          Mức giữa (trung vị): {formatPrice(asset, convertPrice(asset, mid, currency, usdVnd), currency)}{" "}
+          {displayUnit(asset, currency)}. Cùng khoảng theo {other}: {range(asset, other, usdVnd, low, high)}
+        </p>
+      </Swap>
       {currency === "VND" ? (
         <p className="mt-1 text-xs text-muted">
           Tỷ giá USD/VND {formatNumber(usdVnd)}.

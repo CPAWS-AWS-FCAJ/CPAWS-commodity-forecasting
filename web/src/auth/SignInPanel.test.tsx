@@ -1,6 +1,6 @@
 import { cleanup, render } from "@testing-library/react";
 import type { SignUpInput } from "aws-amplify/auth";
-import { NAME_REQUIRED_MESSAGE } from "./authForm";
+import { NAME_REQUIRED_MESSAGE, USERNAME_SPACE_MESSAGE } from "./authForm";
 
 const flags = vi.hoisted(() => ({ allowSignUp: true }));
 const captured = vi.hoisted(() => ({ props: {} as Record<string, unknown> }));
@@ -93,5 +93,19 @@ describe("SignInPanel (Authenticator)", () => {
       name: NAME_REQUIRED_MESSAGE,
     });
     await expect(SIGN_IN_SERVICES.validateCustomSignUp({ name: "Lan" }, { name: true })).resolves.toBeUndefined();
+  });
+
+  it("tên đăng nhập có khoảng trắng: báo lỗi tiếng Việt, không gọi Cognito", async () => {
+    await expect(
+      SIGN_IN_SERVICES.validateCustomSignUp({ name: "Lan", username: "lan 01" }, { name: true, username: true }),
+    ).resolves.toEqual({ username: USERNAME_SPACE_MESSAGE });
+    amplify.signUp.mockClear();
+    const input = {
+      username: "lan 01",
+      password: "Abcdef1!",
+      options: { userAttributes: { email: "lan@example.com", name: "Lan" } },
+    } as SignUpInput;
+    await expect(SIGN_IN_SERVICES.handleSignUp(input)).rejects.toThrow(USERNAME_SPACE_MESSAGE);
+    expect(amplify.signUp).not.toHaveBeenCalled();
   });
 });

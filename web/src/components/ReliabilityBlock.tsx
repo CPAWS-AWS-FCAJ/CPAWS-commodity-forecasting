@@ -52,7 +52,7 @@ export function ReliabilityBlock({
       <div className="mt-3">
         {/* VITE_ACCURACY_API=false (route /accuracy chưa deploy): cùng chữ với not_ready, không gọi API */}
         {config.accuracyApiEnabled ? null : <p className="text-sm text-muted">Chưa có kết quả đánh giá</p>}
-        {config.accuracyApiEnabled && accuracy.isPending ? <LoadingBlock label="Đang tải độ tin cậy…" /> : null}
+        {config.accuracyApiEnabled && accuracy.isPending ? <LoadingBlock label="Đang tải độ tin cậy…" shape="panel" /> : null}
         {accuracy.isError ? (
           isAccuracyUnavailable(accuracy.error) ? (
             <p role="status" className="text-sm text-muted">

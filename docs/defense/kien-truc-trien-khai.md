@@ -1,6 +1,6 @@
 # Chương 4. Kiến trúc, triển khai và vận hành
 
-> Bản nháp ngày 16/11/2026, sửa 17/11/2026 theo review của Khải và Long trên PR #134. Chủ trì: Tiến; review: Khải (pipeline), Tuấn (IAM/API), Long (rolling accuracy). Cơ sở: `origin/developer` @ `a6eef06` (16/11/2026); kết quả test2020 theo #131.
+> Bản nháp ngày 16/11/2026, sửa 17/11/2026 theo review của Khải và Long trên PR #134; cập nhật 23/11/2026 sau lần deploy bản nộp v1.0.0 từ nhánh `production` (22/11). Chủ trì: Tiến; review: Khải (pipeline), Tuấn (IAM/API), Long (rolling accuracy). Cơ sở: `origin/developer` @ `a6eef06` (16/11/2026); kết quả test2020 theo #131; trạng thái triển khai theo `production` @ `ba3d9f4` (tag `v1.0.0`, deploy 22/11/2026).
 >
 > Chương này tóm tắt và sắp xếp lại theo đề cương 4.1–4.6 của [khung báo cáo cuối](khung-bao-cao-cuoi.md). Chi tiết cấu hình, lệnh vận hành và bảng các lần deploy nằm ở [tài liệu triển khai và vận hành](trien-khai-van-hanh.md) (gọi tắt **TKVH**), dùng làm nguồn và phụ lục. Trạng thái là tại ngày viết; phần nào là kế hoạch thì ghi rõ. Không đưa Account ID, ARN, domain, email hay số liệu giá vào chương này.
 
@@ -37,7 +37,7 @@ Cấu hình chi tiết từng stack và thứ tự phụ thuộc: TKVH §2.1. St
 | Bedrock chatbot có Guardrails | Bedrock Converse + tool use, **không bật Guardrails** | Chốt 11/11: bật sau benchmark official sẽ đổi hành vi bản đã đánh giá (Chương 3) |
 | GitHub Actions CI/CD (bước 19) | Chỉ CI; deploy CDK và push image từ máy thành viên | GitHub không giữ quyền AWS; repo public |
 | Amplify Hosting nối Git | Upload zip thủ công | Cần chạy trước buổi chạy thử 08/11; từ 16/11 giữ nguyên domain cho người chấm nên không nối Git (mục 4.3) |
-| — (không có trong proposal) | Job `rolling_8w`, route `GET /accuracy/{asset}`, shadow S1a, 6 alarm, giới hạn lượt chat | Thêm trong quá trình làm để đo dự báo chạy thật và kiểm soát chi phí |
+| — (không có trong proposal) | Job `rolling_8w`, route `GET /accuracy/{asset}`, shadow S1a, 6 alarm, giới hạn lượt chat, lịch sử giá tới 2 năm, tự đăng ký Cognito có thời hạn | Thêm trong quá trình làm để đo dự báo chạy thật và kiểm soát chi phí |
 
 ## 4.2. Luồng dữ liệu hằng ngày
 
@@ -65,7 +65,7 @@ Những điểm thiết kế chính (chi tiết ở TKVH §3):
 
 ## 4.3. Triển khai, CI, rollback và giám sát
 
-**Deploy.** Chỉ deploy từ `developer` sau khi PR đã merge, luôn chạy `cdk diff` trước, mỗi lệnh một stack, một người deploy tại một thời điểm và báo nhóm. Không deploy `CpawsData` trong khung 19:05–19:35. Image container gắn tag bằng SHA ngắn của commit merge, không dùng `latest`. Các tham số `-c` bắt buộc (email nhận alarm, origin CORS) phải truyền ở mọi lần deploy (TKVH §4).
+**Deploy.** Đến 17/11 nhóm deploy từ `developer` sau khi PR đã merge. Với bản nộp, mã chạy trên AWS lấy từ nhánh `production`: PR release `developer → production` (merge commit, Long approve), gắn tag, rồi chỉ deploy từ commit có tag (`v1.0.0`, 22/11); sửa lỗi sau đó vào `developer` trước rồi release bản tiếp theo. Luôn chạy `cdk diff` trước, mỗi lệnh một stack, một người deploy tại một thời điểm và báo nhóm. Không deploy `CpawsData` trong khung 19:05–19:35; lần deploy release còn tránh 20:40–21:00 (lượt job accuracy 20:45). Image container gắn tag bằng SHA ngắn của commit merge, không dùng `latest`. Các tham số `-c` bắt buộc (email nhận alarm, origin CORS) phải truyền ở mọi lần deploy (TKVH §4).
 
 **CI.** GitHub Actions chạy ở mọi push và PR: `ruff`, `pytest` (kể cả test synth CDK từ [#95](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/95)), và phần web `typecheck`, `test`, `build`. `developer` cần ít nhất 1 approve; thay đổi IAM/hạ tầng do Tuấn review. Pre-commit quét bí mật (gitleaks, detect-aws-credentials) vì repo public (TKVH §8).
 
@@ -73,7 +73,9 @@ Những điểm thiết kế chính (chi tiết ở TKVH §3):
 
 **Giám sát.** Sáu alarm (≥ 1 lỗi trong 5 phút) gửi email qua SNS: lỗi ingest, predict, shadow, job accuracy, chat (crash/timeout) và lỗi `500` của chat. Sau mỗi lượt 19:15 nhóm kiểm tay log `PREDICT_DONE`, `Duration`, số object shadow và trạng thái alarm (TKVH §6, Phụ lục A.3).
 
-**Web và CORS.** Web build từ `developer` và upload zip lên Amplify; các cờ `VITE_*` đọc lúc build, nên đổi cờ chỉ cần build lại web. Commit của mỗi bản upload được ghi lại tay (TKVH §7, 5 lần đến 13/11). API chỉ cho một origin: từ 07/11 là domain Amplify. **Domain Amplify hiện tại là địa chỉ nộp cho người chấm**: giữ chạy tới khi chấm xong và không đổi domain, nên không nối Amplify với GitHub trong phạm vi dự án.
+**Web và CORS.** Web build từ nhánh đang deploy (từ 22/11 là `production`) và upload zip lên Amplify; các cờ `VITE_*` đọc lúc build, nên đổi cờ chỉ cần build lại web. Commit của mỗi bản upload được ghi lại tay (TKVH §7, 6 lần đến 22/11). API chỉ cho một origin: từ 07/11 là domain Amplify. **Domain Amplify hiện tại là địa chỉ nộp cho người chấm**: giữ chạy tới khi chấm xong và không đổi domain, nên không nối Amplify với GitHub trong phạm vi dự án.
+
+**Deploy bản nộp v1.0.0 (22/11/2026, từ `production` @ `ba3d9f4`).** `cdk diff` cả 5 stack (kèm hai tham số `-c`) chỉ có thay đổi ở `CpawsAuth` (User Pool sửa tại chỗ 3 thuộc tính, không thay thế pool) và `CpawsApi` (Lambda dự báo thêm quyền `s3:GetObject` đúng prefix `serving/price-history/*`, 2 biến môi trường và gói code mới; Lambda chat đổi gói code cho bộ tin [#142](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/142)); `CpawsData`, `CpawsServing`, `CpawsOps` không đổi. Thứ tự: `CpawsAuth` (21:07) → `CpawsApi` (21:13) → xuất lịch sử giá 520 phiên × 4 tài sản lên S3 (21:19; chạy thử ra máy trước rồi mới ghi S3) → build web từ `production` và upload Amplify (21:27). Không build lại image Lambda. Chi tiết và kết quả kiểm: TKVH §7.
 
 ## 4.4. Rolling accuracy: job và API
 
@@ -86,7 +88,7 @@ Khối "Độ tin cậy" trên web hiển thị số đo `rolling_8w` của **d�
 | 12/11 | Bật lịch `cron(45 13 ? * TUE-SAT *)` UTC, 20:45 giờ VN; `cdk diff` chỉ đổi `State` | [#118](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/118) |
 | 13/11 | Web bật khối "Độ tin cậy" (`VITE_ACCURACY_API=true`) | — |
 
-Lượt theo lịch đầu tiên (12/11, 20:45) chạy xong cho cả 4 tài sản: run ở trạng thái `COMPLETED` và con trỏ kết quả đã cập nhật (`promoted`), 30,3 s, 297/1.024 MB, alarm OK; Long xác minh độc lập qua DynamoDB, API và web ([#89](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/89)). Run hoàn tất **không** có nghĩa là số đo đã được công bố: khi số ngày cơ sở hợp lệ (khác nhau) chưa đủ 20, API vẫn trả `collecting`, chưa công bố giá trị `overall`, và web hiện "Đang thu thập (n/20)". Ngày 12/11 cả 4 tài sản ở mức 9/20. Nếu mỗi lượt thêm được một ngày cơ sở hợp lệ thì có thể đủ 20 vào khoảng cuối tháng 11; đây chỉ là ước lượng có điều kiện, vì số ngày tăng còn phụ thuộc giá thực tế đã có, điều kiện hợp lệ và provenance của từng ngày. Số hiển thị tại ngày đóng băng: `[CHỜ SỐ LIỆU: chụp 22/11]`.
+Lượt theo lịch đầu tiên (12/11, 20:45) chạy xong cho cả 4 tài sản: run ở trạng thái `COMPLETED` và con trỏ kết quả đã cập nhật (`promoted`), 30,3 s, 297/1.024 MB, alarm OK; Long xác minh độc lập qua DynamoDB, API và web ([#89](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/89)). Run hoàn tất **không** có nghĩa là số đo đã được công bố: khi số ngày cơ sở hợp lệ (khác nhau) chưa đủ 20, API vẫn trả `collecting`, chưa công bố giá trị `overall`, và web hiện "Đang thu thập (n/20)". Ngày 12/11 cả 4 tài sản ở mức 9/20. Nếu mỗi lượt thêm được một ngày cơ sở hợp lệ thì có thể đủ 20 vào khoảng cuối tháng 11; đây chỉ là ước lượng có điều kiện, vì số ngày tăng còn phụ thuộc giá thực tế đã có, điều kiện hợp lệ và provenance của từng ngày. Tại ngày đóng băng 22/11 (lượt gần nhất là 21/11, 20:45, vì job không chạy Chủ nhật và thứ Hai), cả 4 tài sản ở mức **16/20**: API vẫn trả `collecting`, web hiện "Đang thu thập (16/20)" và chưa công bố số đo tổng. Nếu mỗi lượt từ 24/11 thêm một ngày cơ sở hợp lệ thì đủ 20 ở lượt 27/11.
 
 `GET /accuracy/{asset}` chỉ phục vụ số đo của champion `baseline-q252`. Đánh giá cặp champion–S1a của shadow được job lưu riêng dưới `eval/shadow_eval/` trên S3, không ghi đè số đo champion và không đi qua API (Chương 2 §3.1).
 
@@ -99,13 +101,16 @@ Lượt theo lịch đầu tiên (12/11, 20:45) chạy xong cho cả 4 tài sả
 | Job accuracy | Dry-run 11/11 (23,7 s), lượt theo lịch 12/11 (30,3 s), `collecting` 9/20 | TKVH §9; [#89](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/89) |
 | API và CORS trên Amplify | Preflight đúng origin; `/forecasts`, `/accuracy` (4 tài sản) và `POST /chat` trả 200 trên domain Amplify | TKVH §7 |
 | Chatbot sau cập nhật bộ tin | Deploy `CpawsApi` 13/11 15:57: `cdk diff` chỉ đổi gói code Lambda chat; hỏi tin WTI ra đúng hai tin EIA mới | TKVH §7; [#123](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/123) |
-| Ảnh giao diện | Trang chủ, trang vàng (cơ bản/nâng cao, VND), khối quy đổi, khối "Độ tin cậy", khung chat | `[CHỜ ẢNH: chụp 22/11 sau đăng nhập, che email/token]` |
+| Deploy bản nộp v1.0.0 (22/11) | `cdk diff` 5 stack chỉ có `CpawsAuth` và `CpawsApi`; deploy xong trong 21:07–21:27; log Lambda dự báo 14 giờ sau deploy không có lỗi đọc tệp lịch sử giá (`PRICE_HISTORY_FILE_UNAVAILABLE`) | TKVH §7 |
+| Kiểm sau deploy (22–23/11) | Chưa đăng nhập: `/overview`, `/asset/gold`, `/accuracy` chuyển về trang đăng nhập; trang giới thiệu không có số giá và không gọi API dự báo. Sáng/tối và menu trên điện thoại (375 px) dùng được. Trang tài sản mốc 2 năm gọi `history=520` và vẽ đủ chuỗi. Chatbot: câu dự báo vàng đủ phần bắt buộc, câu tin vàng ra biên bản FOMC 18/11 (Phước kiểm) | TKVH §7 |
+| Tự đăng ký (23/11) | Tài khoản thử có Họ tên: nhận mã xác minh qua email, nhập mã, đăng nhập thì menu hiện Họ tên, đăng xuất về trang giới thiệu | Ảnh trong Workshop mục 5.4.3 (đã che email, mã) |
+| Ảnh giao diện | Ảnh chụp sau đăng nhập dùng trong Workshop và video demo; không đưa ảnh có số giá vàng, bạc lên repo công khai (ADR-0005) | Workshop |
 
 ## 4.6. Giao diện web và quy tắc hiển thị
 
-Web nằm trong `web/`: React + TypeScript + Vite + Tailwind, gọi API bằng TanStack Query, biểu đồ Recharts, đăng nhập bằng Amplify UI `Authenticator` trên Cognito User Pool có sẵn (không dùng Amplify backend). Mọi trang nằm sau đăng nhập. Web gửi ID token trong header `Authorization`; API trả 401 thì web đăng xuất và về màn đăng nhập.
+Web nằm trong `web/`: React + TypeScript + Vite + Tailwind, gọi API bằng TanStack Query, biểu đồ Recharts, đăng nhập bằng Amplify UI `Authenticator` trên Cognito User Pool có sẵn (không dùng Amplify backend). Từ v1.0.0 ([#143](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/143)), trang giới thiệu (`/`), "Cách đọc dự báo" (`/guide`) và "Giới thiệu" (`/about`) công khai và không có số giá; các trang có dữ liệu (`/overview`, `/asset/:id`, `/accuracy`) cần đăng nhập, chưa đăng nhập thì chuyển tới `/dang-nhap?next=…`. Web gửi ID token trong header `Authorization`; API trả 401 thì web đăng xuất và về màn đăng nhập.
 
-**Các trang:** trang chủ (4 thẻ tài sản), trang tài sản (vàng, bạc, Brent, WTI), trang "Độ chính xác" (khối độ tin cậy của cả 4 tài sản và cách đọc chỉ số), trang "Giới thiệu" (cách đọc dự báo, phương pháp, nguồn dữ liệu).
+**Các trang cần đăng nhập:** "Tổng quan giá" (giá cuối phiên 4 sản phẩm, USD/VND, biểu đồ lịch sử), trang dự báo (4 thẻ tài sản), trang tài sản (vàng, bạc, Brent, WTI), trang "Độ chính xác" (khối độ tin cậy của cả 4 tài sản và cách đọc chỉ số), cùng hai trang công khai "Cách đọc dự báo" và "Giới thiệu" (phương pháp, nguồn dữ liệu).
 
 **Trang tài sản**, từ trên xuống:
 
@@ -121,11 +126,11 @@ Web nằm trong `web/`: React + TypeScript + Vite + Tailwind, gọi API bằng T
 - **USD/VND:** đổi theo tỷ giá đã công bố trong snapshot. Vàng, bạc tính theo VND/lượng (1 lượng = 37,5 g, 1 ounce troy = 31,1034768 g), dầu theo VND/thùng. Nhãn vàng ghi rõ đây là giá thế giới quy đổi, không phải giá vàng miếng trong nước.
 - **Vàng, bạc** dùng chuỗi đại diện GLD, SLV quy về USD/oz (không phải giá giao ngay; trang "Giới thiệu" ghi rõ). Giá vàng, bạc hiển thị theo ADR-0005 phương án (a) khi bật cờ `VITE_SHOW_METAL_PRICES` (bật từ 07/11): chỉ sau đăng nhập, có dòng nguồn "Yahoo Finance, U.S. EIA", không có tính năng tải dữ liệu. Tắt cờ thì vàng, bạc chỉ hiện % thay đổi và xác suất.
 - Mọi trang có câu "không phải lời khuyên đầu tư".
-- **Chưa có biểu đồ lịch sử giá** (nhóm chốt bỏ ngày 13/11; TKVH §10).
+- **Lịch sử giá tới 2 năm** (#143): `GET /forecasts/{asset}?history=N` (1–520 phiên) trả giá cuối phiên, lấy từ bảng dự báo, thiếu thì đọc tệp `serving/price-history/<asset>.json` trên S3 do `scripts/export_price_history.py` xuất tay (bản 22/11, tới phiên 20/11). Ngày 13/11 nhóm từng bỏ biểu đồ này khỏi phạm vi; #143 đưa lại trước đóng băng sau khi Tuấn chấp nhận rủi ro hiển thị chuỗi Yahoo 2 năm (ADR-0005; TKVH §10).
 
-**Cờ build đang dùng** (bản Amplify 13/11 từ `26399d0`): `VITE_AUTH_ENABLED=true`, `VITE_SHOW_METAL_PRICES=true`, `VITE_ACCURACY_API=true`.
+**Cờ build đang dùng** (Amplify Deployment 6, 22/11, từ `production` @ `ba3d9f4`): `VITE_AUTH_ENABLED=true`, `VITE_SHOW_METAL_PRICES=true`, `VITE_ACCURACY_API=true`, `VITE_ALLOW_SIGNUP=true`.
 
-**Tự đăng ký cho người chấm (kế hoạch, chưa triển khai).** Web đã có cờ `VITE_ALLOW_SIGNUP` (mặc định tắt; [#132](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/132), merge 16/11) để hiện màn đăng ký và nhập mã xác minh email của Amplify `Authenticator`. Chỉ bật sau khi `CpawsAuth` cho tự đăng ký kèm xác minh email, theo **ADR-0014 (mới) và một dòng bổ sung ở ADR-0005** (Tuấn; ADR-0006 không sửa). Cờ web chỉ ẩn/hiện giao diện, không chặn được ai: client ID là giá trị công khai, nên thứ chặn thật là cấu hình User Pool. Mốc tắt: trong 1 ngày sau khi mentor báo chấm xong, chậm nhất 10/12/2026 — tắt self sign-up trong `CpawsAuth` trước, rồi build web với cờ tắt, rồi disable/xóa các user tự tạo. Nếu không kịp trước 22/11, người chấm dùng một tài khoản riêng do Tuấn tạo. `[CẬP NHẬT sau khi deploy hoặc bỏ]`
+**Tự đăng ký cho người chấm (đang mở từ 22/11/2026, 21:07).** Theo ADR-0014, `CpawsAuth` ([#141](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/141)) bật tự đăng ký kèm xác minh email và chính sách mật khẩu (tối thiểu 8 ký tự, có chữ hoa, chữ thường, chữ số, ký tự đặc biệt); `cdk diff` chỉ sửa tại chỗ 3 thuộc tính của User Pool, không thay pool nên tài khoản cũ giữ nguyên. Web (cờ `VITE_ALLOW_SIGNUP`, [#132](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/132); form hỏi Họ tên từ #143) hiện tab "Tạo tài khoản". Cờ web chỉ ẩn/hiện giao diện, không chặn được ai: client ID là giá trị công khai, nên thứ chặn thật là cấu hình User Pool. Mốc đóng: trong 1 ngày sau khi mentor báo chấm xong, chậm nhất 10/12/2026 — tắt tự đăng ký trong `CpawsAuth` trước, rồi build web với cờ tắt, rồi disable/xóa các tài khoản tự tạo (gồm tài khoản thử 23/11). Tài khoản riêng cho người chấm do Tuấn tạo và bàn giao qua kênh riêng.
 
 ## 4.7. Giới hạn và hướng phát triển
 
@@ -135,10 +140,11 @@ Chi tiết ở TKVH §10. Các điểm chính:
 - **Alarm không phát hiện việc lịch không chạy** (thiếu dữ liệu coi là bình thường). Hướng sửa: alarm trên `Invocations` của ingest, chu kỳ 1 ngày, báo khi 3 ngày liên tiếp không có lượt chạy.
 - **CORS một origin**; **Amplify upload zip thủ công**, không có lịch sử build gắn commit.
 - **ECR giữ 5 image**, image dùng để rollback có thể bị xóa nếu không theo dõi.
-- Không có biểu đồ lịch sử giá; chatbot không bật Guardrails.
+- Chatbot không bật Guardrails. Lịch sử giá trên S3 là tệp xuất tay (bản 22/11); ngày mới hơn lấy từ bảng dự báo.
+- Form đăng ký chưa kiểm tên đăng nhập trước khi gửi: tên có dấu cách làm hiện nguyên văn lỗi tiếng Anh của Cognito (phát hiện khi đăng ký thử 23/11).
 
-Hướng phát triển sau dự án: tách môi trường `dev`/`prod` và deploy qua pipeline (CD) với quyền AWS tạm thời (OIDC); alarm "không chạy"; nối Amplify với Git sau khi hết thời gian chấm; endpoint lịch sử giá nếu nguồn dữ liệu cho phép.
+Hướng phát triển sau dự án: tách môi trường `dev`/`prod` và deploy qua pipeline (CD) với quyền AWS tạm thời (OIDC); alarm "không chạy"; nối Amplify với Git sau khi hết thời gian chấm; tự động hóa việc xuất lịch sử giá; kiểm tên đăng nhập và dịch lỗi Cognito trên form đăng ký.
 
 ---
 
-**Nguồn:** [trien-khai-van-hanh.md](trien-khai-van-hanh.md) §1–§11 và Phụ lục A; sơ đồ hiện trạng ([#125](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/125)) và sơ đồ proposal; `infra/app.py`, `infra/stacks/`; `web/`; `.github/workflows/ci.yml`; ADR-0003, 0005, 0011, 0012, 0013; [khung báo cáo cuối](khung-bao-cao-cuoi.md) mục Chương 4.
+**Nguồn:** [trien-khai-van-hanh.md](trien-khai-van-hanh.md) §1–§11 và Phụ lục A; sơ đồ hiện trạng ([#125](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/125)) và sơ đồ proposal; `infra/app.py`, `infra/stacks/`; `web/`; `.github/workflows/ci.yml`; ADR-0003, 0005, 0011, 0012, 0013, 0014; PR #141, #142, #143; [khung báo cáo cuối](khung-bao-cao-cuoi.md) mục Chương 4.

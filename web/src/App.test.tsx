@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { MemoryRouter, useLocation } from "react-router-dom";
 import App from "./App";
@@ -110,8 +110,10 @@ describe("chưa đăng nhập: trang công khai và chuyển hướng", () => {
     expect(text).not.toMatch(/\d[\d.]*,\d{2}/);
     expect(text).not.toMatch(/\d\s*(USD|VND)\b/);
     expect(text).not.toMatch(/Xác suất giá tăng:/);
+    // Ngăn kéo menu (đóng) cũng có tên sản phẩm: chỉ xét phần nội dung trang
+    const main = screen.getByRole("main");
     for (const name of ["Vàng", "Bạc", "Dầu Brent", "Dầu WTI"]) {
-      expect(screen.getByText(name)).toBeInTheDocument();
+      expect(within(main).getByText(name)).toBeInTheDocument();
     }
     expect(screen.getByText("Dự báo mang tính tham khảo, không phải lời khuyên đầu tư.")).toBeInTheDocument();
   });
@@ -131,21 +133,38 @@ describe("chưa đăng nhập: trang công khai và chuyển hướng", () => {
     ["/overview", "/dang-nhap?next=%2Foverview"],
     ["/asset/gold", "/dang-nhap?next=%2Fasset%2Fgold"],
     ["/accuracy", "/dang-nhap?next=%2Faccuracy"],
+    ["/guide", "/dang-nhap?next=%2Fguide"],
+    ["/guide#do-tin-cay", "/dang-nhap?next=%2Fguide%23do-tin-cay"],
   ])("%s → %s, hiện form đăng nhập", async (path, target) => {
     mount(path);
     expect(await screen.findByTestId("authenticator")).toHaveTextContent("signIn");
     expect(location()).toBe(target);
   });
 
-  it.each([
-    ["/guide", "Trang cách đọc"],
-    ["/about", "Giới thiệu"],
-  ])("%s là trang công khai", async (path, heading) => {
-    mount(path);
-    expect(await screen.findByRole("heading", { level: 1, name: heading })).toBeInTheDocument();
-    expect(location()).toBe(path);
+  it("/about là trang công khai; mục và link Cách đọc dự báo có khóa", async () => {
+    mount("/about");
+    expect(await screen.findByRole("heading", { level: 1, name: "Giới thiệu" })).toBeInTheDocument();
+    expect(location()).toBe("/about");
     // Mục cần đăng nhập có khóa và chữ cho trình đọc màn hình
     expect(screen.getAllByText("(cần đăng nhập)").length).toBeGreaterThan(0);
+    const nav = screen.getAllByRole("navigation", { name: "Điều hướng chính" })[0];
+    expect(within(nav).getByRole("link", { name: /Cách đọc dự báo/ })).toHaveTextContent("(cần đăng nhập)");
+    expect(within(screen.getByRole("main")).getByText(/\(cần đăng nhập\)/)).toBeInTheDocument();
+  });
+
+  it("landing và 404: link Cách đọc dự báo vẫn còn, có khóa, dẫn tới /guide (rồi tới đăng nhập)", async () => {
+    mount("/");
+    await screen.findByRole("heading", { level: 1 });
+    const links = screen.getAllByRole("link", { name: /Cách đọc dự báo/ });
+    expect(links.length).toBeGreaterThan(0);
+    for (const link of links) {
+      expect(link).toHaveAttribute("href", "/guide");
+      expect(link).toHaveTextContent("(cần đăng nhập)");
+    }
+    cleanup();
+    mount("/khong-co");
+    const main = await screen.findByRole("main");
+    expect(within(main).getByRole("link", { name: /Cách đọc dự báo/ })).toHaveTextContent("(cần đăng nhập)");
   });
 
   it("tab=dang-ky mở tab Đăng ký khi cho tự đăng ký, không thì tab Đăng nhập", async () => {
@@ -181,6 +200,13 @@ describe("đã đăng nhập", () => {
     expect(await screen.findByRole("heading", { name: "Trang tổng quan" })).toBeInTheDocument();
   });
 
+  it("/guide mở thẳng, không còn khóa", async () => {
+    mount("/guide");
+    expect(await screen.findByRole("heading", { level: 1, name: "Trang cách đọc" })).toBeInTheDocument();
+    expect(location()).toBe("/guide");
+    expect(screen.queryByText("(cần đăng nhập)")).toBeNull();
+  });
+
   it.each([
     ["/dang-nhap?next=%2Faccuracy", "/accuracy"],
     ["/dang-nhap?next=%2Fasset%2Fsilver%3Fh%3D3", "/asset/silver?h=3"],
@@ -211,6 +237,9 @@ describe("tắt đăng nhập (VITE_AUTH_ENABLED=false)", () => {
   it("trang cần dữ liệu mở thẳng, /dang-nhap quay về next", async () => {
     mount("/accuracy");
     expect(await screen.findByRole("heading", { name: "Trang độ chính xác" })).toBeInTheDocument();
+    cleanup();
+    mount("/guide");
+    expect(await screen.findByRole("heading", { name: "Trang cách đọc" })).toBeInTheDocument();
     cleanup();
     mount("/dang-nhap?next=%2Foverview");
     await waitFor(() => expect(location()).toBe("/overview"));

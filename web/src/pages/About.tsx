@@ -1,8 +1,11 @@
 import { Link } from "react-router-dom";
 import { config } from "../api/config";
+import { useAuth } from "../auth/AuthContext";
 import { SOURCE_ATTRIBUTION } from "../lib/source";
 
 export default function About() {
+  // /about công khai nhưng /guide cần đăng nhập: ghi rõ trong câu để người chưa đăng nhập không bất ngờ
+  const guideLocked = useAuth().status !== "authenticated";
   return (
     <div className="max-w-2xl space-y-4">
       <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Giới thiệu</h1>
@@ -14,7 +17,7 @@ export default function About() {
       <ul className="list-disc space-y-2 pl-5 text-sm">
         <li>
           Dự báo là các phân vị của <strong>log return</strong>, quy đổi sang khoảng giá. Khoảng 80% (q10–q90)
-          nghĩa là giá được kỳ vọng nằm trong khoảng đó với xác suất danh nghĩa 80%.
+          là khoảng được dựng để giá thật rơi vào bên trong khoảng 8 trên 10 lần; đây chưa phải xác suất đã được kiểm chứng, mức bao phủ thật xem ở trang Độ chính xác.
         </li>
         <li>
           Xác suất tăng lấy đúng số hệ thống tính, làm tròn đến 1% và giới hạn trong 5%–95% (ghi “≥ 95%” hoặc
@@ -33,7 +36,7 @@ export default function About() {
         <Link to="/guide" className="text-forecast underline">
           Cách đọc dự báo
         </Link>
-        .
+        {guideLocked ? " (cần đăng nhập)" : null}.
       </p>
 
       <h2 className="pt-4 text-lg font-semibold">Phương pháp</h2>

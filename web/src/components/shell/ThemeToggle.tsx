@@ -18,7 +18,7 @@ export function ThemeToggle({ variant = "row" }: { variant?: "row" | "icon" }) {
         aria-label="Giao diện tối"
         title={dark ? "Đang dùng giao diện tối" : "Đang dùng giao diện sáng"}
         onClick={toggleTheme}
-        className="inline-flex size-9 items-center justify-center rounded-md text-muted transition-colors duration-150 hover:bg-surface-muted hover:text-price active:bg-line"
+        className="inline-flex size-9 items-center justify-center rounded-md pointer-coarse:size-11 text-muted transition-colors duration-150 hover:bg-surface-muted hover:text-price active:bg-line"
       >
         {dark ? <SunIcon /> : <MoonIcon />}
       </button>
@@ -31,7 +31,7 @@ export function ThemeToggle({ variant = "row" }: { variant?: "row" | "icon" }) {
       role="switch"
       aria-checked={dark}
       onClick={toggleTheme}
-      className="flex h-9 w-full items-center gap-2.5 rounded-md px-3 text-sm text-muted transition-colors duration-150 hover:bg-surface-muted hover:text-price active:bg-line"
+      className="flex h-9 w-full items-center gap-2.5 pointer-coarse:h-11 rounded-md px-3 text-sm text-muted transition-colors duration-150 hover:bg-surface-muted hover:text-price active:bg-line"
     >
       <MoonIcon />
       <span className="flex-1 text-left">Giao diện tối</span>

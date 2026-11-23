@@ -557,6 +557,7 @@ Hỏi đáp tiếng Việt về dự báo vàng, bạc, Brent, WTI. Lambda nhậ
 
 - Router không chắc thì chọn `complex`. Router theo luật chưa xong; nếu chưa kịp cho demo 8/11 thì mọi câu đi `complex` (mục 9 ở cuối phần này).
 - Prompt v2 bản dev3 đã được Khải duyệt (review approve PR [#38](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/38), 27/10) và khóa SHA-256 ngày 29/10 (`docs/experiments/chatbot-benchmark-v2-proposal.md` mục 11). Lambda dùng đúng bản prompt đã khóa.
+- **Ngày giờ hiện tại (từ v1.0.1, sửa lỗi production 23/11/2026):** model không tự biết hôm nay (đã hiểu "năm nay" là 2024 và coi ngày cơ sở là hôm nay). Lambda gửi `system` gồm hai khối: khối 1 là prompt đã khóa, giữ nguyên từng byte (SHA-256 không đổi); khối 2 do code tạo (`current_time_block` trong `src/chatbot/chat.py`), ví dụ: `Thời điểm hiện tại: thứ Hai, 23/11/2026 01:50 (giờ Việt Nam, UTC+7). "Hôm nay", "năm nay" tính theo mốc này. Ngày cơ sở trong dữ liệu dự báo là phiên giá gần nhất, có thể sớm hơn hôm nay.` Giờ Việt Nam tính bằng offset cố định UTC+7. `to_date` mặc định của `get_news` dùng cùng mốc. Request và response của `/chat` không đổi. Đây là thay đổi hành vi sau benchmark v2: kết quả benchmark v2, v4 (script gọi Bedrock riêng, không có khối này) không đo thay đổi này.
 
 **Nguồn dữ liệu của tool `get_forecast` (Khải chốt 26/10)**
 

@@ -81,3 +81,248 @@ body {
 .tabular {
   font-variant-numeric: tabular-nums;
 }
+
+/* ===================== Chuyển động (MOTION_INTENSITY ~4/10) =====================
+   Một hệ thống chung cho web và chatbot: chuyển động chỉ để báo "cái gì mới, cái gì đổi, cái gì đang
+   chờ", không trang trí. Quy tắc:
+   - Chỉ animate transform/opacity (và màu khi hover); không transition-all, không đổi width/height.
+   - Ba thời lượng: nhanh 120ms (nhấn, đổi số), vừa 200ms (hover, hộp thoại đóng), chậm 320ms (vào
+     trang, thẻ, hộp thoại mở). Đóng nhanh hơn mở (~65%).
+   - Một đường cong chính cho UI (--ease-standard), một cho phần tử xuất hiện (--ease-enter), không nảy.
+   - Thẻ xuất hiện so le 40ms/thẻ, tối đa 6 bước (≤ 200ms trễ). Chỉ chạy một lần khi mount, không theo
+     cuộn trang.
+   - Lặp vô hạn chỉ cho chỉ báo đang tải (khung skeleton, ba chấm "đang trả lời").
+   - prefers-reduced-motion: mọi animation/transition gần như tức thì, View Transitions tắt (cuối file). */
+@theme {
+  --ease-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-enter: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+
+  --animate-fade-in: fade-in 200ms var(--ease-standard) backwards;
+  --animate-fade-up: fade-up 320ms var(--ease-enter) backwards;
+  --animate-scale-in: scale-in 320ms var(--ease-enter) backwards;
+  --animate-sheet-up: sheet-up 320ms var(--ease-enter) backwards;
+  --animate-msg-in: fade-up-sm 240ms var(--ease-enter) backwards;
+  --animate-swap: fade-in 160ms var(--ease-standard) backwards;
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+  }
+  @keyframes fade-out {
+    to {
+      opacity: 0;
+    }
+  }
+  @keyframes fade-up {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+  }
+  @keyframes fade-up-sm {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+  }
+  @keyframes scale-in {
+    from {
+      opacity: 0;
+      transform: scale(0.97);
+    }
+  }
+  @keyframes scale-out {
+    to {
+      opacity: 0;
+      transform: scale(0.98);
+    }
+  }
+  @keyframes sheet-up {
+    from {
+      transform: translateY(100%);
+    }
+  }
+  @keyframes sheet-down {
+    to {
+      transform: translateY(100%);
+    }
+  }
+  @keyframes typing-dot {
+    0%,
+    60%,
+    100% {
+      opacity: 0.35;
+      transform: translateY(0);
+    }
+    30% {
+      opacity: 1;
+      transform: translateY(-3px);
+    }
+  }
+  @keyframes skeleton-breathe {
+    from {
+      opacity: 1;
+    }
+    to {
+      opacity: 0.55;
+    }
+  }
+  @keyframes dot-in {
+    from {
+      opacity: 0;
+      transform: scale(0.3);
+    }
+  }
+}
+
+:root {
+  --dur-fast: 120ms;
+  --dur-base: 200ms;
+  --dur-slow: 320ms;
+}
+
+/* Thẻ xuất hiện so le: đặt style={{"--i": n}} (n = vị trí, tính từ 0). Trễ tối đa 5 bước × 40ms. */
+@utility stagger-item {
+  animation: fade-up var(--dur-slow) var(--ease-enter) backwards;
+  animation-delay: calc(min(var(--i, 0), 5) * 40ms);
+}
+
+/* Khối đang tải: nhịp sáng-tối chậm, chỉ đổi opacity */
+@utility skeleton {
+  border-radius: 0.25rem;
+  background-color: var(--color-surface-muted);
+  animation: skeleton-breathe 900ms ease-in-out infinite alternate;
+}
+
+/* Thẻ bấm được: nhấc 2px + viền màu khi rê chuột (chỉ chuột, xem @media hover của Tailwind), nhấn thì về
+   chỗ. Màu viền do class viền riêng của từng nơi. */
+@utility lift {
+  transition:
+    transform var(--dur-base) var(--ease-standard),
+    border-color var(--dur-base) var(--ease-standard),
+    box-shadow var(--dur-base) var(--ease-standard);
+  @media (hover: hover) and (pointer: fine) {
+    &:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px -12px color-mix(in srgb, var(--color-price) 22%, transparent);
+    }
+  }
+  &:active {
+    transform: translateY(0);
+    transition-duration: var(--dur-fast);
+  }
+}
+
+/* Nút chính: nhấn lún 1px và thu .98 (phản hồi tức thì khi bấm) */
+@utility press {
+  transition:
+    transform var(--dur-fast) var(--ease-standard),
+    opacity var(--dur-base) var(--ease-standard),
+    background-color var(--dur-base) var(--ease-standard);
+  &:active:not(:disabled) {
+    transform: translateY(1px) scale(0.98);
+  }
+}
+
+/* Ba chấm "đang trả lời" của chatbot */
+.typing-dots > span {
+  display: inline-block;
+  width: 0.375rem;
+  height: 0.375rem;
+  border-radius: 9999px;
+  background-color: currentColor;
+  animation: typing-dot 1.1s var(--ease-standard) infinite;
+}
+.typing-dots > span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.typing-dots > span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+/* Hộp thoại đang đóng (giữ trên màn thêm một nhịp để chạy hiệu ứng ra, xem useExitTransition) */
+[data-motion="closing"] .motion-backdrop {
+  animation: fade-out 150ms var(--ease-exit) forwards;
+}
+[data-motion="closing"] .motion-dialog {
+  animation: scale-out 150ms var(--ease-exit) forwards;
+}
+[data-motion="closing"] .motion-sheet {
+  animation: sheet-down 200ms var(--ease-exit) forwards;
+}
+
+/* Biểu đồ lần đầu vẽ (class chart-enter chỉ có trong ~1 giây đầu): dải khoảng hiện dần sau đường giá,
+   đường trung vị và chấm đỏ trung vị hiện lần lượt từ phiên 1 đến 7. Đổi mốc/phóng to sau đó không chạy. */
+.chart-enter .recharts-area {
+  animation: fade-in 360ms var(--ease-standard) 180ms backwards;
+}
+.chart-enter .chart-median-line {
+  animation: fade-in 280ms var(--ease-standard) 320ms backwards;
+}
+.chart-enter .median-dot {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: dot-in 260ms var(--ease-enter) backwards;
+  animation-delay: calc(360ms + var(--i, 0) * 45ms);
+}
+
+/* View Transitions (Chrome/Edge 111+, Safari 18+): thu gọn/mở sidebar desktop. Sidebar và cột nội dung
+   được đặt tên chỉ trong lúc chuyển (class vt-sidebar trên <html>), ảnh chụp không bị kéo giãn (giữ cỡ
+   gốc, neo góc trên trái), sidebar cắt theo bề rộng mới, nội dung trượt và hòa dần. Trình duyệt cũ: đổi
+   tức thì như trước. */
+.vt-sidebar #sidebar-dieu-huong {
+  view-transition-name: app-sidebar;
+}
+.vt-sidebar #app-content {
+  view-transition-name: app-main;
+}
+::view-transition-group(app-sidebar),
+::view-transition-group(app-main) {
+  animation-duration: 260ms;
+  animation-timing-function: var(--ease-standard);
+}
+::view-transition-group(app-sidebar) {
+  overflow: clip;
+}
+::view-transition-old(app-sidebar),
+::view-transition-new(app-sidebar),
+::view-transition-old(app-main),
+::view-transition-new(app-main) {
+  inline-size: auto;
+  block-size: auto;
+}
+/* Không hòa hai bố cục chữ vào nhau (chữ chồng mờ): bản cũ tắt rất nhanh, bản mới hiện dần trong lúc
+   trượt về chỗ mới. */
+::view-transition-old(app-sidebar),
+::view-transition-old(app-main) {
+  animation: fade-out 90ms var(--ease-exit) both;
+}
+::view-transition-new(app-sidebar),
+::view-transition-new(app-main) {
+  animation: fade-in 200ms var(--ease-standard) 50ms both;
+}
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 200ms;
+}
+
+/* Giảm chuyển động: mọi hiệu ứng thành tức thì (trạng thái cuối hiện ngay), chỉ báo tải đứng yên */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+    transition-delay: 0ms !important;
+    scroll-behavior: auto !important;
+  }
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
+}
