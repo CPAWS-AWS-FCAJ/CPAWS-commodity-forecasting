@@ -263,10 +263,12 @@ export const VI_VOCABULARY: Record<string, string> = {
   "The verification code you entered is incorrect. Please try again.":
     "Mã xác minh không đúng, vui lòng thử lại.",
   "Network error": "Lỗi mạng, vui lòng thử lại.",
+  "Exceeded daily email limit for the operation or the account. If a higher limit is required, please configure your user pool to use your own Amazon SES configuration for sending email.":
+    "Hệ thống đã gửi quá số email cho phép trong hôm nay. Vui lòng thử lại vào ngày mai hoặc liên hệ nhóm CPAWS.",
   "1 validation error detected: Value at 'username' failed to satisfy constraint: Member must satisfy regular expression pattern: [\\p{L}\\p{M}\\p{S}\\p{N}\\p{P}]+":
     USERNAME_SPACE_MESSAGE,
   "An account with the given email already exists.": "Email này đã được dùng cho một tài khoản khác.",
-  "Username/client id combination not found.": "Sai tên đăng nhập hoặc mật khẩu.",
+  "Username/client id combination not found.": "Không đặt lại được mật khẩu cho tài khoản này. Kiểm tra lại tên đăng nhập.",
   "Password did not conform with policy: Password not long enough": "Mật khẩu cần tối thiểu 8 ký tự.",
   "Password did not conform with policy: Password must have uppercase characters": "Mật khẩu cần có chữ hoa.",
   "Password did not conform with policy: Password must have lowercase characters": "Mật khẩu cần có chữ thường.",

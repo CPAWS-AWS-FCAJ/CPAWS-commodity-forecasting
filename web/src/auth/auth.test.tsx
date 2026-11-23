@@ -130,6 +130,12 @@ describe("cấu hình form đăng ký", () => {
     expect(VI_VOCABULARY[cognito]).toBe(USERNAME_SPACE_MESSAGE);
     expect(VI_VOCABULARY["An account with the given email already exists."]).toMatch(/Email này/);
     expect(VI_VOCABULARY["Password did not conform with policy: Password not long enough"]).toMatch(/8 ký tự/);
+    expect(VI_VOCABULARY["Username/client id combination not found."]).toMatch(/đặt lại được mật khẩu/);
+    expect(
+      VI_VOCABULARY[
+        "Exceeded daily email limit for the operation or the account. If a higher limit is required, please configure your user pool to use your own Amazon SES configuration for sending email."
+      ],
+    ).toMatch(/quá số email/);
   });
 
   it("có bản dịch cho tab, nút và lỗi mật khẩu", () => {
