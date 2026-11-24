@@ -1,9 +1,3 @@
-"""Dependency-light response projection for the Accuracy API.
-
-Keep the public response shape aligned with src.eval.rolling_accuracy.response_payload.
-This module deliberately avoids importing the evaluation stack (NumPy/Pandas).
-"""
-
 from __future__ import annotations
 
 DISCLAIMER = "Dự báo mang tính tham khảo, không phải lời khuyên đầu tư."

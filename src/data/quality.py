@@ -1,18 +1,3 @@
-"""Cờ theo chuỗi, đối chiếu chéo, hệ số hiển thị và báo cáo quality.json (ADR-0005).
-
-Cờ theo chuỗi (chỉ đánh dấu, tính lại trên toàn bộ lịch sử mỗi lần chạy):
-  stale        phiên thứ >= STALE_RUN liên tiếp có giá y hệt (nhân quả: chỉ nhìn lùi)
-  jump         |log return 1 ngày| > ngưỡng của tài sản, trừ ngày trong KNOWN_EVENTS
-  roll         phiên đầu tiên sau ngày đáo hạn hợp đồng (CL, BZ); không dùng chuỗi back-adjusted
-  xcheck_level wti: CL=F / RWTC lệch > 3% so với trung vị trượt 60 phiên trước đó (nhân quả)
-  xcheck_resid brent: |r(BZ=F) - r(CL=F)| > 8% (cùng giờ chốt 14:30 ET)
-Loại spike (tài sản có reject_spikes, hiện chỉ USD/VND): vọt > ngưỡng rồi quay về gần mức cũ trong
-tối đa SPIKE_MAX_SESSIONS phiên → cả đoạn sang rejected với "bad_value|spike". display_fx giữ tỷ giá
-hiển thị ở phiên trước cú vọt chưa xét xong ("pending_confirm"), không sửa prices.
-RBRTE chỉ đối chiếu mức giá (chênh lệch trung vị theo năm). NBP chỉ đối chiếu mức giá và trung bình
-tháng của vàng (chốt giá trưa Warsaw nên không so return ngày).
-"""
-
 from __future__ import annotations
 
 import numpy as np

@@ -1,5 +1,3 @@
-"""NumPy-only DLinear runtime. Does not cut windows or import training packages."""
-
 import hashlib
 import json
 from pathlib import Path

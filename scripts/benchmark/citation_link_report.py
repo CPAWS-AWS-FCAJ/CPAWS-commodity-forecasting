@@ -1,16 +1,3 @@
-"""Đếm câu trả lời có URL lạ từ raw.jsonl của benchmark chatbot.
-
-URL lạ: URL trong câu trả lời không trùng nguyên văn link của tin get_news trả về trong chính câu
-đó (buổi tập 7/11: model chép "pressrelease" thay cho "pressreleases", link mở lỗi và tin không vào
-citations). Cách so dùng chung với Lambda: `src/chatbot/citations.py`.
-
-Script này chỉ đếm và liệt kê. `check_answer` của benchmark chấm URL lạ là trượt bằng cùng hàm
-`stray_links`, và `citations.py` nằm trong TOOL_CODE_PATHS, để khóa cùng bộ chính thức v4 (Khải,
-review PR #104 điểm 3). Script không nằm trong TOOL_CODE_PATHS: đọc lại kết quả cũ không đổi khóa bộ nào.
-
-Chạy: python scripts/benchmark/citation_link_report.py <raw.jsonl> [<raw.jsonl> ...] [--json]
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -88,7 +75,9 @@ def _print_text(path: Path, rep: dict) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap = argparse.ArgumentParser(
+        description="Đếm câu trả lời có URL lạ từ raw.jsonl của benchmark chatbot"
+    )
     ap.add_argument("raw", nargs="+", type=Path, help="đường dẫn raw.jsonl")
     ap.add_argument("--json", action="store_true", help="in JSON thay cho văn bản")
     args = ap.parse_args(argv)

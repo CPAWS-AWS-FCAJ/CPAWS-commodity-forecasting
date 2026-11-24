@@ -1,5 +1,3 @@
-"""DLinear MVP: replicated-edge centered average and median-anchored quantiles."""
-
 import numpy as np
 import torch
 from torch import nn

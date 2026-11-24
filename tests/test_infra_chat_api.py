@@ -1,11 +1,3 @@
-"""Kiểm tra hạ tầng `POST /chat`: asset Lambda, IAM, route, CORS, bảng chat-usage, alarm.
-
-Đối chiếu contract `POST /chat` (mục "Tài nguyên và quyền IAM của Lambda chat") và docstring của
-infra/lambda/chat_api/handler.py. Cần aws-cdk-lib (có trong infra/.venv, không có trong CI) nên
-tự bỏ qua khi thiếu. Chạy: infra/.venv/Scripts/activate rồi
-python -m pytest -q tests/test_infra_chat_api.py (từ gốc repo).
-"""
-
 import importlib.util
 import json
 import re

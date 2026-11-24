@@ -1,11 +1,3 @@
-"""Luật định tuyến chatbot (src/chatbot/router.py), theo ADR-0004 mục 1.
-
-Router không gọi LLM. Câu đơn giản (chào hỏi, khái niệm, từ chối ngoài phạm vi hoặc tư vấn đầu tư)
-sang Nova 2 Lite; câu cần số liệu dự báo hoặc tin tức sang Claude Haiku 4.5; không chắc thì sang
-Haiku. Cụm từ viết có dấu; với câu người dùng gõ không dấu, router so cả bản đã bỏ dấu.
-Thêm hay sửa cụm ở đây, không sửa trong code, và chạy lại tests/test_router.py.
-"""
-
 SIMPLE = "simple"  # Nova 2 Lite, không có tool
 COMPLEX = "complex"  # Claude Haiku 4.5, có tool get_forecast/get_news
 DEFAULT_BRANCH = COMPLEX  # ADR-0004: không đủ tự tin thì chuyển sang Haiku

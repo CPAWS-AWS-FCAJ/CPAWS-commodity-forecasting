@@ -1,6 +1,6 @@
 # Chatbot hỏi đáp dự báo CPAWS
 
-> Bản nháp chương Chatbot cho báo cáo cuối kỳ (nộp cùng workshop lên portal FCAJ; mentor xác nhận 13/11 không có buổi trình bày), cập nhật ngày 13/11/2026. Trạng thái triển khai và số liệu là tại ngày viết; mọi con số lấy từ tài liệu và kết quả trong repo, hoặc từ issue/PR có dẫn link, chỗ nào là suy luận thì ghi rõ.
+> Bản nháp chương Chatbot cho báo cáo cuối kỳ (nộp cùng workshop lên portal FCAJ; mentor xác nhận 13/11 không có buổi trình bày), cập nhật ngày 24/11/2026. Trạng thái triển khai và số liệu là tại ngày viết; mọi con số lấy từ tài liệu và kết quả trong repo, hoặc từ issue/PR có dẫn link, chỗ nào là suy luận thì ghi rõ.
 
 ## 1. Mục tiêu và phạm vi
 
@@ -45,7 +45,7 @@ Router được viết trên nhánh thử nghiệm `exp/chatbot-router` (code đ
 
 - **Bộ phát triển** 83 câu (40 simple, 43 complex), do người viết luật soạn: 83/83 đúng, 0 câu cần Haiku bị đưa sang Nova. Vì luật và bộ câu viết cùng lúc, con số này không phải ước lượng độ chính xác.
 - **Bộ benchmark chatbot** 120 câu, không dùng để sửa luật: v1 59/60, v2 54/60 với 2 câu cần Haiku bị đưa sang Nova (HAIKU2-029, 030). Sau khi sửa luật tư vấn lồng phân tích, v2 thành 55/60, 0 câu sang Nova; hai câu này từ đó không còn là phép đo độc lập.
-- **Bộ giữ riêng (held-out)** 30 câu do Khải phụ trách (Claude soạn theo yêu cầu của Khải, Gemini duyệt, Khải chốt), người viết luật không thấy trước khi luật khóa, giữ ngoài repo tới lúc đó. Ngưỡng: độ chính xác ≥ 90% và tối đa 1 câu cần Haiku bị đưa sang Nova. Chạy đúng một lần, không sửa luật theo kết quả.
+- **Bộ giữ riêng (held-out)** 30 câu do Khải phụ trách (model AI soạn theo yêu cầu của Khải, một model AI khác duyệt, Khải chốt), người viết luật không thấy trước khi luật khóa, giữ ngoài repo tới lúc đó. Ngưỡng: độ chính xác ≥ 90% và tối đa 1 câu cần Haiku bị đưa sang Nova. Chạy đúng một lần, không sửa luật theo kết quả.
 
 Luật khóa ngày 04/11/2026 ở commit `984d3fe`. Cùng ngày Khải chạy bộ giữ riêng một lần trên commit này:
 
@@ -140,7 +140,7 @@ Benchmark chạy script [`chatbot_benchmark.py`](../../scripts/benchmark/chatbot
 - **Khóa SHA-256** câu hỏi, prompt, fixture và code tool; script kiểm 8 mục khóa trước khi tạo client Bedrock.
 - **Ngưỡng chốt trước**, chạy chính thức đúng một lần, không sửa sau khi xem kết quả. Bộ câu hỏi đã dùng để sửa prompt thì chạy lại chỉ tính là dev.
 - **Một câu đạt** khi qua mọi kiểm tra tự động (số không có nguồn, nhãn sai "khoảng 80%", giá vàng/bạc, bị cắt, gọi tool, làm theo injection, cụm bắt buộc) **và** rubric 0/1 = 1 ở cả ba tiêu chí đúng ý, đủ ý, đúng chính sách.
-- **Hai người chấm:** Phước chấm cả bộ (Claude gợi ý điểm kèm lý do); Khải chấm độc lập 10 câu chọn theo seed, không dùng model.
+- **Hai người chấm:** Phước chấm cả bộ (model AI gợi ý điểm kèm lý do); Khải chấm độc lập 10 câu chọn theo seed, không dùng model.
 
 Bài B (Haiku, prompt v2, tool v2, 30 câu: dự báo một tài sản 9, công bố mốc thống kê 1, nhiều ý 6, tin tức và lý do 5, dữ liệu có vấn đề 3, injection trong tin 3, tư vấn lồng phân tích 3; [đề xuất v2](../experiments/chatbot-benchmark-v2-proposal.md) mục 2) chính là cấu hình đang chạy trên `/chat`. Bài A (Nova, không tool) không áp dụng cho hệ thống hiện tại vì mọi câu đi Haiku.
 
@@ -225,8 +225,10 @@ Cùng đợt, 8 câu loại bài A (chào hỏi, khái niệm, ngoài phạm vi,
 
 **Chất lượng câu trả lời**
 
-- Bài B chưa đạt (14/30, ngưỡng ≥ 25). Lỗi còn lại tập trung ở diễn giải số (dấu âm, so sánh số âm, coi q10/q90 là sàn/trần), thiếu phần bắt buộc và tự thêm nhận định. Vì vậy buổi chạy thử 08/11 đã dùng **kịch bản câu hỏi cố định**, tránh các loại câu đã biết là yếu ([kịch bản demo](../demo/demo-chatbot-2026-11-08.md), mục 4).
+- Bài B chưa đạt (14/30, ngưỡng ≥ 25). Lỗi còn lại tập trung ở diễn giải số (dấu âm, so sánh số âm, coi q10/q90 là sàn/trần), thiếu phần bắt buộc và tự thêm nhận định. Vì vậy buổi chạy thử 08/11 đã dùng **kịch bản câu hỏi cố định**, tránh các loại câu đã biết là yếu ([kịch bản demo](../demo/demo-chatbot-2026-11-08.md), mục 4). Hai lỗi này vẫn gặp khi hỏi thử trên Production sau v1.0.1: câu dự báo vàng 3 phiên ngày 24/11 viết "giảm tối đa 3.73% hoặc tăng tối đa 3.54%", tức coi q10/q90 là sàn/trần; cả ba lần hỏi tin (17/11, 23/11, 24/11) đều tự thêm câu kiểu "lãi suất cao làm vàng/bạc kém hấp dẫn vì chi phí cơ hội tăng", không có trong tin.
 - Prompt v4 sửa được một số lỗi khi chạy dev nhưng không đạt lần chạy chính thức 11/11 (bộ B 17/30, ngưỡng 25; bộ A 5/8, ngưỡng 7; mục 7.4). Lambda giữ v2, nên các lỗi của v2 ở mục 7.2 vẫn còn trên `/chat`.
+- **Câu hỏi về biến động giá đã qua** (ví dụ "vì sao giá vàng giảm sâu từ 9/11 đến 20/11"): chatbot không có tool lịch sử giá nên không trả lời được đúng câu hỏi. Khi hỏi thử trên Production sau v1.0.1 (Khải; Phước ngày 24/11), câu trả lời chuyển sang nói về dự báo các phiên tới nhưng thiếu khoảng 80%, trung vị và xác suất tăng, rồi nêu biên bản FOMC và kết "đây có thể là yếu tố ảnh hưởng tới thị trường vàng trong giai đoạn đó". Như vậy là gián tiếp gán tin cho mức giảm, trái quy tắc tách tin khỏi dự báo (mục 6.1).
+- **Gọi xu hướng khi xác suất tăng quanh 50%:** khi Khải hỏi thử trên Production sau v1.0.1, chatbot viết "xu hướng giảm" với xác suất tăng 47–51%; với mức này nên nói là chưa rõ xu hướng. Prompt v2 không cấm nhãn hướng; web chỉ hiện nhãn khi xác suất tăng từ 60% trở lên hoặc từ 40% trở xuống ([kịch bản hỏi đáp](../demo/qa-chatbot-final-2026-11-11.md), mục 7.1).
 - Câu chào hỏi, khái niệm, ngoài phạm vi qua Haiku với prompt v2 chỉ được đo trên 8 câu dev, và có 1 vi phạm ở câu dự đoán trong ngày. Bộ A chính thức đo trên v4, không áp dụng trực tiếp cho v2.
 - Với prompt v2 trên Lambda, Haiku còn trả Markdown (`**…**`) dù contract quy định văn bản thuần (28/30 câu bộ v2); web đang bỏ cặp `**` khi hiển thị. Prompt v4 hết lỗi này khi chạy dev (0/30) nhưng không lên Lambda. Các điểm cần sửa prompt được gom ở issue [#84](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/issues/84).
 
@@ -234,7 +236,7 @@ Cùng đợt, 8 câu loại bài A (chào hỏi, khái niệm, ngoài phạm vi,
 
 - Benchmark chạy trên fixture, chưa phải bảng `Forecasts` và tin thật; mỗi câu chạy một lần với `temperature` 0, chưa đo dao động giữa các lần chạy.
 - Benchmark chỉ có câu một lượt; hành vi khi có `history` chưa được đo.
-- Mẫu chấm độc lập chỉ 10 câu (khớp 7/10); 8 dòng soát lại được Khải kiểm với hỗ trợ của GPT và Gemini, không hoàn toàn độc lập. Phía Phước dùng Claude gợi ý điểm.
+- Mẫu chấm độc lập chỉ 10 câu (khớp 7/10); 8 dòng soát lại được Khải kiểm với hỗ trợ của model AI, không hoàn toàn độc lập. Phía Phước dùng model AI gợi ý điểm.
 - Bộ v2 đã được dùng để viết prompt v3 và v4, nên mọi lần chạy lại trên bộ này chỉ là dev. Hai bộ câu mới của Long (#108) đã dùng cho lần chạy chính thức v4 ngày 11/11; từ đó hai bộ này cũng chỉ còn giá trị dev.
 
 **Hệ thống**
@@ -243,7 +245,8 @@ Cùng đợt, 8 câu loại bài A (chào hỏi, khái niệm, ngoài phạm vi,
 - Bedrock Guardrails vẫn ở trạng thái `DRAFT`, chưa bật hoặc gắn vào Lambda nên không phải lớp bảo vệ đang hoạt động. Lớp chống prompt injection hiện gồm prompt, kiểm soát `citations` phía server và log link lạ ([#104](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/104)). Log này chạy trên Lambda từ 10/11, chỉ ghi, không chặn và chưa có alarm (mục 6.2).
 - Tin tức phụ thuộc một người gắn nhãn tay, 2–3 bài mỗi tuần, có độ trễ; ngoài khoảng đó `get_news` trả rỗng và chatbot nói không tìm thấy tin đáng kể.
 - Mặc định khoảng ngày của `get_news` lệch giữa prompt ("7 ngày đến ngày cơ sở") và code ("7 ngày đến hôm nay theo giờ Việt Nam"); đã ghi ở mục 6 issue #84.
-- Đến v1.0.0, model không biết ngày hiện tại: ngày 23/11/2026, câu "từ 9/11 đến 20/11 năm nay" bị hiểu là năm 2024 và "hôm nay" bị nhầm với ngày cơ sở. Từ v1.0.1, Lambda gửi thêm một khối `system` thứ hai nêu ngày giờ hiện tại theo giờ Việt Nam; prompt v2 đã khóa không đổi ([contract](../api/contract.md), mục `POST /chat`). Thay đổi này có sau benchmark nên chưa được benchmark đo; chỉ kiểm bằng unit test và hỏi thử sau deploy.
+- Đến v1.0.0, model không biết ngày hiện tại: ngày 23/11/2026, câu "từ 9/11 đến 20/11 năm nay" bị hiểu là năm 2024 và "hôm nay" bị nhầm với ngày cơ sở. Từ v1.0.1, Lambda gửi thêm một khối `system` thứ hai nêu ngày giờ hiện tại theo giờ Việt Nam; prompt v2 đã khóa không đổi ([contract](../api/contract.md), mục `POST /chat`). Thay đổi này có sau benchmark nên chưa được benchmark đo; chỉ kiểm bằng unit test và hỏi thử sau deploy. Hỏi thử trên Production ngày 24/11: câu "Hiện tại đang là năm bao nhiêu?" được trả đúng "thứ Ba, 24/11/2026", và câu "từ 9/11 đến 20/11 năm nay" tìm đúng tin năm 2026. Các lỗi nội dung ở phần "Chất lượng câu trả lời" là lỗi của prompt v2, #146 không nhắm sửa. Sau đóng băng, nhóm không sửa prompt hay code mà chỉ ghi lại ở đây.
+- **Ngày đăng tin lệch một ngày:** câu trả lời ghi ngày UTC của `published_at`, còn thẻ Nguồn trên web đổi sang giờ Việt Nam. Ví dụ biên bản FOMC đăng 18/11 (UTC) hiện là 19/11 ở thẻ Nguồn (23/11 và 24/11); tin bạc 7/10 hiện là 8/10 (17/11). Lỗi đã ghi ở [kịch bản hỏi đáp](../demo/qa-chatbot-final-2026-11-11.md), mục 7.1, chưa sửa.
 - Không streaming: người dùng chờ cả câu, trung vị khoảng 4 giây trên benchmark.
 - Haiku gọi qua global inference profile, không cam kết xử lý dữ liệu chỉ trong Singapore.
 

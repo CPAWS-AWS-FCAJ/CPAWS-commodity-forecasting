@@ -56,7 +56,7 @@ Proposal còn đặt mục tiêu thử nghiệm với 10–15 người dùng th�
 
 - 4 tài sản ở trên, kỳ hạn 1–7 phiên giao dịch, dự báo theo lô mỗi ngày.
 - Một môi trường `dev` trên AWS, region `ap-southeast-1`, hạ tầng viết bằng AWS CDK.
-- Web yêu cầu đăng nhập Cognito; trong thời gian chấm, nhóm dự kiến mở tự đăng ký có xác minh email theo ADR-0014 rồi đóng lại sau khi chấm. Web không có tính năng tải dữ liệu giá.
+- Web yêu cầu đăng nhập Cognito; trên thực tế, tự đăng ký có xác minh email đang mở từ 22/11/2026 21:07, muộn hơn điều kiện "mở trước 21/11" của ADR-0014. Từ 23/11/2026 16:44, Data & Security Lead chấp thuận giữ mở có thời hạn (không hồi tố): mỗi thành viên mời tối đa 8 người qua link riêng, người chấm tự đăng ký, giám sát mỗi ngày lúc 21:00, đóng khi chạm ngưỡng và chậm nhất 10/12/2026; xem mục "Cập nhật 23/11/2026" của ADR-0014. Web không có tính năng tải dữ liệu giá.
 
 **Ngoài phạm vi** (proposal mục 4.4, giữ nguyên):
 

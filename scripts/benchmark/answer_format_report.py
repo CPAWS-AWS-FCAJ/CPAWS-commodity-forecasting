@@ -1,20 +1,3 @@
-"""Báo cáo định dạng câu trả lời và ngày truyền vào get_news từ raw.jsonl của benchmark chatbot.
-
-Issue #84 mục 1, 4 và 6:
-- đếm câu trả lời có Markdown (contract: `answer` là văn bản thuần, gạch đầu dòng "- " được phép);
-- liệt kê lần gọi get_news có from_date/to_date, đánh dấu câu hỏi không nêu ngày mà model vẫn
-  truyền ngày (mặc định đúng là để trống, tool lấy 7 ngày đến hôm nay giờ Việt Nam);
-- link lạ: URL trong câu trả lời không trùng link của tin get_news trả trong lượt đó (lỗi tập
-  dượt 7/11, Khải review PR #98);
-- câu có get_forecast mà thiếu câu "mốc thống kê" / "252 phiên";
-- nhãn hướng bị cấm ("nghiêng", "tăng nhẹ", "giảm nhẹ", "kịch bản tích cực/tiêu cực").
-
-Đây là số đo ghi nhận, không phải điều kiện đạt. Script không nằm trong TOOL_CODE_PATHS
-(configs/chatbot_benchmark.py), nên không đổi khóa SHA-256 của bộ câu hỏi nào.
-
-Chạy: python scripts/benchmark/answer_format_report.py <raw.jsonl> [<raw.jsonl> ...] [--json]
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -193,7 +176,9 @@ def _print_text(path: Path, rep: dict) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap = argparse.ArgumentParser(
+        description="Báo cáo định dạng câu trả lời và ngày truyền vào get_news từ raw.jsonl của benchmark chatbot"
+    )
     ap.add_argument("raw", nargs="+", type=Path, help="đường dẫn raw.jsonl")
     ap.add_argument("--json", action="store_true", help="in JSON thay cho văn bản")
     args = ap.parse_args(argv)

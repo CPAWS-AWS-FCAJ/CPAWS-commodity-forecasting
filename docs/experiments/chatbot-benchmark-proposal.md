@@ -3,7 +3,7 @@
 - Ngày: 22/10/2026
 - Người đề xuất: Phước (AI – News & Chatbot)
 - Người duyệt: Khải
-- Căn cứ: tổng hợp benchmark bản 21/10/2026, ADR-0004, `docs/api/contract.md`, CLAUDE.md
+- Căn cứ: tổng hợp benchmark bản 21/10/2026, ADR-0004, `docs/api/contract.md`
 - Trạng thái: **Đã duyệt kèm 4 điều chỉnh** (Khải, 22/10/2026, xem mục 12). Chưa tạo file dữ liệu, chưa viết script, chưa gọi Bedrock.
 
 ## 1. Mục tiêu và phạm vi
@@ -228,10 +228,9 @@ Câu bị cắt do `max_tokens` **không** được chạy lại.
 
 ## 10. Ràng buộc
 
-- Claude Code không gọi Bedrock, không chạy `aws`, không tạo tài nguyên AWS.
 - Script benchmark không chạy trong CI. CI chỉ chạy test không gọi mạng.
 - Không ghi key, Account ID đầy đủ hay email vào file. Không chép nội dung tin thật vào fixture.
-- Git: Claude Code chỉ chạy `status`, `diff`, `log`; người dùng tự commit. Gợi ý tách commit:
+- Git: người dùng tự commit. Gợi ý tách commit:
   - `test(chatbot): add simple and complex benchmark question sets and fixtures`
   - `feat(benchmark): add per-branch chatbot benchmark script with auto checks`
 

@@ -1,11 +1,3 @@
-"""Quy đổi dự báo, phân vị từ đoạn hiệu chỉnh, chỉ số và chẩn đoán (kế hoạch mục 3.1, 3.2, 4).
-
-- r̂ = log(P̂(t+1) / P(t)); P̂ ≤ 0 là lỗi dự báo: đếm, để r̂ = NaN, không thay giá trị P̂.
-- Phân vị: q_τ = r̂ + phân vị thực nghiệm τ của phần dư return (r − r̂) trên đoạn calib.
-- Chỉ số ADR-0008 dùng src/eval/metrics.py. Chỉ số trên mức giá (MAE, RMSE, MAPE) chỉ để minh
-  họa kiểu bài báo, ADR-0008 không dùng để đánh giá; tính riêng ở đây, không thêm vào src/eval.
-"""
-
 from __future__ import annotations
 
 import numpy as np

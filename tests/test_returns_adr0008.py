@@ -1,5 +1,3 @@
-"""returns.py theo ADR-0008 mục 1–3: target theo lịch, chuẩn hóa phân vị, prob_up, PCHIP."""
-
 import math
 
 import numpy as np

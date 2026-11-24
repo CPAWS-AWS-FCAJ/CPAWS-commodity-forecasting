@@ -1,5 +1,3 @@
-"""Repository-safe Kaggle integration tests using only synthetic temporary data."""
-
 import json
 import subprocess
 import sys

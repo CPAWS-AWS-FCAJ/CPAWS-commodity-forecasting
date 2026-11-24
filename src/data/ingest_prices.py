@@ -1,29 +1,3 @@
-"""Thu thập giá → raw → clean (Parquet dạng dài) → quality.json. Cùng code cho local, S3 và Lambda.
-
-Chạy:
-  python -m src.data.ingest_prices --start 2012-01-01 --dest local   # tải toàn bộ lịch sử
-  python -m src.data.ingest_prices --dest local                     # tăng dần: tải lại 5 phiên gần nhất
-Key EIA: secret_store.get_eia_api_key() (.env khi chạy local; Lambda đọc từ nơi lưu secret). yfinance
-không cần key. Bucket/tiền tố S3: biến môi trường LAKE_BUCKET, LAKE_PREFIX (config.lake_bucket).
-
-Xử lý lỗi nguồn (theo từng tài sản):
-- Nguồn của một tài sản chính (ASSETS) lỗi hoặc trả rỗng: tài sản đó giữ dữ liệu clean của lần
-  trước, dòng cuối của nó gắn flag "stale_source"; quality.json có stale_sources[asset] =
-  {last_date, status, error}. Các tài sản khác vẫn cập nhật và bản clean mới vẫn được ghi. Log dòng
-  ERROR có mã INGEST_SOURCE_FAILED (cho CloudWatch metric filter) và thoát mã 1.
-  Lần chạy thành công sau tải lại từ phiên thứ REFETCH_SESSIONS tính từ cuối của tài sản cũ nhất,
-  nên khoảng trống được bù và flag stale_source tự mất (dòng bị ghi đè theo khóa).
-- Nguồn trả về bình thường nhưng thiếu phiên mới nhất (Yahoo trễ, ví dụ GLD/SLV thiếu phiên
-  21/10/2026): quality.json có stale_latest_session[asset] = {latest, expected, missing_sessions},
-  log WARNING INGEST_STALE asset=… latest=… expected=… missing_sessions=…; không raise, không đổi
-  bảng clean. Predict sẽ bỏ qua tài sản đó (latest_session_missing) và bật alarm của predict.
-- Nguồn tham chiếu (EIA, GC=F, SI=F, NBP) lỗi: log WARNING INGEST_REFERENCE_FAILED, giữ bản tham
-  chiếu cũ, thoát mã 0.
-- quality.json có xcheck_skipped: các phiên chưa được đối chiếu với EIA, lý do source_unavailable
-  (EIA lỗi/thiếu key, log WARNING XCHECK_SKIPPED) hoặc reference_pending (EIA chưa công bố tới ngày
-  đó, trễ date+7; chỉ log INFO). Ngày chưa có tham chiếu không mang cờ xcheck_*.
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -354,7 +328,9 @@ def summarize(report: dict) -> str:
 def main(argv: list[str] | None = None) -> int:
     """Mã thoát: 0 = mọi nguồn chính OK; 1 = có nguồn chính lỗi (clean vẫn ghi, tài sản lỗi giữ
     dữ liệu cũ với flag stale_source)."""
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap = argparse.ArgumentParser(
+        description="Thu thập giá → raw → clean (Parquet dạng dài) → quality.json. Cùng code cho local, S3 và Lambda"
+    )
     ap.add_argument("--start", default=None, help="YYYY-MM-DD; bỏ trống = tải lại 5 phiên gần nhất")
     ap.add_argument("--dest", choices=["local", "s3"], default="local")
     ap.add_argument("--lake-dir", default="data/lake")

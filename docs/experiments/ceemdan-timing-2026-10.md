@@ -1,6 +1,6 @@
 # Thời gian chạy CEEMDAN theo cửa sổ: vàng, 2014–2019 (10/2026)
 
-- Người làm: Trịnh Tiến Khải (script và bản nháp do Claude Code soạn). Người đọc: Châu Trần Mạnh Tiến (lịch cache, hạ tầng), Nguyễn Tiến Long.
+- Người làm: Trịnh Tiến Khải. Người đọc: Châu Trần Mạnh Tiến (lịch cache, hạ tầng), Nguyễn Tiến Long.
 - Script `scripts/ceemdan_timing.py`, cấu hình `configs/ceemdan_timing.py` (seed 42). Kết quả đầy đủ trong `data/lake/experiments/ceemdan_timing/dt=2026-10-10/` (không commit).
 - Dữ liệu: GLD từ bản clean `dt=2026-10-09`, **cắt tới 31/12/2019** ngay khi đọc. Ngày gốc lấy mẫu trong 2014–2019. Không đọc hay tóm tắt IMF của giai đoạn 2020 → nay. Số cửa sổ cần cache tới nay được đếm từ lịch phiên.
 - Máy đo: Windows 11, 16 CPU logic, Python 3.11.9, EMD-signal 1.10.0. `seq_len = 60`, `n_imfs = 10` (mặc định).

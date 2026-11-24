@@ -1,13 +1,3 @@
-"""Cấu hình K4: FHS GJR-GARCH và kết hợp phân vị, chốt trước khi chạy (docs/experiments/k4-plan.md).
-
-Không đổi ứng viên, tham số hay quy tắc chọn sau khi đã thấy kết quả (kế hoạch, phần trạng thái);
-sửa đổi ghi thành mục có ngày ở mục 8 của kế hoạch. Bản clean và cách đánh giá dùng lại của K3/K3b.
-
-Loại đánh giá "cross_validation" (CV_EVALUATION_KIND) chỉ là đánh giá nội bộ của K4: kết quả chỉ
-ghi vào <output>/eval/k4/, không vào bảng Accuracy, schema docs/api/accuracy-schema.md hay
-production.
-"""
-
 from configs import k3_grid as K3
 from configs import k3b as K3B
 

@@ -1,5 +1,3 @@
-"""Read-only Accuracy API Lambda for RFC #45 v4.6."""
-
 from __future__ import annotations
 
 import hashlib

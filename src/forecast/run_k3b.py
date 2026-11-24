@@ -1,25 +1,3 @@
-"""K3b: co giãn theo biến động trên validation 2019 (docs/experiments/k3b-volatility-plan.md).
-
-Chạy từ gốc repo, bằng venv có numpy 2.4.6 + EMD-signal 1.10.0 (nằm trong cfg_hash của cache):
-  python -m src.forecast.run_k3b [--lake-dir ../CPAWS-commodity-forecasting/data/lake]
-      [--output-dir data] [--run-id k3b-val2019] [--k3-dir ../k3-rerun/eval/k3/k3-val2019-clean]
-      [--threads 1]
-
-- Lake chỉ đọc, như K3: bản clean configs/k3b.CLEAN_DT cắt tại 2019-12-31 ngay khi đọc; cache
-  CEEMDAN cfg_hash 4c3229533ae3 (window 252) đọc qua src/features/ceemdan_cache.py, không dựng lại.
-- 3 ứng viên chốt (kế hoạch mục 3): S1a (λ 0,94), S1b (λ 0,97) không train; S2 train trên
-  2014–2018, 3 seed × 20 epoch cố định, trung bình phân vị rồi normalize_quantiles() đúng một lần.
-- Đánh giá bằng chính hàm của K3 (train_ceemdan.evaluate → walk_forward._make_detail/_summarize)
-  trên tập chung = giao 3 ứng viên (kế hoạch mục 6.2), và thêm trên tập chung K3; so với
-  baseline-q252 và K3 w252-k3-l30 (forecasts của lần chạy k3-val2019-clean, chỉ đọc). CI của
-  pinball_skill trung bình 7 h dùng chung kế hoạch bootstrap của walk_forward (mục 4, 6.3).
-- Chỉ ghi local: artifact S2 <output>/models/<asset>/<model_version>/ (integration_eligible = false),
-  kết quả <output>/eval/k3b/<run_id>/. Không ghi S3, không đọc 2020 → nay, không chạy tập test.
-
-Điều kiện dừng (StopRun, thoát mã 2): đọc được dữ liệu sau 2019, số mẫu S2 khác K3, loss NaN/inf,
-parity torch–NumPy lệch, tập chung khác dự kiến hoặc không chứa trọn tập K3.
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -798,7 +776,9 @@ def render(summary: dict, sets: dict) -> str:
 
 
 def main(argv=None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(
+        description="K3b: co giãn theo biến động trên validation 2019 (docs/experiments/k3b-volatility-plan.md)"
+    )
     parser.add_argument("--lake-dir", type=Path, default=DEFAULT_LAKE)
     parser.add_argument("--output-dir", type=Path, default=ROOT / "data")
     parser.add_argument("--run-id", default="k3b-val2019")

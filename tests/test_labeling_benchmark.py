@@ -1,9 +1,3 @@
-"""Benchmark gắn nhãn tin (scripts/benchmark/labeling_benchmark.py): không gọi mạng.
-
-Kiểm tra bộ case khớp schema, prompt chỉ gửi khối text, input chỉ có tiêu đề và tóm tắt,
-gọi lại đúng một lần khi đầu ra sai, max_tokens tính invalid, và chấm điểm theo ngưỡng.
-"""
-
 import copy
 import importlib.util
 import json

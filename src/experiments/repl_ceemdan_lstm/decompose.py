@@ -1,15 +1,3 @@
-"""Hai giao thức tách CEEMDAN của minh họa (kế hoạch mục 3, 3.1, 3.3).
-
-- R-causal: mỗi cửa sổ 252 phiên kết thúc tại ngày gốc t tách độc lập bằng `causal_imf_windows`
-  (ADR-0001, ADR-0007), chỉ từ giá trong cửa sổ. Không đọc cache ADR-0007.
-- R-full: một lần CEEMDAN trên toàn chuỗi 2012–2018. CỐ Ý dùng dữ liệu tương lai (spline của
-  CEEMDAN nhìn hai phía, nên giá trị tại t chứa thông tin sau t); chỉ để minh họa giao thức thường
-  gặp trong các bài báo, không dùng cho sản phẩm.
-
-Cả hai gộp về 4 thành phần như `fixed_imf_matrix(max_imf=3)`: IMF1..3, phần còn lại = IMF4 trở đi
-+ residue. Cửa sổ có ít hơn 3 IMF thì các cột IMF thiếu bằng 0.
-"""
-
 from __future__ import annotations
 
 from dataclasses import replace

@@ -1,6 +1,3 @@
-"""K4 fhs_numpy: phương trình GJR, khớp arch, mô phỏng tất định theo seed, không import arch/scipy/
-pandas. Chỉ dùng số giả."""
-
 import hashlib
 import subprocess
 import sys

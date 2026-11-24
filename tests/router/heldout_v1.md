@@ -1,6 +1,6 @@
 # Bộ câu giữ riêng cho router (held-out v1)
 
-- Người soạn: Claude (theo yêu cầu của Khải); người duyệt độc lập: Gemini (lượt chấm không mù, vì đã thấy file nhãn); người chốt: Khải, 4/11/2026.
+- Người soạn: model AI (theo yêu cầu của Khải); người duyệt độc lập: một model AI khác (lượt chấm không mù, vì đã thấy file nhãn); người chốt: Khải, 4/11/2026.
 - File: `router_heldout_v1.jsonl`, 30 câu (12 simple, 18 complex). SHA-256: `da914c2d96d72c89e2b82325d1ccea5a91eb9f9d53cde7b9235c41ed4ba663aa`.
 - Không trùng nguyên văn câu nào với benchmark v1, v2, 8 câu loại A, 83 câu phát triển `tests/router/cases.jsonl` và kịch bản demo #77; độ giống cao nhất 0,74.
 

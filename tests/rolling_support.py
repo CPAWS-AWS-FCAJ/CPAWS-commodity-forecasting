@@ -1,5 +1,3 @@
-"""Behavioral AWS fakes and synthetic prices only; no credentials or network."""
-
 from __future__ import annotations
 
 import copy

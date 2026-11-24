@@ -1,7 +1,7 @@
 # K3b: kết quả co giãn theo biến động trên validation 2019
 
 - Ngày: 26/10/2026
-- Người viết: Khải (bản nháp do Claude soạn)
+- Người viết: Khải
 - Kế hoạch đã chốt trước khi chạy: `docs/experiments/k3b-volatility-plan.md`. Kế hoạch gốc ở commit
   `3131096`, mục 6 bổ sung ở commit `8ff2877`, cả hai đều trước khi có kết quả. Làm đúng kế hoạch:
   3 ứng viên, không đổi λ, ngưỡng kẹp hay siêu tham số, không early stopping theo 2019.

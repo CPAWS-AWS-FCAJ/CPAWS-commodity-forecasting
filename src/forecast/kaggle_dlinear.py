@@ -1,5 +1,3 @@
-"""Small integration checks shared by the Kaggle launcher and local package tests."""
-
 from pathlib import Path
 
 import numpy as np

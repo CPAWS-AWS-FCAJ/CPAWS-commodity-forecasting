@@ -1,10 +1,3 @@
-"""Prompt chatbot-haiku-v4 (issue #84) và script answer_format_report: không gọi mạng.
-
-Kiểm tra: thêm bộ prompt v4 không lệch khóa SHA-256 bộ v2; prompt v4 viết chung (không số thập
-phân, không trùng cụm câu hỏi bộ v2), có các quy tắc của issue #84; script báo cáo đếm đúng
-Markdown và cờ to_date.
-"""
-
 import importlib.util
 import json
 import re

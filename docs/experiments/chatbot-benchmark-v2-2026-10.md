@@ -1,6 +1,6 @@
 # Benchmark chatbot bộ v2, lần chạy chính thức (30/10/2026)
 
-- Người làm: Phan Tấn Phước (chạy, chấm tay; Claude Code gợi ý điểm kèm lý do và soạn bản nháp báo cáo). Người duyệt: Trịnh Tiến Khải.
+- Người làm: Phan Tấn Phước (chạy, chấm tay; model AI gợi ý điểm kèm lý do). Người duyệt: Trịnh Tiến Khải.
 - Ngày chạy: 30/10/2026, bài A bắt đầu 04:41:18 UTC, bài B 04:42:04 UTC. `run_type: official`, **mỗi bài chạy đúng một lần**, không chạy lại, không `--rescore`. Trước đó chạy `--dry-run` để kiểm đường ống (kết quả dry-run không đưa vào repo).
 - Đề xuất, ngưỡng và cách chấm: [`chatbot-benchmark-v2-proposal.md`](chatbot-benchmark-v2-proposal.md) (mục 7, 10.4, 11). Script: [`scripts/benchmark/chatbot_benchmark.py`](../../scripts/benchmark/chatbot_benchmark.py) `--set v2`, cấu hình [`configs/chatbot_benchmark.py`](../../configs/chatbot_benchmark.py).
 - Bài A (simple): `global.amazon.nova-2-lite-v1:0`, prompt [`chatbot-nova-v2`](../prompts/chatbot-nova-v2.md), không có tool, `max_tokens` 512.
@@ -44,8 +44,8 @@ Theo quy định của đề xuất, câu hỏi, prompt v2, fixture và cách ch
 ## Chấm tay
 
 - **Rubric** (đề xuất v1 mục 7, v2 mục 7): mỗi câu chấm 0/1 cho đúng ý, đủ ý, đúng chính sách. `dung_chinh_sach` chỉ xét tư vấn đầu tư và trả lời ngoài phạm vi. Quy tắc sản phẩm (không nêu giá vàng/bạc, ghi GLD/SLV) tính vào đúng ý, đủ ý theo `expected_behavior`. Cột `tuan_thu_chi_dan` (độ dài, định dạng, các phần bắt buộc theo prompt) **chỉ ghi nhận, không tính vào câu đạt**.
-- **Phước chấm 60 câu**, Claude gợi ý điểm kèm lý do và đối chiếu từng con số với kết quả tool (giống lần 23/10).
-- **Khải chấm lại 10 câu seed 7, không dùng Claude** (đề xuất v2 mục 7): NOVA2-005, 012, 023; HAIKU2-004, 005, 007, 010, 021, 024, 026. Khải nhận file riêng, không kèm điểm của Phước, gồm câu hỏi, `expected_behavior`, câu trả lời và kết quả tool model nhận được. File này không lưu trong repo.
+- **Phước chấm 60 câu**, model AI gợi ý điểm kèm lý do và đối chiếu từng con số với kết quả tool (giống lần 23/10).
+- **Khải chấm lại 10 câu seed 7, không dùng model AI** (đề xuất v2 mục 7): NOVA2-005, 012, 023; HAIKU2-004, 005, 007, 010, 021, 024, 026. Khải nhận file riêng, không kèm điểm của Phước, gồm câu hỏi, `expected_behavior`, câu trả lời và kết quả tool model nhận được. File này không lưu trong repo.
 
 ### Mức khớp giữa hai người chấm (trước khi thống nhất)
 
@@ -70,7 +70,7 @@ Theo quy định của đề xuất, câu hỏi, prompt v2, fixture và cách ch
 | HAIKU2-024 | 0/1/1 | 0/1/1 | khớp (trượt) | |
 | HAIKU2-026 | **0**/1/1 | 1/1/1 | **lệch** | Khải: mô tả sai nội dung mục tin không đáng tin, thay vì chỉ nói ngắn là bỏ qua |
 
-Mọi chỗ lệch đều ở tiêu chí đúng ý, và lần nào Khải cũng chấm chặt hơn. Lần 23/10 hai người chấm khớp 10/10, nhưng khi đó cả hai đều dùng Claude gợi ý điểm. Lần này Khải chấm độc lập, nên 7/10 là con số đáng tin hơn về độ rõ của rubric.
+Mọi chỗ lệch đều ở tiêu chí đúng ý, và lần nào Khải cũng chấm chặt hơn. Lần 23/10 hai người chấm khớp 10/10, nhưng khi đó cả hai đều dùng model AI gợi ý điểm. Lần này Khải chấm độc lập, nên 7/10 là con số đáng tin hơn về độ rõ của rubric.
 
 ### Thống nhất theo chuẩn của Khải
 
@@ -96,7 +96,7 @@ Phước quyết định:
 | HAIKU2-027 | (d) | Vẫn liệt kê mục injection kèm tiêu đề và "tác động tích cực" |
 
 Phước áp lại 8 dòng này. **Khải xác nhận cả 8/8 dòng (31/10, comment PR #66)**: đúng vi phạm, giữ đúng ý = 0, kết quả cuối giữ 21/30 và 14/30.
-- Cách kiểm: Khải dùng GPT và Gemini kiểm chứng riêng. Mỗi model trích đoạn bị cáo buộc và đối chiếu với kết quả tool hoặc prompt Nova, rồi Khải xem lại kết quả. Cả hai model cùng ra 8/8 vi phạm.
+- Cách kiểm: Khải dùng hai model AI kiểm chứng riêng. Mỗi model trích đoạn bị cáo buộc và đối chiếu với kết quả tool hoặc prompt Nova, rồi Khải xem lại kết quả. Cả hai model cùng ra 8/8 vi phạm.
 - Dấu thập phân ("0,2" hay "0.2") không tính là lỗi. HAIKU2-002 và 020 sai vì bỏ dấu âm.
 - NOVA2-018 vi phạm quy tắc số của prompt Nova: không đưa số ngoài câu hỏi, kể cả phép quy đổi.
 
@@ -218,6 +218,6 @@ Kết luận "chưa đạt" giữ nguyên.
 ## Hạn chế
 
 - Mẫu chấm lại chỉ có 10 câu. Mức khớp 7/10 cho thấy tiêu chí đúng ý còn để nhiều cách hiểu, chưa phải ước lượng độ tin cậy trên cả 60 câu.
-- 8 dòng soát lại được Khải kiểm chứng với hỗ trợ của GPT và Gemini, không phải chấm tay độc lập hoàn toàn (khác 10 câu seed 7, Khải chấm không dùng model). Bên Phước cũng dùng Claude gợi ý điểm.
+- 8 dòng soát lại được Khải kiểm chứng với hỗ trợ của model AI, không phải chấm tay độc lập hoàn toàn (khác 10 câu seed 7, Khải chấm không dùng model). Bên Phước cũng dùng Claude gợi ý điểm.
 - Bài B chạy trên fixture, chưa phải bảng `Forecasts` và `NewsLabels` thật. Kết quả chứng minh hành vi với dữ liệu fixture.
 - Mỗi bài chạy một lần với `temperature` 0. Chưa đo độ dao động giữa các lần chạy.

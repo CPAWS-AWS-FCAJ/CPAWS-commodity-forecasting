@@ -1,10 +1,3 @@
-"""yfinance: CL=F, BZ=F, VND=X (nguồn chính), GLD/SLV (dự phòng), GC=F/SI=F (hệ số hiển thị).
-
-Index yfinance là 00:00 theo múi giờ sàn (America/New_York cho hợp đồng tương lai và ETF,
-Europe/London cho VND=X); bỏ múi giờ để giữ ngày giao dịch. Không điều chỉnh giá (auto_adjust=False).
-API không chính thức, điều khoản Yahoo chỉ cho dùng cá nhân (ADR-0005).
-"""
-
 from __future__ import annotations
 
 import gzip

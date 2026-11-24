@@ -2,7 +2,7 @@ import { GUIDE_ANCHORS } from "../HowToRead";
 import type { GuideAnchor } from "../HowToRead";
 
 // Từ điển thuật ngữ của trang "Cách đọc dự báo": mỗi từ 1–2 câu đời thường, không công thức.
-// Nội dung khớp /home/claude/ws/glossary.md (bản gửi chủ sản phẩm). Không có số giá thật.
+// Không có số giá thật.
 
 export interface GlossaryTerm {
   term: string;

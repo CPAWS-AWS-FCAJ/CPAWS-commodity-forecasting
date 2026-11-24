@@ -1,18 +1,3 @@
-"""Minh họa CEEMDAN + LSTM, bước 2: dựng mẫu, train LSTM 3 biến thể, đo trên 2017–2018.
-
-Chạy:
-  python scripts/repl_ceemdan_train.py --device cpu --smoke   # 1 mô hình × 2 lần, kiểm tất định
-  python scripts/repl_ceemdan_train.py --device cpu           # đủ 108 LSTM + chỉ số
-
-Kế hoạch: docs/experiments/ceemdan-lstm-replication-plan.md. Đọc bản tách của bước 1
-(data/eval/repl-ceemdan-lstm/, kiểm manifest trước) và bản clean ≤ 2018-12-31 ở lake local; không
-gọi AWS. Ghi vào data/eval/repl-ceemdan-lstm/results/ (gitignore): predictions.parquet,
-metrics.parquet, train_log.parquet, summary.json, env.txt (SHA-256 từng file trong summary.json).
-Chỉ in số tổng hợp, không in giá hay giá trị IMF. Mã thoát 2: manifest hoặc digest bản tách của
-bước 1 thiếu hay lệch (artifacts_sha256.json), đọc được dữ liệu sau CUTOFF, hoặc smoke không tất
-định.
-"""
-
 from __future__ import annotations
 
 import os
@@ -306,7 +291,9 @@ def run_full(samples, device):
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap = argparse.ArgumentParser(
+        description="Minh họa CEEMDAN + LSTM, bước 2: dựng mẫu, train LSTM 3 biến thể, đo trên 2017–2018"
+    )
     ap.add_argument("--lake-dir", default=str(ROOT / "data" / "lake"))
     ap.add_argument("--dec-dir", default=str(ROOT / "data" / C.OUT_SUBDIR))
     ap.add_argument("--device", choices=["auto", "cpu"], default="auto")

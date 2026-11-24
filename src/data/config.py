@@ -1,5 +1,3 @@
-"""Cấu hình nguồn giá, tài sản, quy tắc thời điểm công bố và ngưỡng kiểm tra (ADR-0005)."""
-
 from __future__ import annotations
 
 import os

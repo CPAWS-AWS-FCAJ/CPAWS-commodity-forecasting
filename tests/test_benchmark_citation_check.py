@@ -1,10 +1,3 @@
-"""Kiểm URL lạ trong check_answer của benchmark chatbot (Khải, review PR #104 điểm 3).
-
-URL trong câu trả lời không trùng nguyên văn link của tin get_news trả về trong câu đó thì trượt
-tự động. Fixture là ca thật buổi tập 7/11: model viết "pressrelease" (thiếu "s") thay cho link đã
-lưu "pressreleases". Cách so dùng chung với Lambda: src/chatbot/citations.py.
-"""
-
 from __future__ import annotations
 
 import importlib.util

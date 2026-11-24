@@ -1,5 +1,3 @@
-"""Adapter nguồn giá: yfinance, EIA, NBP (fixture giả, không gọi mạng)."""
-
 import pandas as pd
 import pytest
 

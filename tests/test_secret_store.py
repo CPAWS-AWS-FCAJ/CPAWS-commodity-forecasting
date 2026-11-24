@@ -1,8 +1,3 @@
-"""secret_store.get_eia_api_key(): EIA_API_KEY → SSM Parameter Store (EIA_SECRET_ID) → lỗi.
-
-Dùng client SSM giả; không gọi AWS thật (boto3.client bị chặn trong mọi test của file này).
-"""
-
 import boto3
 import pytest
 from botocore.exceptions import ClientError, NoCredentialsError

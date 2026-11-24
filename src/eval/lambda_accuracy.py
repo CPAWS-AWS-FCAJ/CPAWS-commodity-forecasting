@@ -1,5 +1,3 @@
-"""Lambda entrypoint for Scheduler integration; no infrastructure or public API routes."""
-
 from __future__ import annotations
 
 import json

@@ -1,7 +1,7 @@
 # Minh họa CEEMDAN + LSTM theo ý tưởng của Cao et al. (2019) cho buổi bảo vệ (đã chạy 3/11, #83)
 
 - Ngày: 31/10/2026; sửa 2/11/2026 theo review của Long ở #75
-- Người viết: Khải (bản nháp do Claude soạn); người duyệt: Long
+- Người viết: Khải; người duyệt: Long
 - Trạng thái: **Đã chạy 3/11 (#83).** Long approve, merge, rồi mới viết code. Sau khi chốt, thay đổi ghi thành mục mới có ngày ở mục 9, trước khi chạy.
 - Khải chốt 31/10: hiện sai số trên mức giá trên slide (chỉ để minh họa); chạy đủ 4 tài sản; chạy trên máy Khải; code ở `src/experiments/`; không chờ toàn văn bài báo (mục 0).
 - Bài tham khảo: Cao, Li, Li (2019), *Financial time series forecasting model based on CEEMDAN and LSTM*, Physica A 519, 127–139, doi 10.1016/j.physa.2018.11.061.
@@ -73,7 +73,7 @@ Không dùng cache ADR-0007 (cache có cả 2019, và kiểm mẫu không thay �
 
 - **Kiểu bài báo (chỉ minh họa trên 1–2 slide, không phải chỉ số đánh giá của dự án):** MAE, RMSE, MAPE trên mức giá một bước tới, luôn đặt cạnh cùng chỉ số của naive; slide ghi "chỉ số kiểu bài báo, ADR-0008 không dùng để đánh giá" và không khẳng định đây đúng là bộ chỉ số của Cao et al. MAPE chỉ tính trên cặp có giá thực > 0 (dữ liệu ≤ 2018 không có giá ≤ 0, vẫn kiểm và báo số cặp bị loại).
 - **Theo ADR-0008 trên log return h = 1:** `mae_ratio_vs_naive`, `sign_accuracy` kèm `up_rate`; DM (HAC, HLN) so với naive. `pinball_skill` so với `baseline-q252` dùng phân vị ở mục 3.2 (chỉ báo cáo).
-- **Chẩn đoán cơ chế:** so thành phần tại cùng một ngày giữa R-full và R-causal (độ lệch ở điểm cuối cửa sổ) để minh họa R-full dùng thông tin sau ngày gốc. Chỉ xuất số tổng hợp (tương quan, sai lệch trung bình theo thành phần); Claude Code không in hay tóm tắt giá trị IMF thô.
+- **Chẩn đoán cơ chế:** so thành phần tại cùng một ngày giữa R-full và R-causal (độ lệch ở điểm cuối cửa sổ) để minh họa R-full dùng thông tin sau ngày gốc. Chỉ xuất số tổng hợp (tương quan, sai lệch trung bình theo thành phần); không in hay tóm tắt giá trị IMF thô.
 
 ## 5. Kết quả dùng để làm gì
 
@@ -85,7 +85,7 @@ Không dùng cache ADR-0007 (cache có cả 2019, và kiểm mẫu không thay �
 - Code trong `src/experiments/repl_ceemdan_lstm/`, không import vào Lambda hay `src/forecast/`; PyTorch chỉ cài offline (`requirements-experiments.txt` riêng, không thêm vào `requirements.txt` hay requirements của Lambda). CI chỉ chạy test không cần GPU (gồm test mục 3.3 trên dữ liệu tổng hợp).
 - Chạy trên máy Khải (RTX 4060 8 GB, Ryzen 7 7840H), chạy PyTorch bản CPU (máy không có torch CUDA). Tái lập: seed cố định cho Python, NumPy, PyTorch; `torch.use_deterministic_algorithms(True)`, `CUBLAS_WORKSPACE_CONFIG=:4096:8`; ghi phiên bản PyTorch, CUDA, driver vào `env.txt`. Nếu LSTM cuDNN không chạy được ở chế độ tất định thì chạy CPU (108 LSTM: 36 mỗi seed × 3 seed; ước tính vài giờ).
 - Kết quả lưu `eval/repl-ceemdan-lstm/` trên S3 kèm SHA-256, không commit dữ liệu giá.
-- Claude Code không đọc hay tóm tắt dữ liệu sau 2018 trong việc này.
+- Không đọc hay tóm tắt dữ liệu sau 2018 trong việc này.
 
 ## 7. Lịch
 

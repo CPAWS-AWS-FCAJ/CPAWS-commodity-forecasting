@@ -1,5 +1,3 @@
-"""One local/Kaggle training entrypoint; fixed epochs, no validation-label updates."""
-
 import argparse
 import hashlib
 import json
@@ -165,7 +163,9 @@ def export_artifact(
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(
+        description="One local/Kaggle training entrypoint; fixed epochs, no validation-label updates"
+    )
     parser.add_argument("--asset", choices=(*ASSET_NAMES, "all"), required=True)
     parser.add_argument("--prices", type=Path, required=True)
     parser.add_argument("--rejected", type=Path, required=True)

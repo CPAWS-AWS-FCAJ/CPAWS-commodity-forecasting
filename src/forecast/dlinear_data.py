@@ -1,5 +1,3 @@
-"""Training-only data preparation using the shared Feature Builder and Returns."""
-
 from collections import Counter
 from dataclasses import dataclass
 

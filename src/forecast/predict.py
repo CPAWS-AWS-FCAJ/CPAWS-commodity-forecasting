@@ -1,54 +1,3 @@
-"""Dự báo hằng ngày cho vàng, bạc, Brent, WTI → bảng `Forecasts` (docs/api/contract.md, ADR-0008).
-
-Chạy sau Lambda ingest (kích hoạt bởi Lambda destination OnSuccess và OnFailure của Lambda ingest,
-xem src/forecast/lambda_predict.py; hạ tầng do Tiến cấu hình). Với mỗi tài sản:
-  1. Đọc snapshot clean mới nhất: clean/prices/dt=D/ (có quality.json, file ingest ghi cuối) và
-     clean/display_factors/dt=D/ cùng ngày.
-  2. build_feature_frame(prices, asset, invalid_dates=<ngày bị loại>) → latest_base_date →
-     make_windows(frame, [base], window): con đường DUY NHẤT tạo input (không tự cắt, không fill).
-  3. Không ghi bản ghi cho tài sản đó (bản ghi cũ giữ nguyên, không lùi ngày), log PREDICT_SKIPPED:
-     - latest_session_missing: base_date sớm hơn phiên mong đợi (thiếu hoặc bị loại giá phiên cuối);
-     - invalid_input_window / insufficient_input_history: cửa sổ input không hợp lệ;
-     - input_publication_unavailable: batch.max_input_published_at là NaT hoặc muộn hơn as_of
-       (cùng quy tắc với training, src/forecast/dlinear_data.py);
-     - display_factor_missing / display_factor_stale (vàng, bạc), fx_missing.
-  4. model.predict → normalize_quantiles() đúng một lần ngay sau mô hình; log
-     PREDICT_QUANTILE_CROSSING với số hàng h phải sắp xếp.
-  5. last_price, tỷ giá, stale_sources, roll_in_horizon → to_forecast_record → ghi. DynamoDB không
-     ghi đè dự báo đã phát hành cùng (asset, base_date), chỉ thay bản mẫu (is_sample = true);
-     log PREDICT_ALREADY_PUBLISHED, tài sản vẫn tính là xong.
-  6. Shadow (SHADOW_MODELS=s1a-l094, docs/experiments/s1a-shadow-plan.md): chỉ khi champion
-     của tài sản đó là baseline-q252 và ok, S1a co giãn chính `raw` của champion theo k_t
-     (src/forecast/vol_scale_core.py) → eval/shadow/s1a-l094/dt=<ngày chạy UTC>/<asset>.json (S3:
-     không ghi đè). Lỗi shadow chỉ log PREDICT_SHADOW_FAILED, không đổi kết quả champion.
-
-Champion có thể khác nhau giữa tài sản (MODEL_VERSIONS của Lambda, RFC #45 D10): run_predict nhận
-model_version là một version cho mọi tài sản, hoặc mapping tài sản → version.
-
-Phiên mong đợi: chạy thường = phiên cuối của lịch tài sản đứng trước ngày dt của snapshot (ingest
-chạy 12:15 UTC nên phiên của ngày dt chưa chốt); với --base-date D = phiên cuối <= D.
-
-as_of (thời điểm dự báo được dùng dữ liệu): chạy thường = thời điểm chạy (now, UTC); với
---base-date D = D + PUBLISHED_AT_RULES[nguồn chính của tài sản] (yfinance: D+1 12:00 UTC), tức thời
-điểm sớm nhất dự báo cho D được phép chạy.
-
-Chạy:
-  python -m src.forecast.predict --source local --dest local --out-dir data/forecasts \\
-      --model-version dlinear-2026-10-20
-  python -m src.forecast.predict --source s3 --dest dynamodb --model-version ...  # FORECASTS_TABLE
---base-date chỉ để test/backfill: cắt snapshot tại ngày đó (bỏ mọi dòng sau D) trước khi tạo frame;
-khi đó stale_sources = [] vì quality.json là của snapshot hiện tại, không mô tả ngày D.
-
-Model: artifact models/<asset>/<model_version>/ (weights.npz, config.json, scaler.json,
-manifest.json) trong lake, hoặc thư mục --model-dir/<asset>/<model_version>/. Artifact có
-manifest.integration_eligible khác true bị từ chối, trừ khi CLI có --allow-experimental.
---model-version baseline-q252: mốc phân vị 252 phiên (baselines.Quantile252Model, ADR-0008 mục 4),
-không có artifact; cửa sổ input 252 phiên qua cùng make_windows và các bước như DLinear.
-
-Không import torch, yfinance, PyEMD, requests (image Lambda chỉ có requirements-predict.txt): boto3
-và DLinearNumpy chỉ import trong hàm.
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -945,7 +894,9 @@ def _iso_date(s: str) -> str:
 def main(argv: list[str] | None = None) -> int:
     """Mã thoát: 0 = mọi tài sản đã dự báo; 1 = có tài sản bị bỏ qua hoặc lỗi (các tài sản khác
     vẫn được ghi)."""
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap = argparse.ArgumentParser(
+        description="Dự báo hằng ngày cho vàng, bạc, Brent, WTI → bảng `Forecasts` (docs/api/contract.md, ADR-0008)"
+    )
     ap.add_argument("--source", choices=["local", "s3"], default="local")
     ap.add_argument("--lake-dir", default="data/lake", help="lake local khi --source local")
     ap.add_argument("--dest", choices=["local", "dynamodb"], default="local")

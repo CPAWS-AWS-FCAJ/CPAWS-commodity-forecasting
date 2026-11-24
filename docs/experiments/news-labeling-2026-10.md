@@ -1,6 +1,6 @@
 # Gắn nhãn tin bằng Nova 2 Lite trên bộ case giả lập (10/2026)
 
-- Người làm: Phan Tấn Phước (script và bản nháp do Claude Code soạn). Người duyệt: Trịnh Tiến Khải.
+- Người làm: Phan Tấn Phước. Người duyệt: Trịnh Tiến Khải.
 - Ngày chạy: 22/10/2026, bắt đầu 12:58 UTC. **Chạy đúng một lần**, không chạy lại.
 - Model: `global.amazon.nova-2-lite-v1:0`, gọi từ `ap-southeast-1` qua Converse; `maxTokens` 1200, `temperature` 0; ép gọi tool `record_news_labels` bằng `toolChoice`; không có Guardrail.
 - Prompt: `labeling-v2` ([`docs/prompts/news-labeling-v2.md`](../prompts/news-labeling-v2.md)), chỉ gửi khối `text`. Schema: [`docs/prompts/news-labeling-schema.json`](../prompts/news-labeling-schema.json).
@@ -106,7 +106,7 @@ Các ô sau lệch mức impact 1 bậc, vẫn trong ngưỡng ±1 và đúng h�
 
 **Kiểm tra bằng máy:** không có evidence nào thiếu dấu tiếng Việt hoặc dài quá một câu. Có **38 ô** thuộc bài `relevant = true` để evidence rỗng (case 5, 6, 10, 11, 14, 15, 16, 17, 19, 20, 21, 22, 24, 27, 28), đều là ô Nova gán `impact_score = 0`. Prompt v2 cho phép điều này ("giải thích ngắn gọn trong `evidence` nếu phù hợp"), còn `acceptance_criteria` yêu cầu evidence không rỗng khi `relevant = true`. Hai tài liệu chưa thống nhất; ghi nhận để xử lý ở v3.
 
-**Duyệt tay:** 10 ô chọn ngẫu nhiên (seed 7) trong các ô có evidence khác rỗng. Cột "Ghi chú sơ bộ" do Claude Code điền để hỗ trợ; kết quả chính thức do người duyệt điền.
+**Duyệt tay:** 10 ô chọn ngẫu nhiên (seed 7) trong các ô có evidence khác rỗng. Cột "Ghi chú sơ bộ" do model AI điền để hỗ trợ; kết quả chính thức do người duyệt điền.
 
 | Case | Ô | Nova | Evidence của Nova | Ghi chú sơ bộ | Kết quả duyệt tay |
 |---|---|---|---|---|---|

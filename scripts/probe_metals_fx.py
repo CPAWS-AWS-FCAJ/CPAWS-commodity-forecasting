@@ -1,14 +1,3 @@
-"""Bước 0b – probe nguồn vàng, bạc: GLD/SLV qua yfinance, NBP; snapshot thanh gần nhất.
-
-Chạy:
-  python scripts/probe_metals_fx.py               # toàn bộ probe 0b (không cần key)
-  python scripts/probe_metals_fx.py --bars-only   # chỉ chụp 5 thanh gần nhất và so với các lần chụp trước
-- Tiingo đã bị gỡ (điều khoản gói Starter, xem ADR-0005); script không gọi Tiingo.
-- Phản hồi thô: data/lake/raw/<source>/dt=<ngày chạy UTC>/. Báo cáo: data/lake/probe/dt=<ngày>/.
-- NBP và WGC chỉ là chuỗi đối chiếu, không đưa vào pipeline.
-Đây là script khảo sát, không phải pipeline.
-"""
-
 from __future__ import annotations
 
 import argparse

@@ -1,16 +1,3 @@
-"""Phân tích roll của CL=F, BZ=F và đợt CL=F lệch RWTC 9–10/2026 (docs/experiments/roll-analysis-2026-10.md).
-
-Chạy: python scripts/roll_analysis.py [--lake-dir data/lake] [--raw-dt 2026-10-08]
-In JSON ra stdout. Chỉ đọc dữ liệu, không ghi gì.
-
-Phần 1 (dữ liệu 2026): return ngày CL=F so với BZ=F, chênh lệch Brent–WTI so với trung vị 60 phiên
-trước đó, và độ lệch CL=F/RWTC, BZ=F/RBRTE so với trung vị 60 phiên trước đó.
-Phần 2 (chỉ 2014–2019, cắt dữ liệu tại 31/12/2019 ngay khi đọc): ngày roll theo quy tắc
-(flag roll) so với ngày Yahoo chuyển hợp đồng nhận biết từ volume (raw yfinance) và từ phần dư
-return so với hợp đồng kia; |return| ngày roll; roll trùng ngày; sai số của việc thay return
-ngày roll bằng return của hợp đồng kia, ước lượng trên ngày không roll.
-"""
-
 from __future__ import annotations
 
 import argparse

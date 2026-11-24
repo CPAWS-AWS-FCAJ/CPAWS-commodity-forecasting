@@ -1,5 +1,3 @@
-"""CDK stack for CPAWS Cognito authentication."""
-
 from typing import Any
 
 from aws_cdk import (

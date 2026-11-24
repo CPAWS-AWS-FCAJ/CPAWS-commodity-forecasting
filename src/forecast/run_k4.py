@@ -1,32 +1,3 @@
-"""K4: FHS GJR-GARCH và kết hợp phân vị, kiểm định chéo 2016–2018 (docs/experiments/k4-plan.md).
-
-Chạy từ gốc repo, bằng venv có arch 8.0.0 (requirements-dev.txt):
-  python -m src.forecast.run_k4 --stage cv [--lake-dir data/lake] [--output-dir data] [--run-id k4-cv]
-  python -m src.forecast.run_k4 --stage cv-dm --cv-dir data/eval/k4/k4-cv-clean [--run-id k4-cv-dm]
-  python -m src.forecast.run_k4 --stage val2019 --cv-dir data/eval/k4/k4-cv-clean
-      --cv-dm-dir data/eval/k4/k4-cv-dm --candidate fhs-gjr-t-dm [--k3-dir …]
-      (run-id cố định k4-val2019; run-id khác hoặc đã có started.json thì từ chối)
-
-- Stage cv: bản clean configs/k4.CLEAN_DT cắt tại 2018-12-31 ngay khi đọc; ngày gốc 2016–2018, ngày
-  đích ≤ 2018-12-31 (một mốc cắt cho cả ba fold, mục 8). Bốn mô hình: baseline-q252, S1a (λ 0,94),
-  fhs-gjr-t (src/forecast/fhs_fit.py + fhs_numpy.py), combo-eq3 = (q252 + S1a + FHS) / 3 trước
-  normalize, rồi normalize_quantiles() đúng một lần. Tập ngày gốc chung: q252, S1a, FHS cùng hợp lệ.
-  Đánh giá bằng walk_forward (cấu hình cross_validation) qua train_ceemdan.evaluate và
-  run_k3b.evaluate_set; chọn theo mục 4; MCS 90% theo từng tài sản chỉ để báo cáo (mục 8).
-- Stage cv-dm (mục 8, sửa đổi sau kiểm định chéo): chỉ fhs-gjr-t-dm (bootstrap từ z − mean(z)) trên
-  cùng tập ngày gốc chung, cùng mốc cắt. Dựng lại fhs-gjr-t và dừng nếu không trùng từng bit với
-  kết quả cv; số của các mô hình khác lấy từ thư mục cv (chỉ đọc). Thêm bảng q50 < 0 và prob_up.
-- Stage val2019: phần chặn (có cv và cv-dm, cv chọn fhs-gjr-t, trung bình 28 nhóm của cv-dm > 0,
-  ứng viên là fhs-gjr-t-dm, chưa có lần chạy 2019 nào), rồi một lần trên tập chung K3 (vàng 245,
-  bạc 245, Brent 202, WTI 202), mốc cắt 2019-12-31, refit hằng tháng; tiêu chí mục 5 theo tài sản.
-- Không đọc cache CEEMDAN (mọi hàm đọc cache bị chặn trong lúc chạy), không ghi S3, không đọc 2019
-  ở stage cv và cv-dm; kết quả local <output>/eval/k4/<run_id>/.
-
-Điều kiện dừng (StopRun hoặc FitStop, thoát mã 2): đọc được dữ liệu sau mốc cắt, tập chung khác
-mục 8 hoặc khác tập K3, lần refit đầu lỗi, đệ quy NumPy lệch arch, mốc so sánh khác mốc của
-walk_forward, fhs-gjr-t dựng lại khác kết quả cv, phần chặn val2019 không qua.
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -1701,7 +1672,9 @@ def render_val(summary: dict, named: dict) -> str:
 
 
 def main(argv=None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(
+        description="K4: FHS GJR-GARCH và kết hợp phân vị, kiểm định chéo 2016–2018 (docs/experiments/k4-plan.md)"
+    )
     parser.add_argument("--stage", choices=("cv", "cv-dm", "val2019"), required=True)
     parser.add_argument("--lake-dir", type=Path, default=DEFAULT_LAKE)
     parser.add_argument("--output-dir", type=Path, default=ROOT / "data")

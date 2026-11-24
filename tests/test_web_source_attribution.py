@@ -1,5 +1,3 @@
-"""Dòng nguồn trên web phải khớp `SOURCE_ATTRIBUTION` của pipeline dữ liệu (ADR-0005)."""
-
 from __future__ import annotations
 
 from pathlib import Path

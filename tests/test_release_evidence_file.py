@@ -1,9 +1,3 @@
-"""Kiểm file evidence mà infra/app.py đưa vào job accuracy (ROLLING_EVIDENCE_JSON).
-
-Khối shadow_release do Khải duyệt bằng comment ở PR #89 (2026-11-04T14:22:51Z), sau lượt 19:15
-đầu tiên của image c61abdd (#79). Test chốt đúng giá trị đã duyệt và kiểm job dùng được khối này.
-"""
-
 import json
 from dataclasses import replace
 from pathlib import Path
