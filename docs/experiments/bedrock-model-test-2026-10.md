@@ -1,8 +1,8 @@
 # Báo cáo benchmark chất lượng và hiệu năng: Đánh giá độc lập Amazon Nova 2 Lite và Claude Haiku 4.5 theo tiêu chí chấp thuận (PASS Criteria)
 
-Dự án: CPAWS Commodity Forecasting · Ngày chạy: 18/10/2026 · Người đánh giá chất lượng: ChatGPT (đánh giá độc lập theo rubric đã thống nhất)
+Dự án: CPAWS Commodity Forecasting · Ngày chạy: 18/10/2026 · Người đánh giá chất lượng: một LLM độc lập (chấm theo rubric đã thống nhất)
 
-**Lưu ý về phiên bản benchmark:** Báo cáo này thay thế kết quả benchmark được thực hiện ngày 14/10. So với phiên bản trước, phương pháp đánh giá đã được thay đổi từ rubric chấm điểm thủ công theo thang 0–2 sang sử dụng ChatGPT chấm điểm theo thang 0–5. Vì vậy, kết quả giữa hai phiên bản không thể so sánh trực tiếp do khác biệt về thang điểm và phương pháp đánh giá. Cụ thể, kết quả Haiku 52/52 ở phiên bản trước và điểm trung bình 3,40/5 ở phiên bản hiện tại phản ánh hai cách đánh giá khác nhau, không đồng nghĩa với việc chất lượng mô hình đã suy giảm tương ứng.
+**Lưu ý về phiên bản benchmark:** Báo cáo này thay thế kết quả benchmark được thực hiện ngày 14/10. So với phiên bản trước, phương pháp đánh giá đã được thay đổi từ rubric chấm điểm thủ công theo thang 0–2 sang sử dụng một LLM chấm điểm theo thang 0–5. Vì vậy, kết quả giữa hai phiên bản không thể so sánh trực tiếp do khác biệt về thang điểm và phương pháp đánh giá. Cụ thể, kết quả Haiku 52/52 ở phiên bản trước và điểm trung bình 3,40/5 ở phiên bản hiện tại phản ánh hai cách đánh giá khác nhau, không đồng nghĩa với việc chất lượng mô hình đã suy giảm tương ứng.
 
 ## 1. Tóm tắt kết quả theo tiêu chí chấp thuận (PASS Criteria)
 
@@ -227,7 +227,7 @@ Bao gồm các lỗi vi phạm nguyên tắc cốt lõi:
 
 > [!IMPORTANT]
 > **Vị trí lưu trữ và nguyên tắc quản lý:**
-> - Toàn bộ 4 câu hỏi trên **đã có mặt sẵn và được bảo lưu nguyên vẹn** trong bộ test chuẩn hóa tại file [`benchmark/router_streaming_benchmark.json`](file:///d:/Github%20Repo/CPAWS-commodity-forecasting/benchmark/router_streaming_benchmark.json) thuộc suite `claude_haiku_4_5`.
+> - Toàn bộ 4 câu hỏi trên **đã có mặt sẵn và được bảo lưu nguyên vẹn** trong bộ test chuẩn hóa tại file `benchmark/router_streaming_benchmark.json` (bộ test lưu ngoài repo) thuộc suite `claude_haiku_4_5`.
 > - Tuyệt đối không thay đổi ID và nội dung prompt gốc.
 > - Bốn case này không được tính gộp kết quả giả định vào kết quả Pass/Fail hiện tại của vòng 1. Chúng sẽ được re-run độc lập ở Tuần 4 khi có pipeline tool calling hoàn chỉnh.
 
@@ -370,8 +370,8 @@ Hiệu năng và chi phí (chỉ ghi nhận, không dùng để kết luận):
   - Bài B: 21 câu (HAIKU-010 đến 030) gặp `ThrottlingException` khi gọi liền nhau (khoảng 75 nghìn token input/phút). Script được sửa để nghỉ 20 giây giữa các câu và chờ 60 giây trước khi gọi lại câu bị throttle; 21 câu này được chạy lại riêng bằng `--rerun-api-errors` lúc 01:23 UTC. Lịch sử lỗi của từng câu lưu ở `previous_api_errors` trong `raw.jsonl`. Theo đề xuất, câu gặp lỗi API không tính là câu trượt chất lượng.
 - **Tool giả lập:** kết quả chỉ chứng minh "hành vi với tool giả lập", chưa phải `get_forecast`/`get_news` thật đã được kiểm chứng.
 - **Chấm tay:**
-  - Điểm 0/1 do Claude gợi ý kèm lý do, đối chiếu từng con số với fixture; Phước duyệt và là người chấm.
-  - **Khải chấm lại 10 câu không xem điểm của Phước; cả hai người chấm đều dùng Claude gợi ý điểm, nên mức khớp 10/10 chưa phải đánh giá độc lập hoàn toàn** (seed 7: NOVA-005, 012, 023; HAIKU-004, 005, 007, 010, 021, 024, 026). File gửi riêng, không kèm điểm của Phước, không lưu trong repo. Khải nhận câu hỏi, `expected_behavior`, câu trả lời và bản tóm tắt kết quả tool (đủ 7 phân vị theo từng h).
+  - Điểm 0/1 do model AI gợi ý kèm lý do, đối chiếu từng con số với fixture; Phước duyệt và là người chấm.
+  - **Khải chấm lại 10 câu không xem điểm của Phước; cả hai người chấm đều dùng model AI gợi ý điểm, nên mức khớp 10/10 chưa phải đánh giá độc lập hoàn toàn** (seed 7: NOVA-005, 012, 023; HAIKU-004, 005, 007, 010, 021, 024, 026). File gửi riêng, không kèm điểm của Phước, không lưu trong repo. Khải nhận câu hỏi, `expected_behavior`, câu trả lời và bản tóm tắt kết quả tool (đủ 7 phân vị theo từng h).
   - **Kết quả đối chiếu: khớp 10/10 ở cả ba tiêu chí** (đúng ý, đủ ý, đúng chính sách), nên rubric cuối cũng khớp 10/10. Không phải sửa điểm.
   - Ghi chú thêm của Khải:
     - NOVA-023: kiểm tra tự động trượt sai vì cụm "không hỗ trợ", cần nới `must_include` (đã có ở đề xuất 10.5).

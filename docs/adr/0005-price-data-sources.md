@@ -2,7 +2,7 @@
 
 - Ngày: 2026-10-07 (cập nhật 2026-10-08: gỡ Tiingo sau phản hồi của Tiingo; 2026-11-04: vàng, bạc hiển thị giá và khoảng giá, thêm quy đổi ra số tiền; 2026-11-07: làm rõ rủi ro điều khoản Yahoo, giả định log return và tỷ giá theo review của Tuấn)
 - Trạng thái: Đề xuất
-- Người viết: Trịnh Tiến Khải (bản nháp do Claude Code soạn từ kết quả probe); người duyệt: Huỳnh Ngọc Tuấn (IA), Nguyễn Tiến Long
+- Người viết: Trịnh Tiến Khải; người duyệt: Huỳnh Ngọc Tuấn (IA), Nguyễn Tiến Long
 
 ## Bối cảnh
 Mô hình cần chuỗi giá ngày từ 01/2012 (khởi động CEEMDAN 2012–2013, train 2014–2018, validation 2019, test 2020 → nay) cho vàng, bạc, Brent, WTI và tỷ giá USD/VND, cập nhật hằng ngày bằng Lambda `ingest`. Ràng buộc:

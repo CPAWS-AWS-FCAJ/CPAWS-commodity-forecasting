@@ -125,7 +125,7 @@ Nguyên tắc chọn câu:
 
 Phước chạy 8 câu loại A với prompt v2 qua Haiku (dev, ngày 2/11, mỗi câu một lần). Theo Khải, kết quả này **chỉ dùng để chọn kịch bản**, không trình bày là kết quả benchmark.
 
-Quy tắc (Khải chốt trước khi chạy): loại câu nào có câu vi phạm chính sách hoặc gọi bất kỳ tool nào thì bỏ loại đó, vì cả 8 câu đều không cần tool. Kết quả thô ở `docs/experiments/results/chatbot-benchmark-2026-11-02-a-types-haiku-prompt-v2-dev/complex/`. Báo cáo ở mục 8 của `docs/experiments/chatbot-haiku-v3-dev-2026-11-01.md`, trong PR #76; PR đó trỏ link sang PR kịch bản này, kịch bản chỉ có một bản là file này. Điểm chấm tay do Claude gợi ý, Phước đã duyệt và không đổi điểm nào.
+Quy tắc (Khải chốt trước khi chạy): loại câu nào có câu vi phạm chính sách hoặc gọi bất kỳ tool nào thì bỏ loại đó, vì cả 8 câu đều không cần tool. Kết quả thô ở `docs/experiments/results/chatbot-benchmark-2026-11-02-a-types-haiku-prompt-v2-dev/complex/`. Báo cáo ở mục 8 của `docs/experiments/chatbot-haiku-v3-dev-2026-11-01.md`, trong PR #76; PR đó trỏ link sang PR kịch bản này, kịch bản chỉ có một bản là file này. Điểm chấm tay do model AI gợi ý, Phước đã duyệt và không đổi điểm nào.
 
 | Loại A | Câu | Kết quả | Quyết định cho kịch bản |
 |---|---|---|---|

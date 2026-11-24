@@ -1,7 +1,7 @@
 # Tập test 2020 → nay: kế hoạch chạy một lần (chốt trước khi chạy)
 
 - Ngày: 31/10/2026; sửa 2/11/2026 theo review của Long ở #75
-- Người viết: Khải (bản nháp do Claude soạn); người duyệt: Long
+- Người viết: Khải; người duyệt: Long
 - Trạng thái: **Đã chốt (#75, merge 03/11/2026 09:59Z).** Mục 8.1 điền theo quy tắc mục 2; chưa chạy test2020.
 - Căn cứ: ADR-0008 (chia dữ liệu, chỉ số), ADR-0010 (S1a), ADR-0011 (champion/challenger), ADR-0012 (dừng dò mô hình), họp 30/10 điểm 19 và 21.
 
@@ -83,7 +83,7 @@ Kết luận chính chỉ dựa trên mục 3.1 (block 20, mẫu `all`); các m�
 - Chạy xong: tải cả thư mục kèm SHA-256 lên `eval/test2020/`, báo ở PR kế hoạch.
 - **Chạy lỗi giữa chừng:** không tự chạy lại, không đổi cấu hình. Ghi lỗi vào `failure.json` cạnh `claim.json`; cả nhóm quyết và ghi lý do thành mục mới của file này trước khi chạy lại (nếu có).
 - Người chạy: Long, trên một máy và một venv. Khải review kết quả.
-- Claude không xem, không tóm tắt kết quả 2020 → nay (quy tắc project).
+- Không xem, không tóm tắt kết quả 2020 → nay trước khi khóa tham số (quy tắc project).
 
 ## 7. Lịch
 

@@ -74,7 +74,7 @@ Luật xét theo thứ tự, luật đầu tiên khớp sẽ quyết định:
 
 ### 6.1. Kết quả lần chạy ngày 4/11/2026
 
-Bộ 30 câu (`tests/router/heldout_v1.jsonl`, 12 simple, 18 complex) do Khải phụ trách: Claude soạn theo yêu cầu của Khải, Gemini duyệt (không mù, đã thấy nhãn), Khải chốt ngày 4/11. Người viết luật không thấy bộ câu trước khi luật khóa. Quy tắc gán nhãn và các thay đổi sau duyệt ở [`heldout_v1.md`](../../tests/router/heldout_v1.md). Khải chạy một lần trên commit `984d3fe`. Output nguyên văn: [`eval_output.txt`](results/router-heldout-2026-11-04/eval_output.txt).
+Bộ 30 câu (`tests/router/heldout_v1.jsonl`, 12 simple, 18 complex) do Khải phụ trách: model AI soạn theo yêu cầu của Khải, một model AI khác duyệt (không mù, đã thấy nhãn), Khải chốt ngày 4/11. Người viết luật không thấy bộ câu trước khi luật khóa. Quy tắc gán nhãn và các thay đổi sau duyệt ở [`heldout_v1.md`](../../tests/router/heldout_v1.md). Khải chạy một lần trên commit `984d3fe`. Output nguyên văn: [`eval_output.txt`](results/router-heldout-2026-11-04/eval_output.txt).
 
 | Chỉ số | Kết quả | Ngưỡng | Đạt |
 |---|---:|---:|:---:|

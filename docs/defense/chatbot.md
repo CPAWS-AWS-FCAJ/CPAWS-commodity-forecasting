@@ -45,7 +45,7 @@ Router được viết trên nhánh thử nghiệm `exp/chatbot-router` (code đ
 
 - **Bộ phát triển** 83 câu (40 simple, 43 complex), do người viết luật soạn: 83/83 đúng, 0 câu cần Haiku bị đưa sang Nova. Vì luật và bộ câu viết cùng lúc, con số này không phải ước lượng độ chính xác.
 - **Bộ benchmark chatbot** 120 câu, không dùng để sửa luật: v1 59/60, v2 54/60 với 2 câu cần Haiku bị đưa sang Nova (HAIKU2-029, 030). Sau khi sửa luật tư vấn lồng phân tích, v2 thành 55/60, 0 câu sang Nova; hai câu này từ đó không còn là phép đo độc lập.
-- **Bộ giữ riêng (held-out)** 30 câu do Khải phụ trách (Claude soạn theo yêu cầu của Khải, Gemini duyệt, Khải chốt), người viết luật không thấy trước khi luật khóa, giữ ngoài repo tới lúc đó. Ngưỡng: độ chính xác ≥ 90% và tối đa 1 câu cần Haiku bị đưa sang Nova. Chạy đúng một lần, không sửa luật theo kết quả.
+- **Bộ giữ riêng (held-out)** 30 câu do Khải phụ trách (model AI soạn theo yêu cầu của Khải, một model AI khác duyệt, Khải chốt), người viết luật không thấy trước khi luật khóa, giữ ngoài repo tới lúc đó. Ngưỡng: độ chính xác ≥ 90% và tối đa 1 câu cần Haiku bị đưa sang Nova. Chạy đúng một lần, không sửa luật theo kết quả.
 
 Luật khóa ngày 04/11/2026 ở commit `984d3fe`. Cùng ngày Khải chạy bộ giữ riêng một lần trên commit này:
 
@@ -140,7 +140,7 @@ Benchmark chạy script [`chatbot_benchmark.py`](../../scripts/benchmark/chatbot
 - **Khóa SHA-256** câu hỏi, prompt, fixture và code tool; script kiểm 8 mục khóa trước khi tạo client Bedrock.
 - **Ngưỡng chốt trước**, chạy chính thức đúng một lần, không sửa sau khi xem kết quả. Bộ câu hỏi đã dùng để sửa prompt thì chạy lại chỉ tính là dev.
 - **Một câu đạt** khi qua mọi kiểm tra tự động (số không có nguồn, nhãn sai "khoảng 80%", giá vàng/bạc, bị cắt, gọi tool, làm theo injection, cụm bắt buộc) **và** rubric 0/1 = 1 ở cả ba tiêu chí đúng ý, đủ ý, đúng chính sách.
-- **Hai người chấm:** Phước chấm cả bộ (Claude gợi ý điểm kèm lý do); Khải chấm độc lập 10 câu chọn theo seed, không dùng model.
+- **Hai người chấm:** Phước chấm cả bộ (model AI gợi ý điểm kèm lý do); Khải chấm độc lập 10 câu chọn theo seed, không dùng model.
 
 Bài B (Haiku, prompt v2, tool v2, 30 câu: dự báo một tài sản 9, công bố mốc thống kê 1, nhiều ý 6, tin tức và lý do 5, dữ liệu có vấn đề 3, injection trong tin 3, tư vấn lồng phân tích 3; [đề xuất v2](../experiments/chatbot-benchmark-v2-proposal.md) mục 2) chính là cấu hình đang chạy trên `/chat`. Bài A (Nova, không tool) không áp dụng cho hệ thống hiện tại vì mọi câu đi Haiku.
 
@@ -236,7 +236,7 @@ Cùng đợt, 8 câu loại bài A (chào hỏi, khái niệm, ngoài phạm vi,
 
 - Benchmark chạy trên fixture, chưa phải bảng `Forecasts` và tin thật; mỗi câu chạy một lần với `temperature` 0, chưa đo dao động giữa các lần chạy.
 - Benchmark chỉ có câu một lượt; hành vi khi có `history` chưa được đo.
-- Mẫu chấm độc lập chỉ 10 câu (khớp 7/10); 8 dòng soát lại được Khải kiểm với hỗ trợ của GPT và Gemini, không hoàn toàn độc lập. Phía Phước dùng Claude gợi ý điểm.
+- Mẫu chấm độc lập chỉ 10 câu (khớp 7/10); 8 dòng soát lại được Khải kiểm với hỗ trợ của model AI, không hoàn toàn độc lập. Phía Phước dùng model AI gợi ý điểm.
 - Bộ v2 đã được dùng để viết prompt v3 và v4, nên mọi lần chạy lại trên bộ này chỉ là dev. Hai bộ câu mới của Long (#108) đã dùng cho lần chạy chính thức v4 ngày 11/11; từ đó hai bộ này cũng chỉ còn giá trị dev.
 
 **Hệ thống**

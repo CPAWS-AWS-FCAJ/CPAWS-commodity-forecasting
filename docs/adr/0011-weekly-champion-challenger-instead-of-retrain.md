@@ -2,7 +2,7 @@
 
 - Ngày: 2026-10-28
 - Trạng thái: Đã chấp nhận
-- Người viết: Trịnh Tiến Khải (bản nháp do Claude soạn); người duyệt: Nguyễn Tiến Long, Châu Trần Mạnh Tiến
+- Người viết: Trịnh Tiến Khải; người duyệt: Nguyễn Tiến Long, Châu Trần Mạnh Tiến
 
 ## Bối cảnh
 

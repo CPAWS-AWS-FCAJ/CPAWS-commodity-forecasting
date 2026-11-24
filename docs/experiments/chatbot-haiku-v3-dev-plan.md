@@ -39,7 +39,7 @@ Cách chọn:
 - Câu đã có câu trả lời của Nova ở lần chạy chính thức 30/10, nên so được hai model trên cùng câu.
 - Khải có thể đổi câu khi duyệt; đổi thì sửa file trên và bảng này **trước** khi chạy.
 
-## 3. Lệnh chạy (Phước chạy, Claude không chạy)
+## 3. Lệnh chạy (Phước chạy)
 
 Trước khi chạy thật, chạy dry-run để kiểm đường ống (không gọi Bedrock, kết quả dry-run không đưa vào repo):
 

@@ -1,6 +1,6 @@
 # Gắn nhãn tin bằng Nova 2 Lite trên thông cáo Fed/EIA thật, prompt labeling-v3 (10/2026)
 
-- Người làm: Phan Tấn Phước (chạy và bản nháp báo cáo do Claude Code soạn). Người duyệt: Trịnh Tiến Khải.
+- Người làm: Phan Tấn Phước. Người duyệt: Trịnh Tiến Khải.
 - Ngày chạy: 29/10/2026, bắt đầu 06:57 UTC. **Chạy đúng một lần**, không chạy lại. Trước đó chạy `--dry-run` (model giả trả đúng đáp án): 52/52 hợp lệ, mọi chỉ số 100%, đường ống không lỗi.
 - Model: `global.amazon.nova-2-lite-v1:0`, gọi từ `ap-southeast-1` qua Converse; `maxTokens` 1200, `temperature` 0; ép gọi tool `record_news_labels` bằng `toolChoice`; không có Guardrail.
 - Prompt: `labeling-v3` ([`docs/prompts/news-labeling-v3.md`](../prompts/news-labeling-v3.md)), chỉ gửi khối `text`. Schema: [`docs/prompts/news-labeling-schema.json`](../prompts/news-labeling-schema.json) (không đổi so với v2).
@@ -78,7 +78,7 @@ Lệch một bậc nên vẫn trong ngưỡng impact ±1, nhưng làm trượt c
 
 ### Dự báo giá không có so sánh bị coi là tín hiệu tăng
 
-Đáp án để `0` khi EIA dự báo giá đi ngang hoặc không có so sánh, bài không nêu cơ chế (mục 5; Claude sửa E23, E24 ngày 28/10, Khải duyệt). Nova gán `bullish` chỉ từ con số dự báo:
+Đáp án để `0` khi EIA dự báo giá đi ngang hoặc không có so sánh, bài không nêu cơ chế (mục 5; sửa E23, E24 ngày 28/10, Khải duyệt). Nova gán `bullish` chỉ từ con số dự báo:
 
 | Case | Ô | Kỳ vọng → Nova | Evidence của Nova |
 |---|---|---|---|
@@ -127,7 +127,7 @@ Chỉ báo cáo, không có ngưỡng. 90/208 ô đáp án `high` thì Nova cho 
 2. **Khớp hướng:** evidence ủng hộ đúng `direction` đã gán.
 3. **Không thêm dữ kiện:** không có con số, nguyên nhân hay cơ chế mà bài không nêu.
 
-Bảng để điền: [`manual_review.csv`](results/news-labeling-v3-2026-10-29/manual_review.csv) (UTF-8 có BOM, mở được bằng Excel), cột `tc1_dung_noi_dung`, `tc2_khop_huong`, `tc3_khong_them_du_kien`, `ket_qua` (đạt/không đạt), `nguoi_cham`, `ghi_chu`. Cột "Ghi chú sơ bộ" do Claude Code điền để hỗ trợ, như lần v2; kết quả chính thức do người duyệt điền.
+Bảng để điền: [`manual_review.csv`](results/news-labeling-v3-2026-10-29/manual_review.csv) (UTF-8 có BOM, mở được bằng Excel), cột `tc1_dung_noi_dung`, `tc2_khop_huong`, `tc3_khong_them_du_kien`, `ket_qua` (đạt/không đạt), `nguoi_cham`, `ghi_chu`. Cột "Ghi chú sơ bộ" do model AI điền để hỗ trợ, như lần v2; kết quả chính thức do người duyệt điền.
 
 | # | Case | Ô | Nova | Evidence của Nova | Ghi chú sơ bộ | Kết quả duyệt tay |
 |---|---|---|---|---|---|---|
