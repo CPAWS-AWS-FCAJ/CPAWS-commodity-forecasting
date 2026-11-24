@@ -68,7 +68,7 @@ Không đưa API key, mật khẩu, mã MFA, access token hoặc thông tin đă
 
 ### 3.3. API và người dùng
 
-- Cognito User Pool quản lý tài khoản bằng xác thực Cognito. Theo ADR-0014, tự đăng ký (có xác minh email) đang mở từ 22/11/2026 21:07, muộn hơn điều kiện "mở trước 21/11" của ADR; bản sửa đổi 23/11 của ADR-0014 ghi nhận sai lệch này. Từ 23/11/2026 16:44, Data & Security Lead chấp thuận giữ mở có thời hạn (không hồi tố), với hạn mức mời 8 người mỗi thành viên, giám sát mỗi ngày một lần lúc 21:00, các ngưỡng đóng và hạn đóng chậm nhất 10/12/2026. Người chấm tự đăng ký, nhóm không tạo tài khoản grader riêng; tài khoản chưa nhận ra được hỏi lại trong nhóm rồi vô hiệu hóa riêng nếu không ai nhận, không đóng cả đăng ký. `VITE_ALLOW_SIGNUP` chỉ điều khiển giao diện, không phải biện pháp bảo mật.
+- Cognito User Pool quản lý tài khoản bằng xác thực Cognito. Theo ADR-0014, tự đăng ký (có xác minh email) đang mở từ 22/11/2026 21:07, muộn hơn điều kiện "mở trước 21/11" của ADR; bản sửa đổi 23/11 của ADR-0014 ghi nhận sai lệch này. Từ 23/11/2026 16:44, Data & Security Lead chấp thuận giữ mở có thời hạn (không hồi tố), với hạn mức mời 8 người mỗi thành viên, giám sát mỗi ngày một lần lúc 21:00, các ngưỡng đóng và hạn đóng chậm nhất 10/12/2026. Người chấm tự đăng ký, nhóm không tạo tài khoản grader riêng; tài khoản chưa nhận ra được hỏi lại trong nhóm rồi vô hiệu hóa riêng nếu không ai nhận, không đóng cả đăng ký, trừ khi có từ 5 tài khoản chưa nhận ra mới trong một ngày (cửa sổ 21:00–21:00). `VITE_ALLOW_SIGNUP` chỉ điều khiển giao diện, không phải biện pháp bảo mật.
 - API Gateway dùng Cognito authorizer cho các route nghiệp vụ, ngoại trừ `/health`.
 - API có throttling 10 request/giây, burst 20.
 - CORS giới hạn một origin web được cấu hình.

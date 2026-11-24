@@ -3,7 +3,7 @@
 - Ngày: 2026-11-16
 - Trạng thái: Chấp nhận phương án 2 (giữ tự đăng ký có thời hạn) từ 23/11/2026 16:44 giờ Việt Nam, theo quyết định của Data & Security Lead trên PR #148; không áp dụng hồi tố. Việc mở ngày 22/11/2026 21:07 vẫn là sai lệch.
 - Người có thẩm quyền quyết định: Data & Security Lead (Tuấn).
-- Người viết: Tuấn (bản gốc 16/11/2026); Khải (mục "Cập nhật 23/11/2026"), sửa theo review vòng 4 ngày 24/11/2026).
+- Người viết: Tuấn (bản gốc 16/11/2026); Khải (mục "Cập nhật 23/11/2026", sửa theo review vòng 4 và 5 ngày 24/11/2026).
 - Người review: Khải (bản gốc); Data & Security Lead (bản sửa đổi); Tiến (mọi PR CDK `CpawsAuth` đi kèm).
 
 ## Bối cảnh
@@ -29,16 +29,16 @@ Chọn phương án 2, với các điều kiện:
 - Yêu cầu xác minh email khi đăng ký.
 - Áp dụng quota chatbot đã triển khai: 20 lượt/người/ngày và 100 lượt/ngày toàn hệ thống (PR #55, #63; `CpawsApi` deploy ngày 02/11/2026). Hai giới hạn có unit test; bộ đếm đã được quan sát khi gọi API thật, nhưng chưa có kiểm thử thực tế tới ngưỡng bị chặn và trả `429 rate_limited`. Quota toàn hệ thống được chia sẻ; người ngoài có thể sử dụng hết quota trong ngày chấm. Quota reset lúc 00:00 giờ Việt Nam.
 - Web không cung cấp chức năng tải dữ liệu giá; luôn hiển thị nguồn dữ liệu.
-- Tạo riêng một tài khoản grader để bàn giao. Thông tin đăng nhập chỉ gửi qua kênh riêng, không đưa vào Git repository hoặc website Hugo.
+- *(Đã thay ngày 24/11/2026, xem "Thay đổi so với bản gốc 16/11" ở mục "Cập nhật 23/11/2026".)* Tạo riêng một tài khoản grader để bàn giao. Thông tin đăng nhập chỉ gửi qua kênh riêng, không đưa vào Git repository hoặc website Hugo.
 - Chỉ mở đăng ký sau khi hoàn thành các bước và trước ngày 21/11/2026; không thực hiện trong khoảng 19:05–19:35.
-- Nếu không hoàn tất trước thời điểm freeze 22/11/2026, không mở đăng ký; chỉ sử dụng tài khoản grader được nhóm tạo riêng.
+- Nếu không hoàn tất trước thời điểm freeze 22/11/2026, không mở đăng ký; chỉ sử dụng tài khoản grader được nhóm tạo riêng. *(Phần "chỉ sử dụng tài khoản grader" đã thay ngày 24/11/2026, xem "Thay đổi so với bản gốc 16/11".)*
 
 ## Rủi ro và biện pháp giảm thiểu
 
 - **Truy cập dữ liệu Yahoo:** bất kỳ ai có email hợp lệ đều có thể đăng ký và xem giá vàng/bạc được chuyển đổi từ dữ liệu Yahoo. Việc yêu cầu xác minh email, không cung cấp tính năng tải dữ liệu và hiển thị nguồn chỉ giảm thiểu rủi ro, không loại bỏ vấn đề về điều khoản sử dụng dữ liệu.
 - **Cạn quota chatbot:** giới hạn 100 lượt/ngày dùng chung cho toàn hệ thống; người ngoài có thể tiêu thụ hết quota trước giảng viên. Theo dõi mức sử dụng trong thời gian chấm.
 - **Giới hạn email:** Cognito có quota gửi email phụ thuộc cấu hình và phạm vi áp dụng của dịch vụ. Trước khi mở đăng ký, kiểm tra quota thực tế trong AWS Service Quotas và cấu hình email của User Pool; nếu không đủ khả năng gửi email xác minh cho người chấm, không mở đăng ký.
-- **Đóng đăng ký:** trong vòng một ngày sau khi mentor xác nhận hoàn tất chấm, phải tắt tự đăng ký ở Cognito, build lại web với `VITE_ALLOW_SIGNUP=false`, sau đó vô hiệu hóa/xóa các tài khoản tự đăng ký; giữ lại tài khoản của nhóm và tài khoản grader.
+- **Đóng đăng ký:** trong vòng một ngày sau khi mentor xác nhận hoàn tất chấm, phải tắt tự đăng ký ở Cognito, build lại web với `VITE_ALLOW_SIGNUP=false`, sau đó vô hiệu hóa/xóa các tài khoản tự đăng ký; giữ lại tài khoản của nhóm và tài khoản grader. *(Từ 24/11/2026: không còn tài khoản grader riêng; khi đóng, giữ tài khoản trong danh sách được phép theo bước 3 của phương án 1 ở mục "Cập nhật 23/11/2026".)*
 - **Hạn chót đóng:** nếu chưa có thông báo hoàn tất chấm, ngày 10/12/2026 là hạn chót tuyệt đối để đóng tự đăng ký.
 
 ## Cập nhật 23/11/2026: mở sau thời hạn và quyết định xử lý
@@ -59,7 +59,7 @@ Hai phương án đã xem xét:
    3. **Xử lý tài khoản đã đăng ký** (tắt self-signup không tự động xử lý tài khoản đã có):
       - kiểm kê toàn bộ user của `cpaws-dev-users` bằng lệnh ở mục "Bằng chứng kiểm tra"; kết quả lưu ngoài repo, chỉ chia sẻ qua kênh riêng của nhóm;
       - đối chiếu với **danh sách được phép** (định nghĩa ở dưới);
-      - tài khoản ngoài danh sách và tài khoản `UNCONFIRMED`: vô hiệu hóa (`AdminDisableUser`), xóa sau khi nhóm xác nhận không còn cần (`AdminDeleteUser`);
+      - tài khoản ngoài danh sách và tài khoản `UNCONFIRMED`: kiểm lại từng tài khoản bằng `AdminGetUser` (xem "Bằng chứng kiểm tra") rồi mới vô hiệu hóa (`AdminDisableUser`), xóa sau khi nhóm xác nhận không còn cần (`AdminDeleteUser`);
       - ghi số lượng tài khoản đã vô hiệu hóa và ngày thực hiện vào Chương 4 (không ghi email hay tên người dùng).
 2. **Giữ mở có thời hạn (được chọn)** cho người chấm và đợt dùng thử của bạn bè, người thân nhóm. Điều kiện:
    - **giới hạn người dùng thử theo từng thành viên:** mỗi thành viên mời tối đa 8 người (5 thành viên, tối đa 40 người), gửi link riêng qua tin nhắn cá nhân, không đăng công khai (mạng xã hội, nhóm đông người, README, trang Hugo);
@@ -87,17 +87,19 @@ Mỗi thành viên gửi riêng cho người giám sát **email** mà người m
 | Chỉ số | Nguồn dữ liệu | Chu kỳ | Ngưỡng đóng |
 |---|---|---|---|
 | Số tài khoản tự đăng ký đã xác minh | CloudTrail Event history, sự kiện `SignUp` thành công của `cognito-idp` từ `2026-11-22T14:07:00Z`, đối chiếu `UserSub` với `sub` trong `ListUsers`, chỉ đếm `CONFIRMED` | Mỗi ngày một lần lúc 21:00 | Vượt 50 tài khoản |
-| Tài khoản chưa nhận ra | `ListUsers` (thuộc tính `email`), so với danh sách được phép | Mỗi ngày một lần lúc 21:00 | Không phải ngưỡng đóng; xử lý theo mục dưới. Đóng nếu có từ 5 tài khoản chưa nhận ra trong một ngày |
+| Tài khoản chưa nhận ra mới | CloudTrail sự kiện `SignUp` thành công trong cửa sổ đếm của ngày, đối chiếu `UserSub` với `sub` trong `ListUsers`; chỉ `CONFIRMED`, `email` không có trong danh sách được phép (xem "Cửa sổ đếm hằng ngày") | Mỗi ngày một lần lúc 21:00 | Từng tài khoản xử lý theo mục "Xử lý tài khoản chưa nhận ra". Đóng nếu có từ 5 tài khoản chưa nhận ra mới trong một cửa sổ đếm |
 | Dùng chatbot | Bảng DynamoDB `cpaws-dev-chat-usage`, dòng `pk = global`, `sk = day#<ngày>`: `request_count` và `updated_at` lúc đạt 100 | Mỗi ngày lúc 21:00 (xem ngày hôm đó) | Đạt 100 lượt trước 12:00 hai ngày liên tiếp |
 | Lỗi hạn mức email | CloudTrail, sự kiện `SignUp`/`ResendConfirmationCode` có `errorCode = LimitExceededException` | Mỗi ngày lúc 21:00 | Không đóng; nếu xuất hiện, tạo tay tài khoản cho người chấm khi được yêu cầu |
 | Đăng ký bất thường | Cùng nguồn với dòng đầu: số tài khoản tạo trong 1 giờ | Mỗi ngày lúc 21:00 | Từ 10 tài khoản trong 1 giờ |
+
+**Cửa sổ đếm hằng ngày** (cho dòng "Tài khoản chưa nhận ra mới"): lần kiểm 21:00 ngày D xét khoảng từ 21:00 ngày D−1 tới 21:00 ngày D giờ Việt Nam, tức `<D−1>T14:00:00Z` tới `<D>T14:00:00Z` theo UTC. Chỉ đếm tài khoản thỏa cả ba điều kiện: có sự kiện `SignUp` thành công (không có `errorCode`) trong cửa sổ; `UserStatus = CONFIRMED` tại lúc kiểm; `email` không có trong danh sách được phép. Không đếm lại tài khoản đã báo hoặc đã xử lý ở các ngày trước. Tài khoản đăng ký trong cửa sổ trước nhưng tới lúc kiểm ngày đó vẫn `UNCONFIRMED`, nếu sau đó xác minh, được tính ở lần kiểm đầu tiên thấy `CONFIRMED`.
 
 Kiểm một lần mỗi ngày là đủ vì CloudTrail Event history giữ sự kiện 90 ngày, chatbot đã có quota cứng 100 lượt/ngày và chi phí tối đa khoảng 1,2 USD/ngày (cách tính ở dưới), nên vài giờ chậm phát hiện không gây thiệt hại đáng kể. Kết quả mỗi lần kiểm ghi ngắn (ngày, số liệu, quyết định) vào kênh nhóm; không ghi email hay tên người dùng.
 
 **Xử lý tài khoản chưa nhận ra.** Với tài khoản tự đăng ký, đã xác minh, không khớp email trong danh sách được phép:
 1. Người giám sát hỏi trong kênh nhóm (chỉ nêu số lượng và ngày tạo) xem có thành viên nào nhận ra hoặc có người chấm báo đã đăng ký không.
 2. Nếu có người nhận ra hoặc là người chấm: thêm email vào danh sách được phép.
-3. Nếu sau 1 ngày không ai nhận ra: vô hiệu hóa riêng tài khoản đó (`AdminDisableUser`), **không đóng cả đăng ký**. Nếu sau này người chấm báo không đăng nhập được, bật lại (`AdminEnableUser`).
+3. Nếu sau 1 ngày không ai nhận ra: kiểm lại tài khoản bằng `AdminGetUser` (`ListUsers` có độ trễ nhất quán và vẫn liệt kê tài khoản đã vô hiệu hóa, nên phải xác nhận `UserStatus`, `Enabled` và `email` ngay trước khi thao tác), rồi vô hiệu hóa riêng tài khoản đó (`AdminDisableUser`), **không đóng cả đăng ký** (trừ khi chạm ngưỡng 5 tài khoản chưa nhận ra mới trong một cửa sổ đếm). Nếu sau này người chấm báo không đăng nhập được, bật lại (`AdminEnableUser`).
 
 **Không làm trong đồ án:** Cognito trigger *Post confirmation* gửi cảnh báo tức thời. Trigger này chỉ gửi cảnh báo, không tự đóng đăng ký, và cần thêm thay đổi CDK sau thời điểm đóng băng tính năng; với quy mô dùng thử và mức kiểm hằng ngày ở trên, nhóm không triển khai.
 
@@ -112,7 +114,8 @@ Kiểm một lần mỗi ngày là đủ vì CloudTrail Event history giữ sự
     --output table
   ```
   Lệnh trả 6 cột: username, ngày tạo (UTC), trạng thái, enabled, `sub`, `email`. Kết quả có email nên chỉ xem trên máy người giám sát; không dán vào repo hay kênh chung.
-- Tài khoản tự đăng ký: `aws cloudtrail lookup-events --lookup-attributes AttributeKey=EventName,AttributeValue=SignUp --start-time 2026-11-22T14:07:00Z --region ap-southeast-1`; lấy `UserSub` trong `responseElements` của các sự kiện không có `errorCode`, đối chiếu với cột `sub` ở lệnh trên.
+- Tài khoản tự đăng ký: `aws cloudtrail lookup-events --lookup-attributes AttributeKey=EventName,AttributeValue=SignUp --start-time 2026-11-22T14:07:00Z --region ap-southeast-1`; lấy `UserSub` trong `responseElements` của các sự kiện không có `errorCode`, đối chiếu với cột `sub` ở lệnh trên. Với cửa sổ đếm hằng ngày, thay `--start-time` bằng `<D−1>T14:00:00Z` và thêm `--end-time <D>T14:00:00Z`.
+- Kiểm lại một tài khoản trước khi vô hiệu hóa: `aws cognito-idp admin-get-user --user-pool-id <id pool cpaws-dev-users> --username <username> --query "[UserStatus,Enabled,UserAttributes[?Name=='email'].Value|[0]]"`. Chỉ chạy `admin-disable-user` khi kết quả vẫn là tài khoản cần xử lý và `Enabled` đang là `true`.
 
 **Cách tính 1,2 USD/ngày:** lấy chi phí thật của lần chạy dev 26/10/2026 (prompt và tool v2): 0,35 USD cho 30 câu Haiku 4.5, khoảng 0,012 USD mỗi câu `complex` (`docs/api/contract.md`, mục giới hạn `POST /chat`; đơn giá tham chiếu ở ADR-0004). Giả định cả 100 lượt/ngày đều là câu `complex` gọi Haiku, mỗi câu có số token tương đương lần chạy đó: 100 × 0,012 ≈ 1,2 USD/ngày. Con số là ước tính từ chi phí đo được, chưa tách theo token đầu vào và đầu ra; câu dài hơn hoặc gọi nhiều tool hơn sẽ tốn hơn.
 
