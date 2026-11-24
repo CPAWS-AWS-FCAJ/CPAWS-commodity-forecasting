@@ -1,9 +1,3 @@
-"""Chỉ số đánh giá dự báo log return của CPAWS theo ADR-0008.
-
-Các hàm này chỉ tính metric trên mẫu đầu vào đã được lọc ở src/eval/.
-Không tự sửa phân vị và không truy cập nhãn tương lai hoặc baseline lịch sử.
-"""
-
 from __future__ import annotations
 
 import math

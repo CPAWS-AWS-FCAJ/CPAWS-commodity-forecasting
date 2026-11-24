@@ -1,9 +1,3 @@
-"""NBP (Ngân hàng Quốc gia Ba Lan): giá vàng PLN/g và USD/PLN bảng A, không cần key.
-
-Chỉ dùng trong quality.py để đối chiếu mức giá và trung bình tháng của vàng; NBP chốt giá
-khoảng trưa giờ Warsaw nên không dùng đối chiếu return ngày (lệch một ngày với giá Mỹ).
-"""
-
 from __future__ import annotations
 
 import gzip

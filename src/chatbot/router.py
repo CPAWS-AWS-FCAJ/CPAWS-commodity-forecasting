@@ -1,20 +1,3 @@
-"""Router theo luật cho chatbot (ADR-0004 mục 1): chọn nhánh simple (Nova 2 Lite) hay complex
-(Claude Haiku 4.5) cho một câu hỏi, không gọi LLM.
-
-Thứ tự luật (luật đầu tiên khớp quyết định):
-1. ngoài phạm vi trong ngày → simple; ngoài phạm vi sản phẩm → simple, trừ khi câu còn hỏi về
-   tài sản trong phạm vi kèm ý dự báo (câu hỗn hợp) → complex
-2. việc không liên quan, không nhắc tài sản → simple
-3. tư vấn đầu tư: kèm phân tích dự báo/tin, hoặc có tài sản kèm kỳ hạn/hỏi con số → complex;
-   chỉ xin tư vấn → simple
-4. tin tức/lý do kèm tài sản → complex
-5. hỏi khái niệm (không có kỳ hạn, không hỏi con số, không hỏi "dự báo" của tài sản) → simple
-6. tài sản kèm ý dự báo, kỳ hạn hoặc hỏi con số → complex
-7. câu hỏi về chatbot, chào hỏi hoặc chỉ nhắc khái niệm, không có tài sản và kỳ hạn → simple
-8. còn lại (không chắc) → complex
-Cụm từ nằm trong configs/chatbot_router.py.
-"""
-
 from __future__ import annotations
 
 import importlib

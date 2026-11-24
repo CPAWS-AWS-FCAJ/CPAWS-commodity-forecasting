@@ -1,5 +1,3 @@
-"""Rolling orchestration. Champion commits independently of optional shadow results."""
-
 from __future__ import annotations
 
 import logging

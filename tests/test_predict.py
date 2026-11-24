@@ -1,10 +1,3 @@
-"""Lambda predict (src/forecast/predict.py, lambda_predict.py): snapshot clean → bản ghi Forecasts.
-
-S3 và DynamoDB dùng moto (không gọi AWS thật); giá tổng hợp 2019 (không đụng dữ liệu 2020 → nay).
-Phần lớn test dùng mô hình giả; test tích hợp cuối file huấn luyện DLinear thật 1 epoch trên giá
-tổng hợp 2013–2018 rồi nạp bằng DLinearNumpy.load.
-"""
-
 import json
 import logging
 import re

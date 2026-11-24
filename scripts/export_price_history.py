@@ -1,26 +1,3 @@
-"""Xuất một lần chuỗi giá cuối phiên dài (mặc định 520 phiên, ~2 năm) cho biểu đồ lịch sử của web.
-
-Bảng `Forecasts` chỉ có giá từ khi Lambda predict chạy thật (cuối 10/2026). Script này đọc snapshot
-clean mới nhất trong lake (cùng cách đọc của predict: `predict.load_snapshot`) và ghi mỗi tài sản
-một file JSON `serving/price-history/<asset>.json`. Lambda forecasts-api đọc file này cho
-`GET /forecasts/{asset}?history=N` khi bảng `Forecasts` chưa đủ N điểm (docs/api/contract.md); phiên
-mới vẫn lấy từ `Forecasts` nên không cần chạy lại hằng ngày.
-
-Giá cùng đơn vị hiển thị mà predict ghi vào `Forecasts.last_price`, tính bằng đúng hàm của predict
-(`predict.last_price_display`): dầu = giá CL=F/BZ=F; vàng, bạc = GLD/SLV × display factor gần nhất
-<= ngày, factor cũ hơn `FACTOR_MAX_LAG_SESSIONS` phiên NYSE (hoặc không có) thì bỏ ngày đó. Chỉ lấy
-phiên của lịch tài sản, giá hữu hạn > 0, không nằm trong rejected.parquet; không forward-fill.
-
-Dữ liệu Yahoo (ADR-0005): file nằm trong lake (S3 là bản chính), không commit, không gửi qua chat.
-
-Chạy (từ gốc repo):
-  python -m scripts.export_price_history --source local --lake-dir data/lake --dest local
-  python -m scripts.export_price_history --source s3 --dest s3     # bucket config.lake_bucket()
-  python -m scripts.export_price_history --source s3 --dest s3 --sessions 520 --as-of 2026-11-20
-Mã thoát: 0 = mọi tài sản đã ghi; 1 = có tài sản không có điểm nào (không ghi file đó);
-2 = `--dest s3` khi đặt LAKE_PREFIX (Lambda đọc ở gốc bucket nên dừng, không ghi gì).
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -239,7 +216,9 @@ def _positive_int(s: str) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap = argparse.ArgumentParser(
+        description="Xuất một lần chuỗi giá cuối phiên dài (mặc định 520 phiên, ~2 năm) cho biểu đồ lịch sử của web"
+    )
     ap.add_argument("--source", choices=["local", "s3"], default="local")
     ap.add_argument("--lake-dir", default="data/lake", help="lake local khi --source local")
     ap.add_argument("--dest", choices=["local", "s3"], default="local")

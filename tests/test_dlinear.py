@@ -1,5 +1,3 @@
-"""DLinear architecture, leakage, artifacts and training smoke tests."""
-
 import json
 import subprocess
 import sys

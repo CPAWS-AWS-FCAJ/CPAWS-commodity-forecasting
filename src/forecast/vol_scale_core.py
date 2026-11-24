@@ -1,22 +1,3 @@
-"""Phần thuần NumPy/pandas của K3b S1 (src/forecast/vol_scaled.py), dùng chung cho Lambda predict.
-
-Image predict không có PyEMD và không chép configs/, nên module này không import
-src.features.ceemdan_cache hay configs.k3b; hằng số khai báo tại đây, test kiểm chúng bằng đúng
-configs/k3b.py (docs/experiments/s1a-shadow-plan.md mục 3.1).
-
-- daily_log_returns(): r_s = ln(P_s / P_{s−1}) theo lịch của tài sản, đánh chỉ số tại phiên kết thúc
-  s. Cặp vắt qua phiên thiếu, bị loại hoặc giá ≤ 0 là NaN (không nối hai phiên cách xa).
-- long_vol(): σ_long,t = độ lệch chuẩn mẫu của các r_s hợp lệ trong 252 phiên lịch gần nhất ≤ t,
-  cần ít nhất 200 return hợp lệ.
-- ewma_vol(): σ²_t = λ·σ²_{t−1} + (1 − λ)·r_t², khởi tạo tại return hợp lệ thứ 252 bằng phương sai
-  mẫu của 252 return hợp lệ đầu tiên; r_t không hợp lệ thì giữ nguyên σ²_{t−1}.
-- scale_quantiles(): q_τ,h = m_h + k_t·(Q_τ,h − m_h), m_h = q50 của mốc.
-- k_at(): k_t = clip(σ_short/σ_long, 0,5, 2,0) của S1a (λ 0,94) tại một ngày gốc, cùng phép tính
-  với vol_scaled.vol_ratio().
-
-Mọi thống kê tại t chỉ dùng giá tới t, nên không đổi khi nối thêm dữ liệu sau t (có test).
-"""
-
 from __future__ import annotations
 
 from collections.abc import Iterable

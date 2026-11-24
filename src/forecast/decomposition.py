@@ -1,23 +1,3 @@
-"""Leakage-safe (causal) CEEMDAN features.
-
-Rule: the IMFs that feed a forecast made at origin t may only be computed from data
-up to and including t. We therefore decompose a window that ENDS at t and keep the
-last `keep_last` points of that window's IMFs; the model later takes the last `seq_len`
-of them (seq_len <= keep_last).
-
-Never decompose the whole series once and slice it afterwards: CEEMDAN's spline
-envelopes use neighbouring points on both sides, so values inside the series would
-contain information from the future (look-ahead leakage). It also creates a train/serve
-mismatch: in production only the right edge of the series exists.
-
-The same function must be used for backtesting, weekly retraining and daily inference.
-
-Định dạng (ADR-0007): mỗi cửa sổ lưu IMF thô (số IMF thay đổi giữa các cửa sổ, không đệm 0)
-và residue tách riêng. Cách ghép thành ma trận đầu vào (fixed_imf_matrix) chọn ở K3, không cần
-tách lại. PyEMD chạy với parallel=False (tái lập từng bit, chạy được trong Lambda); song song chỉ
-ở tầng ngoài (processes > 1).
-"""
-
 from __future__ import annotations
 
 import hashlib

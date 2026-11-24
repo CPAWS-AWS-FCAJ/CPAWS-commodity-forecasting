@@ -1,22 +1,3 @@
-"""Kiểm câu hỏi trong kịch bản demo chatbot có trùng hay gần trùng câu trong các bộ benchmark.
-
-Không gọi Bedrock, không gọi AWS. Chỉ đọc file trong repo.
-
-Câu hỏi của kịch bản lấy từ bảng Markdown: mỗi dòng bắt đầu bằng `| Q<số> |` hoặc
-`| D<số> |`, câu hỏi là đoạn đầu tiên trong ngoặc kép "..." của dòng đó.
-
-Ba phép đo trên câu đã chuẩn hóa (chữ thường, bỏ dấu câu, gộp khoảng trắng):
-- trùng: hai câu giống hệt sau chuẩn hóa;
-- ratio: difflib.SequenceMatcher trên chuỗi ký tự;
-- jaccard: Jaccard trên tập từ.
-Câu bị cờ "gần trùng" khi ratio >= --ratio hoặc jaccard >= --jaccard.
-
-Dùng (Git Bash, gốc repo):
-    python scripts/check_demo_question_overlap.py docs/demo/qa-chatbot-final-2026-11-11.md
-Mã thoát: 0 khi không có câu trùng hay gần trùng với bộ holdout v4 và các bộ benchmark;
-1 khi có. Bộ "tham khảo" (kịch bản demo cũ) chỉ báo, không làm hỏng mã thoát.
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -113,7 +94,9 @@ def best(q: str, pool: list[tuple[str, str, str]]) -> tuple[float, float, tuple[
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    ap = argparse.ArgumentParser(
+        description="Kiểm câu hỏi trong kịch bản demo chatbot có trùng hay gần trùng câu trong các bộ benchmark"
+    )
     ap.add_argument("script", type=Path, help="file kịch bản Markdown")
     ap.add_argument(
         "--ratio", type=float, default=0.75, help="ngưỡng SequenceMatcher (mặc định 0.75)"

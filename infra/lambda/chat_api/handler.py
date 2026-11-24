@@ -1,25 +1,3 @@
-"""Lambda `POST /chat` (hợp đồng: `docs/api/contract.md`, mục `POST /chat`, PR #41).
-
-Đóng gói asset Lambda (infra/stacks/chat_asset.py; tests/test_infra_chat_api.py kiểm đủ file):
-    handler.py
-    forecast_format.py           ← infra/lambda/forecast_api/forecast_format.py
-    chatbot/__init__.py, tools.py, news.py, chat.py, citations.py, quota.py   ← src/chatbot/
-    prompts/chatbot-nova-v2.md, chatbot-haiku-v2.md   ← docs/prompts/ (bản đã khóa SHA-256)
-    news/gold.json, silver.json, brent.json, wti.json ← infra/lambda/chat_api/news/ (demo, NEWS_DIR;
-        cách làm mới và bật: docs/api/demo-news.md)
-
-Biến môi trường:
-- FORECASTS_TABLE_NAME (bắt buộc), AWS_REGION;
-- CHAT_USAGE_TABLE_NAME (bắt buộc: bảng đếm lượt hỏi chat-usage), CHAT_USER_DAILY_LIMIT (mặc định
-  20), CHAT_GLOBAL_DAILY_LIMIT (mặc định 100); PR #41 mục 3, 4;
-- NEWS_TABLE_NAME (bảng NewsLabels, ADR-0003 mục 6), NEWS_SORT_KEY (tên thuộc tính SK, mặc định
-  "sk"); hoặc NEWS_DIR (thư mục JSON `<asset>.json` cho demo); không đặt thì get_news rỗng;
-- PROMPT_DIR (mặc định thư mục `prompts` cạnh handler);
-- ALLOWED_ORIGIN (CORS, mặc định "*");
-- GUARDRAIL_ID, GUARDRAIL_VERSION (không đặt thì không gắn Guardrail);
-- LOG_QUESTIONS = "1" để ghi nguyên văn câu hỏi vào log (chỉ dev; PR #41 mục 7).
-"""
-
 from __future__ import annotations
 
 import json

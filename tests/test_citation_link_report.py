@@ -1,10 +1,3 @@
-"""Script đếm URL lạ của benchmark (scripts/benchmark/citation_link_report.py): không gọi mạng.
-
-Fixture là ca thật buổi tập 7/11: link "pressrelease" (thiếu "s") so với link đã lưu
-"pressreleases". Script chỉ đếm và liệt kê; check_answer của benchmark chấm URL lạ là trượt bằng
-cùng hàm src/chatbot/citations.py (Khải, review PR #104 điểm 3, thay phương án (b) ngày 8/11).
-"""
-
 from __future__ import annotations
 
 import importlib.util

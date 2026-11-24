@@ -1,22 +1,3 @@
-"""Benchmark gắn nhãn tin bằng Nova 2 Lite (labeling-v2 trên case giả lập, labeling-v3 trên tin thật).
-
-Chạy:
-    python scripts/benchmark/labeling_benchmark.py --dry-run     # model giả, không cần AWS
-    python scripts/benchmark/labeling_benchmark.py               # gọi Bedrock thật, sau `aws login`
-    python scripts/benchmark/labeling_benchmark.py --config labeling_benchmark_v3 [--dry-run]
-
-Mặc định dùng configs/labeling_benchmark.py (v2). Với v3, chạy thật chỉ được khi bộ case đã
-chốt (status "locked") và ngưỡng trong bộ case khớp cấu hình.
-
-Mỗi case gọi model một lần qua Converse, ép gọi tool bằng toolChoice. Đầu ra không hợp lệ thì
-gọi lại đúng một lần kèm lỗi validation; bị cắt do max_tokens thì tính invalid, không gọi lại.
-Chỉ gửi tiêu đề và tóm tắt trong <article>; không gửi URL, ngày hay metadata khác.
-
-Ghi raw.jsonl (từng case) và summary.json (chỉ số, ngưỡng, kết luận) vào
-<RESULTS_DIR>/news-labeling-<YYYY-MM-DD>[-dryrun]/. Không ghi đè kết quả chạy thật đã có,
-trừ khi truyền --force. Cấu hình: configs/labeling_benchmark.py.
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -482,7 +463,9 @@ def bedrock_client(profile: str, region: str):
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap = argparse.ArgumentParser(
+        description="Benchmark gắn nhãn tin bằng Nova 2 Lite (labeling-v2 trên case giả lập, labeling-v3 trên tin thật)"
+    )
     ap.add_argument("--dry-run", action="store_true", help="model giả trả đúng nhãn kỳ vọng")
     ap.add_argument(
         "--config", default="labeling_benchmark", help="module trong configs/ (mặc định v2)"

@@ -1,26 +1,3 @@
-"""EDA giá vàng, bạc, Brent, WTI trên bản clean mới nhất (ADR-0005). Tái lập: cùng bản clean → cùng
-kết quả (không có ngẫu nhiên; ghi dt đầu vào và sha256 của file).
-
-Chạy:
-  python scripts/eda_prices.py                      # bản clean mới nhất trong data/lake
-  python scripts/eda_prices.py --input-dt 2026-10-09
-
-Đầu ra (gitignore): data/lake/eda/dt=<ngày chạy>/
-  eda.json        toàn bộ số liệu
-  summary.md      các bảng tổng hợp (không có chuỗi giá) để chép vào docs/eda/
-  *.csv           bảng chi tiết; wti_around_2020-04-20.csv có giá (chỉ để kiểm tra nội bộ)
-  *.png           độ biến động trượt 20 phiên, ACF
-
-Quy ước (đã chốt với Long):
-- Return h phiên: src.forecast.returns.horizon_log_returns trên lịch phiên riêng của từng tài sản
-  (gold/silver: NYSE, wti/brent: CME). Phiên lịch không có giá (dòng bị loại hoặc thiếu) → NaN,
-  không forward-fill; mọi cửa sổ chạm phiên đó là NaN. WTI 20/4/2020 (giá âm) → NaN.
-- Cửa sổ gán theo ngày gốc t; chỉ giữ cửa sổ có t và t+h cùng nằm trong giai đoạn (cửa sổ 2019
-  không chạm dữ liệu 2020).
-- Thống kê phân phối return CHỈ cho 2014–2018 (train) và 2019 (validation). 2020 → nay chỉ có
-  chất lượng dữ liệu.
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -560,7 +537,9 @@ def run(lake: Path, input_dt: str | None, run_dt: str) -> dict:
 
 
 def main(argv: list[str] | None = None) -> None:
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap = argparse.ArgumentParser(
+        description="EDA giá vàng, bạc, Brent, WTI trên bản clean mới nhất (ADR-0005). Tái lập: cùng bản clean → cùng kết quả (không có ngẫu nhiên; ghi dt đầu vào và sha256 của file)"
+    )
     ap.add_argument("--lake-dir", default=str(ROOT / "data" / "lake"))
     ap.add_argument("--input-dt", default=None, help="dt của bản clean; bỏ trống = mới nhất")
     ap.add_argument("--run-dt", default=datetime.now(UTC).date().isoformat())

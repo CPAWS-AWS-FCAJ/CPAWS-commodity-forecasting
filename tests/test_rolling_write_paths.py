@@ -1,12 +1,3 @@
-"""Quét đường ghi S3 của job accuracy (review IAM #89 của Tuấn, 11/11/2026).
-
-IAM cho role job `s3:PutObject` trên `eval/shadow_eval/*`. Việc không ghi đè report do code bảo
-đảm (`IfNoneMatch="*"`), nên test chốt hai điều:
-1. Mọi module mà handler job nạp vào chỉ có một lệnh ghi S3: `Sources.write_shadow`, luôn kèm
-   `IfNoneMatch="*"`.
-2. Mọi `put_object` trong `src/eval/` (kể cả script offline) đều có `IfNoneMatch="*"`.
-"""
-
 import ast
 import json
 import subprocess

@@ -1,11 +1,3 @@
-"""Bộ tin demo cho `get_news` (infra/lambda/chat_api/news/, dùng qua NEWS_DIR khi demo 8/11/2026).
-
-Kiểm: mỗi tài sản một file đọc được bằng JsonFileNewsRepository, không tin nào bị get_news bỏ,
-7 trường đúng schema của contract (docs/api/contract.md, mục "Nguồn dữ liệu của tool get_news"),
-nguồn chỉ là trang chính thức Fed/EIA và quy ước gắn nhãn labeling-v3 giữa các tài sản.
-Nguồn, nhãn và cách làm mới bộ tin: docs/api/demo-news.md.
-"""
-
 from __future__ import annotations
 
 import datetime as dt

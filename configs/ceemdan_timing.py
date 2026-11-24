@@ -1,9 +1,3 @@
-"""Cấu hình thí nghiệm đo thời gian CEEMDAN theo cửa sổ cho vàng (scripts/ceemdan_timing.py).
-
-Chỉ dùng dữ liệu tới hết 2019 (train + validation); không đọc hay tóm tắt IMF của 2020 → nay.
-Thay đổi tham số ở đây, không sửa trong script.
-"""
-
 ASSET = "gold"  # GLD, bản clean mới nhất
 DATA_END = "2019-12-31"  # cắt chuỗi ngay khi đọc
 SAMPLE_START = "2014-01-01"  # ngày gốc lấy mẫu trong 2014–2019

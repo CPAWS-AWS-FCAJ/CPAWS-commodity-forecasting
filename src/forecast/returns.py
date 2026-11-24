@@ -1,17 +1,3 @@
-"""Target log return theo lịch giao dịch, chuẩn hóa phân vị, xác suất tăng, quy đổi giá và VND.
-
-Mô hình CPAWS dự báo phân vị log return h phiên (không dự báo mức giá) để tránh "độ chính xác ảo".
-Quy tắc theo ADR-0008 mục 1–3:
-- t + h là phiên thứ h sau t trên lịch giao dịch của tài sản (CME cho BZ=F, CL=F; NYSE cho GLD,
-  SLV), không theo vị trí dòng.
-- Phân vị chuẩn hóa đúng một lần bằng normalize_quantiles() (np.sort trên từng (t, h)); các hàm
-  phía sau (prob_up, prob_up_pchip, quantiles_to_prices) không tự sửa mà báo ValueError.
-- prob_up nội suy tuyến tính hàm phân phối qua các phân vị, kẹp trong [0.05, 0.95].
-
-Hàm công khai dùng chung cho DLinear (Long), Lambda predict (Tiến), seed dữ liệu mẫu (Tuấn):
-giữ tên và kiểu dữ liệu ổn định.
-"""
-
 from __future__ import annotations
 
 import logging

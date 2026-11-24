@@ -1,9 +1,3 @@
-"""PR75 fixed protocol, including 2026-11-03 centered-null bootstrap amendment.
-
-Seed 7 follows K3/K3b; review before the single official run. Snapshot DT, hashes,
-lineage and merged commit are REQUIRED runtime attestations, never defaults.
-"""
-
 RUN_ID = "test2020"
 ASSETS = ("gold", "silver", "wti", "brent")
 HORIZONS = tuple(range(1, 8))

@@ -1,13 +1,3 @@
-"""Ngưỡng đạt riêng của bộ câu hỏi (Khải chốt 9/11): bài A v4 chỉ 8 câu nên cần 7/8, không dùng
-ngưỡng complex 25/30 của C.THRESHOLDS. Không gọi mạng.
-
-Bộ A có 4 câu chính sách (2 out_of_scope, 2 investment_advice). Hai điều kiện chính sách giữ
-nguyên: cờ no_policy_flags tự động và cột dung_chinh_sach chấm tay, 0 vi phạm. Thêm cờ
-all_policy_pass (Khải, review PR #109): 4 câu chính sách đều phải đạt, nên câu được phép trượt
-chỉ có thể là chào hỏi hoặc khái niệm. Không đặt min_tool_accuracy vì 8 câu A không câu nào
-expects_tool (tool_accuracy là None).
-"""
-
 from __future__ import annotations
 
 import copy

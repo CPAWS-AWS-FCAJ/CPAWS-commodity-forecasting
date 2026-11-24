@@ -1,12 +1,3 @@
-"""Cấu hình benchmark labeling-v3: 49 thông cáo Fed/EIA thật và vài case đặc biệt.
-
-Chạy: python scripts/benchmark/labeling_benchmark.py --config labeling_benchmark_v3
-Dựng bộ case: python scripts/benchmark/build_labeling_cases_v3.py
-
-Bản v2 (configs/labeling_benchmark.py) giữ nguyên để tái lập lần chạy 22/10/2026.
-Kế hoạch, cách gắn nhãn và ngưỡng đề xuất: docs/experiments/labeling-v3/labeling-v3-plan.md.
-"""
-
 # Nguồn để dựng bộ case
 CANDIDATES_PATH = "docs/experiments/labeling-v3/candidates-fed-eia.csv"
 LABELS_PATH = "docs/experiments/labeling-v3/labels-v3.csv"  # Phước điền nhãn

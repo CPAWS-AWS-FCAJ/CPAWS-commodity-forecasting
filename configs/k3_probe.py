@@ -1,9 +1,3 @@
-"""Cấu hình probe K3 (scripts/k3_ceemdan_probe.py): kiểm cache IMF CEEMDAN, số IMF, thang giá trị
-và số mẫu trước khi train mô hình chính. Chỉ đọc dữ liệu tới CUTOFF (ADR-0008 mục 7).
-
-Tham số CEEMDAN (trials, epsilon, seed, keep_last) lấy từ configs/ceemdan_cache.py, không lặp ở đây.
-"""
-
 ASSETS = ["gold", "silver", "brent", "wti"]
 WINDOWS = [252, 504]
 SEQ_LENS = [30, 60, 120]  # <= keep_last (128), ADR-0007

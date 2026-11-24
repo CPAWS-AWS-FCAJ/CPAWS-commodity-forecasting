@@ -1,9 +1,3 @@
-"""Nạp giá ≤ CUTOFF và chia train theo thời gian (kế hoạch mục 2, 3.2).
-
-Chỉ đọc dòng có `date` ≤ 2018-12-31: cắt ngay khi đọc parquet bằng filter của pyarrow, rồi kiểm
-lại ngày lớn nhất của cả prices lẫn rejected. Không có hàm nào ở đây trả về dữ liệu từ 2019.
-"""
-
 from __future__ import annotations
 
 import hashlib

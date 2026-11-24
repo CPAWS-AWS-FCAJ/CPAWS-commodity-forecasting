@@ -1,6 +1,3 @@
-"""requirements-predict.txt và docker/predict/ (image Lambda predict): đủ thư viện và code cho
-đường chạy predict, không kéo thư viện nặng, cùng base image với ingest."""
-
 import ast
 import re
 from importlib.metadata import version

@@ -1,7 +1,3 @@
-"""K4 run_k4 trên giá GIẢ (không đọc lake thật): bốn mô hình, combo, tập chung kiểu mục 8, đánh giá
-cấu hình cross_validation, MCS, quy tắc chọn, mốc cắt 2018-12-31, chặn cache CEEMDAN, phần chặn
-val2019. Không chạy trên dữ liệu thật."""
-
 import json
 from pathlib import Path
 

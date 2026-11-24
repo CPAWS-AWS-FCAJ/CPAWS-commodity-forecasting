@@ -1,9 +1,3 @@
-"""Cấu hình K3b: co giãn theo biến động, chốt trước khi chạy (docs/experiments/k3b-volatility-plan.md).
-
-Không thêm ứng viên, không đổi λ, ngưỡng kẹp hay siêu tham số sau khi đã thấy kết quả 2019
-(kế hoạch, phần trạng thái). Dữ liệu, cache và cách đánh giá dùng lại của K3 (configs/k3_grid.py).
-"""
-
 from configs import k3_grid as K3
 
 ASSETS = K3.ASSETS

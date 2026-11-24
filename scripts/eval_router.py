@@ -1,16 +1,3 @@
-"""Chấm router theo luật (src/chatbot/router.py) trên một bộ câu có nhãn, không gọi mạng.
-
-Dùng cho bộ giữ riêng (held-out) khoảng 30 câu do Khải soạn: chạy MỘT lần trên commit luật đã khóa,
-không sửa luật theo kết quả. Ngưỡng ở docs/experiments/chatbot-router-proposal.md mục 4.
-
-Chạy:
-  python scripts/eval_router.py duong/dan/heldout.jsonl
-
-Mỗi dòng của file là một JSON: {"id": "...", "question": "...", "expected_branch": "simple"}
-(expected_branch là "simple" hoặc "complex"; có thể thêm "group", "note"). Script in SHA-256 của
-file câu hỏi và của hai file luật để ghi lại đúng lần chạy. Mã thoát 0 khi đạt, 1 khi không đạt.
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -72,7 +59,9 @@ def evaluate(cases: list[dict]) -> dict:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(
+        description="Chấm router theo luật (src/chatbot/router.py) trên một bộ câu có nhãn, không gọi mạng"
+    )
     parser.add_argument("cases", type=Path, help="file JSONL có nhãn expected_branch")
     args = parser.parse_args(argv)
     sys.stdout.reconfigure(encoding="utf-8")  # console Windows mặc định cp1252

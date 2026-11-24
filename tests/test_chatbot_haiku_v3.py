@@ -1,10 +1,3 @@
-"""Prompt chatbot-haiku-v3 và hai bộ chỉ chạy dev (v2-seen, a-types-haiku): không gọi mạng.
-
-Kiểm tra: thêm bộ prompt v3 không lệch khóa SHA-256 bộ v2; hai bộ dev không chạy official được;
-prompt v3 viết chung (không số thập phân, không trùng cụm câu hỏi bài B bộ v2); 8 câu loại bài A
-lấy nguyên từ bộ v2 bài A. Kế hoạch: docs/experiments/chatbot-haiku-v3-dev-plan.md.
-"""
-
 import copy
 import importlib.util
 import re

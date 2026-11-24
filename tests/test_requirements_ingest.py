@@ -1,5 +1,3 @@
-"""requirements-ingest.txt (image Lambda ingest): đủ thư viện cho src/data, không kéo thư viện nặng."""
-
 import ast
 import re
 import subprocess

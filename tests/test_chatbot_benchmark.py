@@ -1,9 +1,3 @@
-"""Benchmark chatbot (scripts/benchmark/chatbot_benchmark.py): không gọi mạng.
-
-Kiểm tra bộ câu hỏi đúng schema và phân bổ, fixture đúng contract, tool giả lập, vòng gọi tool
-của ConverseStream, lỗi API chạy lại một lần, và từng hàm chấm tự động với câu trả lời giả.
-"""
-
 import copy
 import csv
 import importlib.util

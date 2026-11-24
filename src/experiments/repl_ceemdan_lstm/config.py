@@ -1,9 +1,3 @@
-"""Hằng số đã chốt của minh họa CEEMDAN + LSTM (kế hoạch mục 2, 3.1–3.3).
-
-Không đổi giá trị sau khi đã thấy kết quả đánh giá 2017–2018 (kế hoạch mục 3.2). Tham số CEEMDAN
-(trials, epsilon, seed, keep_last) lấy từ configs/ceemdan_cache.py, giống w252 của K3.
-"""
-
 from __future__ import annotations
 
 from configs import ceemdan_cache as CC

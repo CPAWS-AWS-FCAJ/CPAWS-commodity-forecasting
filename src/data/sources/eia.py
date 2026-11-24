@@ -1,9 +1,3 @@
-"""EIA API v2, giá giao ngay RWTC/RBRTE (chỉ dùng đối chiếu). Phân trang 5.000 dòng/lần.
-
-EIA phát hành giá giao ngay hằng tuần. Key bắt buộc nằm trong query (EIA không đọc header),
-nên không bao giờ log URL hay đối tượng request.
-"""
-
 from __future__ import annotations
 
 import gzip

@@ -1,9 +1,3 @@
-"""Router theo luật của chatbot (src/chatbot/router.py, ADR-0004 mục 1): không gọi mạng.
-
-Bộ câu phát triển tests/router/cases.jsonl có nhãn simple/complex. Lỗi đắt nhất là câu cần số
-liệu bị đưa sang nhánh simple (Nova không có tool), nên kiểm tra riêng số lỗi complex → simple.
-"""
-
 import json
 from collections import Counter
 from pathlib import Path

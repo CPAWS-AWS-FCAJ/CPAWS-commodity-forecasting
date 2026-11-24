@@ -1,23 +1,3 @@
-"""K3: train + đánh giá CEEMDAN-DLinear trên validation 2019 (docs/experiments/k3-ceemdan-plan.md).
-
-Chạy từ gốc repo, bằng venv có numpy 2.4.6 + EMD-signal 1.10.0 (nằm trong cfg_hash của cache):
-  python -m src.forecast.train_ceemdan [--lake-dir ../CPAWS-commodity-forecasting/data/lake]
-      [--output-dir data] [--run-id k3-val2019] [--threads 1]
-
-- Lake chỉ đọc: bản clean configs/k3_grid.CLEAN_DT cắt tại 2019-12-31 ngay khi đọc (filter của
-  pyarrow); cache CEEMDAN cfg_hash 4c3229533ae3 đọc qua src/features/ceemdan_cache.py, không dựng lại.
-- Lưới 8 cấu hình × 4 tài sản × 3 seed, 20 epoch cố định trên 2014–2018 (không early stopping);
-  dự báo validation 2019; trung bình phân vị 3 seed rồi normalize_quantiles() đúng một lần.
-- Đánh giá bằng chính src/eval/walk_forward.py (_make_detail, _summarize: chỉ số metrics.py, CI
-  block bootstrap 20 × 1000 trên lịch hợp nhất NYSE/CME, DM theo DM_GAP_POLICY), trên tập ngày gốc
-  chung của 8 cấu hình từng tài sản; baseline-q252 và DLinear MVP chấm trên cùng tập.
-- Chỉ ghi local: artifact <output>/models/<asset>/<model_version>/ (integration_eligible = false),
-  kết quả <output>/eval/k3/<run_id>/. Không ghi S3, không đọc 2020 → nay, không chạy tập test.
-
-Điều kiện dừng (StopRun, thoát mã 2): đọc được dữ liệu sau 2019, số mẫu khác báo cáo probe, loss
-NaN/inf, parity torch–NumPy lệch, một cấu hình chạy quá 10 phút.
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -858,7 +838,9 @@ def render(summary: dict, named: dict) -> str:
 
 
 def main(argv=None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(
+        description="K3: train + đánh giá CEEMDAN-DLinear trên validation 2019 (docs/experiments/k3-ceemdan-plan.md)"
+    )
     parser.add_argument("--lake-dir", type=Path, default=DEFAULT_LAKE)
     parser.add_argument("--output-dir", type=Path, default=ROOT / "data")
     parser.add_argument("--run-id", default="k3-val2019")

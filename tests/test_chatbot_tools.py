@@ -1,10 +1,3 @@
-"""Test tool get_forecast của chatbot (src/chatbot/tools.py), không gọi AWS.
-
-Dùng fixture benchmark v1 (`tests/chatbot/fixtures/forecasts/`, dạng GET /forecasts/{asset}) và
-bản ghi bảng `Forecasts` tạo bằng `to_forecast_record()` đặt trong bảng DynamoDB giả. Không dùng
-fixture của bộ v2 để bộ đó vẫn là phép thử độc lập.
-"""
-
 from __future__ import annotations
 
 import copy

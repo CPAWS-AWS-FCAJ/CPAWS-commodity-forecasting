@@ -1,5 +1,3 @@
-"""Read-only API handlers for the CPAWS Forecasts DynamoDB table."""
-
 from __future__ import annotations
 
 import json

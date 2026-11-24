@@ -1,5 +1,3 @@
-"""K3b S1: σ_long, σ_short (EWMA), k_t và phân vị co giãn: không rò rỉ, phiên thiếu, kẹp, neo mốc."""
-
 import numpy as np
 import pandas as pd
 import pytest

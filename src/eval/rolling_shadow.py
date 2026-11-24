@@ -1,5 +1,3 @@
-"""Independent S1a paired comparison; no Accuracy table writes or champion mutation."""
-
 from __future__ import annotations
 
 import io

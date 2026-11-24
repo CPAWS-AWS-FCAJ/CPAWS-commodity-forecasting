@@ -1,15 +1,3 @@
-"""Stack CpawsData: S3 data lake, ECR, Lambda ingest, Lambda predict và lịch chạy hằng ngày.
-
-Luồng hằng ngày: Scheduler → Lambda ingest (bất đồng bộ, retry 1) → destination OnSuccess và
-OnFailure đều gọi Lambda predict (retry 0). Ingest lỗi một nguồn vẫn ghi snapshot cho tài sản tốt
-nên predict vẫn chạy; tài sản thiếu phiên cuối bị bỏ qua và predict raise PredictFailed (alarm).
-
-Job accuracy rolling_8w (Walk-forward Contract §7): Lambda riêng từ image predict (CMD
-src.eval.lambda_accuracy.handler), lịch 13:45 UTC thứ Ba-thứ Bảy. Lịch tạo TẮT (#89), BẬT sau
-dry-run 4 tài sản và review (handoff §7 bước 4); tắt lại không cần sửa code:
-cdk deploy CpawsData -c accuracy_schedule=off.
-"""
-
 import json
 import re
 from collections.abc import Mapping

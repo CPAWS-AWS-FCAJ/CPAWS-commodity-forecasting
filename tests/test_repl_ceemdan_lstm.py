@@ -1,5 +1,3 @@
-"""Minh họa CEEMDAN + LSTM, bước 1 (kế hoạch mục 3.3): chỉ dữ liệu tổng hợp, không cần GPU."""
-
 import importlib
 import json
 import subprocess

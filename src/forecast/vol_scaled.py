@@ -1,23 +1,3 @@
-"""K3b S1: mốc 252 phiên co giãn theo biến động (docs/experiments/k3b-volatility-plan.md mục 3, 6.3).
-
-- daily_log_returns(): r_s = ln(P_s / P_{s−1}) theo lịch của tài sản, đánh chỉ số tại phiên kết thúc
-  s. Cặp vắt qua phiên thiếu, bị loại hoặc giá ≤ 0 là NaN (không nối hai phiên cách xa).
-- long_vol(): σ_long,t = độ lệch chuẩn mẫu của các r_s hợp lệ trong 252 phiên lịch gần nhất ≤ t,
-  cần ít nhất 200 return hợp lệ.
-- ewma_vol(): σ²_t = λ·σ²_{t−1} + (1 − λ)·r_t², khởi tạo tại return hợp lệ thứ 252 bằng phương sai
-  mẫu của 252 return hợp lệ đầu tiên; r_t không hợp lệ thì giữ nguyên σ²_{t−1}.
-- vol_ratio(): σ_short/σ_long (chưa kẹp, cho S2) và k_t = clip(σ_short/σ_long, 0,5, 2,0) tại các
-  ngày gốc.
-- scale_quantiles(): q_τ,h = m_h + k_t·(Q_τ,h − m_h), m_h = q50 của mốc. Trung vị và thứ tự phân vị
-  giữ nguyên vì k_t > 0.
-- s1_quantiles(): baseline_quantiles() của K3 (mốc 252 phiên tại t) co giãn theo k_t.
-
-daily_log_returns, long_vol, ewma_vol, scale_quantiles nằm ở src/forecast/vol_scale_core.py (thuần
-NumPy/pandas, dùng chung với Lambda predict) và được import lại ở đây.
-
-Mọi thống kê tại t chỉ dùng giá tới t, nên không đổi khi nối thêm dữ liệu sau t (có test).
-"""
-
 from __future__ import annotations
 
 from collections.abc import Iterable

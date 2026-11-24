@@ -1,17 +1,3 @@
-"""Dựng bộ case labeling-v3 từ danh sách ứng viên Fed/EIA và file nhãn do người gắn điền.
-
-Chạy:
-    python scripts/benchmark/build_labeling_cases_v3.py                        # kiểm, ghi bản draft
-    python scripts/benchmark/build_labeling_cases_v3.py --lock --approved-by "Khải"
-
-Tiêu đề và tóm tắt lấy từ candidates-fed-eia.csv theo id, không lấy từ file nhãn. Case đặc biệt
-(id X…) dựng từ một dòng gốc (base_id): injection = tóm tắt gốc + injected_text, empty_summary =
-tóm tắt rỗng. Mọi nhãn phải qua schema và quy tắc v3 (validate_output với cấu hình v3).
-
-Bộ case đã chốt (status "locked") không bị ghi đè; muốn đổi phải xóa file một cách có chủ ý.
-Cấu hình: configs/labeling_benchmark_v3.py.
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -208,7 +194,9 @@ def _sha256(path: Path) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap = argparse.ArgumentParser(
+        description="Dựng bộ case labeling-v3 từ danh sách ứng viên Fed/EIA và file nhãn do người gắn điền"
+    )
     ap.add_argument("--lock", action="store_true", help="chốt bộ case (status locked)")
     ap.add_argument("--approved-by", default="", help="người duyệt đáp án và ngưỡng")
     ap.add_argument("--out", type=Path, default=ROOT / C.CASES_PATH)

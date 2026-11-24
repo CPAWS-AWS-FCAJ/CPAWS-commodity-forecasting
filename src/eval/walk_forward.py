@@ -1,13 +1,3 @@
-"""Fixed-model validation 2019 orchestration (WF contract/ADR-0008/Accuracy PR10).
-
-Only local NumPy inference and evaluation. No training, cloud clients or imports
-from production predict. Dates are exchange sessions; timestamps are UTC.
-
-evaluation_kind "cross_validation" (2016-2018) is an internal K4 evaluation only
-(docs/experiments/k4-plan.md section 8): its results are written under eval/k4/ and
-never to the Accuracy table, docs/api/accuracy-schema.md or production.
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -1518,7 +1508,9 @@ def run_validation(clean_dir, model_root, output_dir, cfg=None, *, run_registry_
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(
+        description="Fixed-model validation 2019 orchestration (WF contract/ADR-0008/Accuracy PR10)"
+    )
     parser.add_argument("--clean-dir", type=Path, required=True)
     parser.add_argument("--model-root", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path)

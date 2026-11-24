@@ -1,10 +1,3 @@
-"""Tạo bản ghi bảng DynamoDB `Forecasts` đúng docs/api/contract.md (ADR-0008).
-
-Dùng chung cho Lambda predict (Tiến), script seed dữ liệu mẫu (Tuấn) và backtest (Long): giữ tên
-hàm, tham số và kiểu dữ liệu ổn định. Hàm không tự sửa phân vị: phân vị phải đã qua
-returns.normalize_quantiles() (không giảm trên từng h), nếu không báo ValueError.
-"""
-
 from __future__ import annotations
 
 from collections.abc import Sequence

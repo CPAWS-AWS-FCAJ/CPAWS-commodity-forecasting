@@ -1,13 +1,3 @@
-"""Lịch phiên giao dịch (pandas_market_calendars) và ngày đáo hạn hợp đồng để gắn flag roll.
-
-- NYSE: ETF (GLD, SLV).
-- CME: ngày có settlement của năng lượng/kim loại = ngày hợp lệ của CMEGlobex_EnergyAndMetals,
-  trừ các ngày Globex chỉ mở rút ngắn mà NYSE nghỉ (Thanksgiving, 4/7, MLK...): những ngày này
-  không có settlement, giao dịch tính cho phiên sau. Black Friday, 24/12 vẫn có settlement.
-- ICE: lịch IEPA (ICE Futures Europe) cho RBRTE.
-- FX: thứ Hai – thứ Sáu.
-"""
-
 from __future__ import annotations
 
 import warnings

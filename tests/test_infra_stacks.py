@@ -1,9 +1,3 @@
-"""Kiểm tra các stack CDK: alarm theo dõi đúng Lambda, lịch khớp config, luồng ingest → predict.
-
-Cần aws-cdk-lib (có trong infra .venv, không có trong CI) nên tự bỏ qua khi thiếu.
-Chạy: infra .venv Scripts activate rồi pytest tests/test_infra_stacks.py (từ gốc repo).
-"""
-
 import ast
 import copy
 import json

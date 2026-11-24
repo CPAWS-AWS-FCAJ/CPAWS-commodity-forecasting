@@ -1,22 +1,3 @@
-"""Đặc trưng CEEMDAN cho mô hình chính K3 (docs/experiments/k3-ceemdan-plan.md mục 1–2).
-
-Một đường tính duy nhất cho train, validation và (sau này) predict:
-- load_cache(): đọc cửa sổ IMF đã tính theo ADR-0007 (không tách lại), kiểm cfg_hash.
-- ceemdan_inputs(): phần biết được tại t: ma trận IMF chuẩn hóa theo P_t và hợp lệ của input.
-- baseline_quantiles(): mốc 252 phiên tại t (neo đầu ra mô hình), chỉ từ return đã hoàn tất.
-- ceemdan_samples(): quy tắc A cho một giai đoạn có nhãn = ceemdan_inputs + target hợp lệ cả 7 h
-  + ngày đích trong giai đoạn + mốc hợp lệ cả 7 h.
-- ColumnScaler: mean/std từng cột, fit chỉ trên mảng train được truyền vào.
-
-Quy tắc A (kế hoạch mục 1): có cửa sổ CEEMDAN kết thúc tại t; make_windows(seq_len) hợp lệ (đoạn
-seq_len đưa vào mô hình không có phiên thiếu); published_at kịp như dlinear_data. Phần cũ hơn của
-cửa sổ decompose được phép có phiên thiếu; số phiên thiếu ghi vào diag.
-
-Chuẩn hóa (kế hoạch mục 2): fixed_imf_matrix(K, L) → mọi cột chia cho P_t (giá cuối cửa sổ, đã biết
-tại t), cột residue đổi thành residue/P_t − 1. Tổng các cột của fixed_imf_matrix bằng giá P_s, nên
-tổng các cột sau bước này bằng P_s/P_t − 1. Chuẩn hóa từng cột (ColumnScaler) là bước riêng.
-"""
-
 from __future__ import annotations
 
 from collections.abc import Iterable

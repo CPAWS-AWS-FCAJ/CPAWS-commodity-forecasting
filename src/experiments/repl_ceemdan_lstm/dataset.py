@@ -1,18 +1,3 @@
-"""Mẫu một bước tới cho 3 biến thể (kế hoạch mục 3.1, 3.2; quyết định Khải 3/11 mục 2–7).
-
-Tại ngày gốc t (một dòng giá được giữ), t + 1 là phiên kế tiếp theo lịch sàn của tài sản:
-- r_raw: đầu vào giá tại SEQ_LEN dòng cuối tới t; target giá tại t + 1.
-- r_full: đầu vào giá trị 4 thành phần của bản tách toàn chuỗi tại SEQ_LEN dòng cuối tới t;
-  target giá trị các thành phần tại t + 1 (cùng bản tách).
-- r_causal: đầu vào SEQ_LEN giá trị cuối của từng thành phần trong cửa sổ kết thúc tại t; target
-  giá trị cuối của thành phần trong cửa sổ kết thúc tại t + 1.
-Cửa sổ đầu vào tính theo dòng giá (được vắt qua phiên thiếu, quy tắc A của K3).
-
-Mặt nạ chung theo tài sản: một ngày gốc được dùng khi cả 3 biến thể đều có mẫu, nên mọi biến thể,
-naive và baseline-q252 được đo trên cùng tập ngày. Đoạn fit / early_stop / calib lấy từ
-`split_train` (tính một lần mỗi tài sản); đoạn eval gồm ngày gốc trong EVAL có t + 1 ≤ CUTOFF.
-"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass, field

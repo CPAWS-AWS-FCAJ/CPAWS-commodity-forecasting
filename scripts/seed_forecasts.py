@@ -1,5 +1,3 @@
-"""Seed or delete synthetic sample forecasts in DynamoDB."""
-
 import argparse
 from datetime import UTC, date, datetime
 from decimal import ROUND_HALF_UP, Decimal

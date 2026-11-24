@@ -1,23 +1,3 @@
-"""Hàm đặc trưng dùng chung cho backtest, retrain, walk-forward, training adapter và Lambda predict.
-
-Đúng 3 hàm công khai, cùng một cách tính cho mọi nơi gọi (không có tham số mode/is_training):
-- build_feature_frame(prices, asset): bảng đặc trưng theo phiên của lịch tài sản.
-- make_windows(frame, base_dates, window): cắt cửa sổ input; không nơi nào khác tự cắt cửa sổ.
-- latest_base_date(frame): ngày gốc dự báo cho Lambda predict (phiên có giá cuối cùng).
-
-Quy tắc (ADR-0008 mục 1, 8):
-- MVP chỉ dùng giá của chính tài sản: log_return_1_end tại phiên u = log return một phiên KẾT THÚC
-  ở u, tức r_1(phiên trước u) của returns.horizon_log_returns, đổi nhãn sang u theo lịch.
-- Giá hợp lệ: có dòng trong bảng clean, không thuộc invalid_dates, giá > 0. Cột flag không được
-  đọc (roll, jump, xcheck_*, stale_source... không làm mất hiệu lực). Không forward-fill, không điền 0.
-- Cửa sổ tại base_date t gồm `window` phiên lịch liên tiếp [t-window+1, ..., t], cũ → mới; cần
-  window + 1 giá hợp lệ liên tiếp. Không chứa return đi tới t+1.
-- Không fit gì (không scaler) và không tạo target: chuẩn hóa thuộc mô hình, target do
-  horizon_log_returns tạo ở walk-forward.
-- Chỉ import numpy, pandas, src.data, src.forecast.returns (Lambda predict phải nhẹ: không torch,
-  scipy, PyEMD).
-"""
-
 from __future__ import annotations
 
 from collections.abc import Iterable

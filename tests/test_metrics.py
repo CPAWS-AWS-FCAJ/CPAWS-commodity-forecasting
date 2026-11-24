@@ -1,5 +1,3 @@
-"""Unit tests for ADR-0008 metrics. No network, price data or AWS required."""
-
 import numpy as np
 import pytest
 
