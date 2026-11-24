@@ -1,20 +1,3 @@
-"""Lambda ingest giá (bàn giao: docs/handoff/ingest-lambda.md).
-
-Entrypoint: src.data.lambda_ingest.handler. Lịch: config.INGEST_SCHEDULE_EXPRESSION (UTC).
-Biến môi trường: LAKE_BUCKET (bắt buộc trên AWS), LAKE_PREFIX (tùy chọn), EIA_SECRET_ID (tùy chọn;
-thiếu thì bỏ đối chiếu EIA), CPAWS_ENV.
-
-event:
-  {}                     chạy thường lệ: tải lại 5 phiên gần nhất, ghi raw/ và clean/ lên S3
-  {"start": "YYYY-MM-DD"} tải lại từ ngày đó (ví dụ nạp lịch sử lần đầu)
-  {"dry_run": true}      chỉ tải GLD, SLV, CL=F, BZ=F, VND=X cho 10 phiên gần nhất, không ghi gì;
-                         trả về số dòng và lỗi từng mã (kiểm tra Yahoo có chặn IP AWS không)
-Khi có nguồn chính lỗi: dữ liệu các tài sản khác vẫn được ghi, log INGEST_SOURCE_FAILED, rồi raise
-IngestSourceFailed để Lambda tính là lỗi (metric Errors của CloudWatch). Không dùng sys.exit.
-Nguồn chạy được nhưng thiếu phiên mới nhất: chỉ log WARNING INGEST_STALE và trả trong
-stale_latest_session, không raise (một sự cố chỉ một alarm: alarm của predict).
-"""
-
 from __future__ import annotations
 
 import logging

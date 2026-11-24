@@ -1,9 +1,3 @@
-"""Khung Lambda `POST /chat` (src/chatbot/chat.py, news.py, infra/lambda/chat_api/handler.py).
-
-Không gọi mạng: client Bedrock giả trả lần lượt các response Converse đã soạn; dữ liệu dự báo
-lấy từ fixture benchmark bộ v1.
-"""
-
 from __future__ import annotations
 
 import datetime as dt

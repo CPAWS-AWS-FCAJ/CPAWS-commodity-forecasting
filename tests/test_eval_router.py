@@ -1,5 +1,3 @@
-"""Script chấm router trên bộ giữ riêng (scripts/eval_router.py): không gọi mạng."""
-
 import importlib.util
 import json
 from pathlib import Path

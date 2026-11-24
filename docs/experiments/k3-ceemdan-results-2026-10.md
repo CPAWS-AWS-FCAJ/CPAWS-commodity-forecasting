@@ -1,7 +1,7 @@
 # K3: kết quả CEEMDAN + DLinear trên validation 2019
 
 - Ngày: 26/10/2026
-- Người viết: Khải (bản nháp do Claude soạn)
+- Người viết: Khải
 - Kế hoạch đã chốt trước khi train: `docs/experiments/k3-ceemdan-plan.md` (commit `59384e4`). Làm
   đúng kế hoạch: không thêm cấu hình, không đổi siêu tham số, không early stopping theo 2019.
 - Căn cứ: ADR-0007, ADR-0008; probe `docs/experiments/k3-ceemdan-probe-2026-10-26.md`.

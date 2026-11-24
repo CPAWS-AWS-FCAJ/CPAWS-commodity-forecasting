@@ -1,7 +1,3 @@
-"""Adapter theo nguồn. Mỗi adapter trả về FetchResult với bảng thanh ngày đã chuẩn hóa
-(index = ngày giao dịch, không múi giờ; cột open, high, low, close, volume) và phản hồi thô.
-Đổi nguồn chỉ cần viết adapter mới; clean/quality không phụ thuộc nguồn."""
-
 from __future__ import annotations
 
 from dataclasses import dataclass

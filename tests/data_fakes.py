@@ -1,5 +1,3 @@
-"""Nguồn giả cho test pipeline giá (không gọi mạng)."""
-
 from __future__ import annotations
 
 import zlib

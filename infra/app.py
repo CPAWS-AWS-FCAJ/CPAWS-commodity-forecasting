@@ -1,6 +1,4 @@
 #!/usr/bin/env python3
-"""Điểm vào CDK của CPAWS."""
-
 import json
 import os
 from pathlib import Path

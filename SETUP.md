@@ -13,7 +13,6 @@ Làm theo thứ tự. Người phụ trách gợi ý trong ngoặc.
 | AWS CDK | v2 (`npm install -g aws-cdk`) | hạ tầng dạng code |
 | draw.io Desktop (hoặc app.diagrams.net) | — | sửa `docs/architecture/*.drawio` |
 | Node.js + npm | 20 LTS trở lên | cũng dùng cho web (`web/`) |
-| Claude Code (tùy chọn) | — | tự đọc `CLAUDE.md` và `.claude/skills/` trong repo |
 
 ## 2. Repo (Tiến)
 
@@ -43,40 +42,10 @@ Bật branch protection cho `main`: 1 review, test xanh.
 6. **CDK bootstrap**: `cdk bootstrap aws://<account-id>/ap-southeast-1 --profile cpaws-dev`.
 7. **API key** (EIA, FRED, Guardian, NYT, API giá kim loại): Secrets Manager; bản dev trong `.env`.
 
-## 4. Claude
-
-### 4.1. Project trên claude.ai (mỗi người tạo riêng, hoặc chia sẻ nếu nhóm có gói Team)
-
-1. Vào **Projects → New Project**, đặt tên "CPAWS".
-2. Dán nội dung `docs/claude-project-instructions.md` vào phần **Instructions** của Project.
-3. Thêm vào **project knowledge**:
-   - `CLAUDE.md`
-   - `docs/proposal/Proposal_final.docx`
-   - `docs/architecture/CPAWS-architecture-en.png`
-   - 9 file `SKILL.md` trong `.claude/skills/`
-   - các ADR trong `docs/adr/`
-   - file nhiệm vụ của mình trong `docs/team/` (ví dụ `khai-tasks.md`)
-4. Nếu có file bổ sung cá nhân (ví dụ `docs/team/khai-project-instructions.md`), dán tiếp vào phần Instructions.
-
-Các chat trong cùng Project không chia sẻ nội dung với nhau, trừ project knowledge — cập nhật knowledge khi có quyết định mới.
-
-### 4.2. Skills trên claude.ai
-
-Có 9 skill. Mỗi skill là một file ZIP chứa thư mục trùng tên skill (sẵn trong `dist/skills/`). Vào **Customize → Skills → + → Create skill → Upload a skill**, tải từng ZIP. Cần bật code execution (gói Free/Pro/Max: Settings → Capabilities; gói Team/Enterprise: owner bật trong Organization settings). Trên gói cá nhân, mỗi người tự upload vào tài khoản của mình.
-
-### 4.3. Claude Code
-
-Mở repo bằng Claude Code: `CLAUDE.md` và các skill trong `.claude/skills/` được nạp tự động.
-
-Commit do người làm: `.claude/settings.json` (chia sẻ cho cả nhóm) chặn Claude chạy `git commit`, `git push`, `git merge`, `git rebase`, `git reset --hard` và đọc `.env`. Claude chỉ sửa file; mỗi người tự xem diff (`git diff`), chỉnh rồi commit. Kiểm tra file đã được nạp bằng lệnh `/status` trong Claude Code.
-
-Cá nhân hóa: `cp CLAUDE.local.md.example CLAUDE.local.md`, sửa tên và đường dẫn file nhiệm vụ của mình. File này đã nằm trong `.gitignore`. Nếu Claude Code không tự đọc file này, mở đầu phiên bằng: "Đọc docs/team/<tên>-tasks.md".
-
-## 5. Checklist tuần 1
+## 4. Checklist tuần 1
 
 - [ ] Repo, branch protection, pre-commit, test xanh trên máy mọi người
 - [ ] Tài khoản AWS chung, MFA root, SSO, Budgets + Cost Anomaly Detection
 - [ ] Kiểm tra Bedrock ở Singapore (model, Guardrails, Knowledge Bases), ghi ADR-0004
 - [ ] Chốt nguồn dữ liệu và điều khoản (EIA, FRED, GPR, Guardian, NYT, API kim loại), ghi ADR-0003
 - [ ] Tải lịch sử: giá và tỷ giá từ 2012, tín hiệu và tin tức từ 2014
-- [ ] Project Claude có instructions + knowledge; skills đã upload

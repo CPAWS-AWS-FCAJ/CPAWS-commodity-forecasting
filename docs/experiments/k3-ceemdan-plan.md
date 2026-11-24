@@ -1,7 +1,7 @@
 # K3: kế hoạch thí nghiệm CEEMDAN + DLinear (chốt trước khi chạy)
 
 - Ngày: 26/10/2026
-- Người viết: Khải (bản nháp do Claude soạn)
+- Người viết: Khải
 - Trạng thái: **Chốt trước khi train.** File này được commit TRƯỚC khi có bất kỳ kết quả validation
   nào; không sửa lưới, quy tắc chọn hay tiêu chí sau khi đã thấy kết quả 2019. Thay đổi (nếu có)
   ghi thành mục mới có ngày, kèm lý do, và báo cáo cả kết quả trước lẫn sau thay đổi.

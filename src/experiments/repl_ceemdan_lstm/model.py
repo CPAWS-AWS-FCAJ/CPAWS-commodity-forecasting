@@ -1,11 +1,3 @@
-"""LSTM một bước tới cho từng thành phần (kế hoạch mục 3.2; siêu tham số đóng băng ở config.LSTM).
-
-1 lớp LSTM, `units` đơn vị, đầu ra Linear 1 giá trị từ trạng thái ẩn cuối; MSE trên giá trị đã
-chuẩn hóa; Adam, không lịch giảm learning rate; xáo batch bằng torch.Generator có seed; dừng sớm
-theo loss đoạn early_stop (patience), khôi phục trọng số tốt nhất. Tái lập: seed Python, NumPy,
-PyTorch và torch.use_deterministic_algorithms(True).
-"""
-
 from __future__ import annotations
 
 import os

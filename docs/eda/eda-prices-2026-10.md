@@ -1,6 +1,6 @@
 # EDA giá vàng, bạc, Brent, WTI (10/2026)
 
-- Người làm: Trịnh Tiến Khải (script và bản nháp do Claude Code soạn). Người đọc: Nguyễn Tiến Long, cả nhóm AI.
+- Người làm: Trịnh Tiến Khải. Người đọc: Nguyễn Tiến Long, cả nhóm AI.
 - Script: `scripts/eda_prices.py` (tái lập: cùng bản clean → cùng số liệu; chạy hai lần cho file giống hệt từng byte).
 - Hình và bảng chi tiết: `data/lake/eda/dt=2026-10-09/` (không commit): `rolling_vol_20_2014_2019.png`, `acf_2014_2018.png`, `eda.json`, các file CSV.
 - File này chỉ có bảng số tổng hợp, không có chuỗi giá (ADR-0005, chính sách sử dụng dữ liệu).

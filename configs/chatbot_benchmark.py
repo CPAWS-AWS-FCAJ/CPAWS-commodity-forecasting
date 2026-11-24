@@ -1,10 +1,3 @@
-"""Cấu hình benchmark chatbot theo nhánh (scripts/benchmark/chatbot_benchmark.py).
-
-Thay đổi tham số ở đây, không sửa trong script. Cấu hình gọi model theo ADR-0004; bộ câu hỏi,
-chấm điểm và ngưỡng theo docs/experiments/chatbot-benchmark-proposal.md (v1, mục 6, 7, 11, 12) và
-docs/experiments/chatbot-benchmark-v2-proposal.md (v2, mục 4 và 7).
-"""
-
 # Bộ câu hỏi. v1: chạy chính thức 23/10, nay chỉ dùng cho lần chạy phát triển (run_type dev).
 # v2: chạy chính thức trước 8/11; phải khóa SHA-256 (locked_sha256) trước khi chạy official.
 QUESTION_SETS = {

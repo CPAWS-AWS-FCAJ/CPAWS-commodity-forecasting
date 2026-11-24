@@ -1,9 +1,3 @@
-"""K3b S2 (torch, chỉ để train): giữ trung vị của mốc 252 phiên, học độ rộng khoảng từ năng lượng
-IMF và tỷ số biến động (docs/experiments/k3b-volatility-plan.md mục 3, 6.3).
-
-Runtime NumPy tương đương: src/forecast/energy_width_numpy.py (cùng công thức, có test parity).
-"""
-
 import torch
 from torch import nn
 

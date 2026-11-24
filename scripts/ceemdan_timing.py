@@ -1,20 +1,3 @@
-"""Đo thời gian CEEMDAN theo cửa sổ (src/forecast/decomposition.causal_imf_windows) cho vàng và
-ngoại suy thời gian cache. Cấu hình: configs/ceemdan_timing.py.
-
-Chạy:
-  python scripts/ceemdan_timing.py
-Đầu ra (gitignore): data/lake/experiments/ceemdan_timing/dt=<ngày chạy>/results.json, summary.md
-
-Chỉ đọc giá GLD tới DATA_END (2019); ngày gốc lấy mẫu trong 2014–2019. Số cửa sổ cần cache tới nay
-được đếm từ lịch phiên (không đọc dữ liệu 2020 → nay).
-
-Hai chế độ của PyEMD:
-- inner=default: CEEMDAN với parallel mặc định của PyEMD 1.10 (True): mỗi lần gọi tự mở
-  Pool(os.cpu_count()). Đây là hành vi của decompose_window trước ADR-0007.
-- inner=off: CEEMDAN(parallel=False), hành vi hiện tại của decompose_window.
-Chế độ đặt qua biến môi trường để tiến trình con của Pool cũng nhận.
-"""
-
 from __future__ import annotations
 
 import json

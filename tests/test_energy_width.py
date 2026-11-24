@@ -1,5 +1,3 @@
-"""K3b S2: đặc trưng năng lượng IMF không rò rỉ; mô hình neo mốc 252 phiên, parity torch–NumPy."""
-
 import json
 
 import numpy as np

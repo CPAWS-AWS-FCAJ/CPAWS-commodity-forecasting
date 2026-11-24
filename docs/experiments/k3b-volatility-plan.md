@@ -1,7 +1,7 @@
 # K3b: kế hoạch thí nghiệm co giãn theo biến động (chốt trước khi chạy)
 
 - Ngày: 26/10/2026
-- Người viết: Khải (bản nháp do Claude soạn)
+- Người viết: Khải
 - Trạng thái: **Chốt trước khi chạy.** Commit và push file này TRƯỚC khi có bất kỳ kết quả 2019 nào
   của K3b. Không sửa ứng viên, tham số hay quy tắc chọn sau khi thấy kết quả; thay đổi (nếu có) ghi
   thành mục mới có ngày, kèm lý do, và báo cáo cả kết quả trước lẫn sau.

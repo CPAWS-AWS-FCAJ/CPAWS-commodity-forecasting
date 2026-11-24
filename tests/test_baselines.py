@@ -1,5 +1,3 @@
-"""Mốc 252 phiên (ADR-0008 mục 4): đúng công thức, nhân quả, bỏ NaN, ngưỡng 200 return."""
-
 import numpy as np
 import pandas as pd
 import pytest

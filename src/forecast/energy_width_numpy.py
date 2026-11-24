@@ -1,12 +1,3 @@
-"""NumPy-only runtime cho K3b S2 (không import torch), cùng công thức với src/forecast/energy_width.py.
-
-Kiến trúc (docs/experiments/k3b-volatility-plan.md mục 3, 6.3):
-- đặc trưng [B, F] (F = 5: log năng lượng 4 cột IMF + log σ_short/σ_long), chuẩn hóa từng cột;
-- Δg = W·x + b, W [42, F], b [42] = 7 h × 6 khoảng cách; Δm = 0 (trung vị = q50 mốc 252 phiên);
-- mỗi khoảng cách giữa hai phân vị liền kề = khoảng cách của mốc × exp(Δg) (anchor_quantiles của K3).
-  W = b = 0 → đúng mốc. Nhiều seed: trung bình phân vị (caller gọi normalize_quantiles() một lần).
-"""
-
 import hashlib
 import json
 from pathlib import Path

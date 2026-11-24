@@ -1,15 +1,3 @@
-"""Đặc trưng S2 của K3b (docs/experiments/k3b-volatility-plan.md mục 3, 6.1, 6.3).
-
-Dùng lại đường tính của K3 (ceemdan_features: cache ADR-0007, quy tắc A, chia cho P_t), thêm:
-- log_energy(): X (n, L, K+1) đã chia cho P_t (cột residue = residue/P_t − 1) → log của trung bình
-  bình phương trên L điểm, mỗi cột một giá trị: (n, K+1).
-- s2_features(): ghép log năng lượng với log(σ_short/σ_long) (tỷ số chưa kẹp, vol_scaled.vol_ratio)
-  → (n, K+2); với K = 3 là 5 cột.
-- s2_inputs(): phần biết được tại t (ceemdan_inputs + vol_ratio), dùng cho predict sau này và test
-  không rò rỉ. s2_samples(): quy tắc A trên giai đoạn có nhãn (ceemdan_samples) + cùng s2_features.
-Dòng có log năng lượng không hữu hạn (cột IMF toàn 0) hoặc tỷ số không hợp lệ thì không hợp lệ.
-"""
-
 from __future__ import annotations
 
 from collections.abc import Iterable

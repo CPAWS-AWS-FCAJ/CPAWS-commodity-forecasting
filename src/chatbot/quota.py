@@ -1,17 +1,3 @@
-"""Giới hạn lượt hỏi mỗi ngày cho `POST /chat` (hợp đồng: `docs/api/contract.md`, PR #41 mục 3, 4).
-
-Bộ đếm nằm trong bảng DynamoDB `cpaws-<env>-chat-usage`:
-- PK `pk`: `user#<sub Cognito>`, dòng giới hạn chung là `global`;
-- SK `sk`: `day#YYYY-MM-DD` theo giờ Việt Nam, reset lúc 00:00;
-- `request_count` (N), `updated_at` (S, ISO 8601 UTC), `expires_at` (N, TTL: 00:00 giờ Việt Nam
-  của ngày + 3 ngày). TTL chỉ để dọn dữ liệu; reset theo ngày dựa vào ngày nằm trong `sk`.
-
-Mỗi lượt gọi một `TransactWriteItems` gồm hai `Update` có điều kiện (dòng người dùng và dòng
-`global`): một điều kiện sai thì cả giao dịch bị hủy, nên vượt giới hạn chung không làm mất lượt của
-người dùng. Sau đó đọc lại số lượt của người dùng bằng `GetItem` (đọc nhất quán) để trả `quota.used`.
-Module chỉ dùng thư viện chuẩn; Lambda truyền client DynamoDB cấp thấp của boto3.
-"""
-
 from __future__ import annotations
 
 import datetime as dt

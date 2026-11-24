@@ -1,6 +1,3 @@
-"""K3b run_k3b trên giá GIẢ (không đọc lake): đường S2 đầy đủ, CI trung bình 7 h, quy tắc chọn,
-đọc mốc K3 chỉ đọc, báo cáo Markdown. Không chạy trên dữ liệu 2019 thật."""
-
 import json
 
 import numpy as np

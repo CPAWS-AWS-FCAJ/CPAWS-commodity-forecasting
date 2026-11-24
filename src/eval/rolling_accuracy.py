@@ -1,5 +1,3 @@
-"""RFC45 v4.6 pure rolling evaluation; no AWS, SciPy, training or publication writes."""
-
 from __future__ import annotations
 
 import hashlib

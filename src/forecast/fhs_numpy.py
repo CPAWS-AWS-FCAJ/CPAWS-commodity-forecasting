@@ -1,19 +1,3 @@
-"""NumPy-only runtime cho FHS GJR-GARCH K4 (docs/experiments/k4-plan.md mục 3).
-
-Không import arch, scipy, pandas: Lambda predict có thể dùng lại với tham số, backcast và phần dư
-chuẩn hóa đã lưu (fit hằng tháng offline bằng src/forecast/fhs_fit.py).
-- Trên x = return × scale: x_t = ε_t = σ_t·z_t, σ²_t = ω + (α + γ·1[ε_{t−1} < 0])·ε²_{t−1}
-  + β·σ²_{t−1}. Khởi tạo như arch: σ²_0 = ω + (α + γ/2 + β)·backcast.
-- variance_path(): σ²_t trên dãy return hợp lệ (return NaN đã bỏ, giống đầu vào lúc fit) và σ² của
-  bước kế tiếp sau mỗi return.
-- fhs_quantiles(): z* lấy mẫu có hoàn lại từ phần dư chuẩn hóa của cửa sổ fit, ε* = σ*·z*, σ* theo
-  phương trình trên; return h phiên = tổng ε* của h bước đầu, chia scale. Phân vị thực nghiệm
-  (nội suy tuyến tính như np.quantile) [7 h, 7 τ], CHƯA qua normalize_quantiles().
-  demean=True (fhs-gjr-t-dm, kế hoạch mục 8): lấy mẫu từ z − mean(z), cùng các chỉ số rút, nên
-  độ lệch chuẩn không đổi; mặc định False giữ nguyên fhs-gjr-t.
-- seed_for(): seed cố định theo (asset, base_date), cùng quy ước với cache CEEMDAN (ADR-0007).
-"""
-
 import zlib
 from dataclasses import dataclass
 

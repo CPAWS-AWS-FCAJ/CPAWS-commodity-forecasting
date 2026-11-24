@@ -1,13 +1,3 @@
-"""NumPy-only runtime cho CEEMDAN-DLinear K3 (để Lambda predict dùng sau này; không import torch).
-
-Kiến trúc (docs/experiments/k3-ceemdan-plan.md mục 3), giống hệt src/forecast/ceemdan_dlinear.py:
-- mỗi cột đặc trưng (đã chuẩn hóa) qua cùng một ánh xạ tuyến tính L → 49, nhân hệ số riêng của
-  cột, cộng lại, cộng bias 49;
-- 49 = 7 h × (Δm + 6 Δg). Trung vị = q50 mốc 252 phiên + Δm; mỗi khoảng cách giữa hai phân vị
-  liền kề = khoảng cách của mốc × exp(Δg). Phân vị luôn không giảm; trọng số 0 → đúng mốc.
-- Nhiều seed: trung bình phân vị của các seed (caller gọi normalize_quantiles() đúng một lần).
-"""
-
 import hashlib
 import json
 from pathlib import Path

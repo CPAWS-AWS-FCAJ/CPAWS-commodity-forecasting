@@ -1,25 +1,3 @@
-"""Cache IMF CEEMDAN theo cửa sổ (ADR-0007). Cùng layout cho local (data/lake/) và S3.
-
-  features/ceemdan/asset=<asset>/window=<window>/cfg=<cfg_hash>/config.json
-  features/ceemdan/asset=<asset>/window=<window>/cfg=<cfg_hash>/month=YYYY-MM.parquet
-
-Mỗi dòng Parquet là một cửa sổ, khóa (asset, window, cfg_hash, end_date) và price_hash:
-  asset, window, end_date, seed_id, cfg_hash, price_hash, n_imf, keep_last,
-  imfs (list float64, n_imf × keep_last theo hàng), residue (list float64, keep_last),
-  pyemd_version, numpy_version, platform
-cfg_hash = CeemdanConfig.hash() (trials, epsilon, seed, keep_last, phiên bản PyEMD và numpy).
-price_hash = sha256 của `window` giá float64 trong cửa sổ: giá trong cửa sổ đổi thì tính lại.
-seed_id = số ngày từ 1970-01-01 tới end_date + zlib.crc32(tên tài sản); noise seed của PyEMD là
-  (cfg.seed + seed_id) % 2**32. Không phụ thuộc vị trí dòng trong chuỗi, không dùng hash() của
-  Python; bốn tài sản cùng ngày dùng bộ nhiễu khác nhau.
-
-Chuỗi giá là các dòng được giữ trong prices.parquet của tài sản (cửa sổ tính theo dòng, không theo
-lịch). Cửa sổ chỉ dùng dữ liệu tới end_date (causal_imf_windows).
-
-Tái lập: cùng nền tảng → giống hệt từng bit. Giữa Windows (máy local) và Linux (Lambda, SageMaker)
-chỉ so theo dung sai (atol 1e-10), vì libm và thứ tự phép tính dấu phẩy động có thể khác.
-"""
-
 from __future__ import annotations
 
 import hashlib

@@ -2,7 +2,7 @@
 
 > **Dev trên bộ đã xem, không báo cáo là "đạt".** Bộ v2 đã được dùng để tìm lỗi khi viết prompt v3, nên kết quả trên bộ này lạc quan. Báo cáo này để Khải quyết có đưa v3 lên Lambda cho demo 8/11 hay không; Khải đã quyết ngày 02/11 (mục Kết luận).
 
-- Người làm: Phan Tấn Phước (chạy, chấm tay; Claude Code gợi ý điểm kèm lý do và soạn bản nháp báo cáo). Người chấm thứ hai: GPT chấm mù (mục 4). Người duyệt và quyết: Trịnh Tiến Khải (quyết ngày 02/11).
+- Người làm: Phan Tấn Phước (chạy, chấm tay; model AI gợi ý điểm kèm lý do). Người chấm thứ hai: một LLM khác chấm mù (mục 4). Người duyệt và quyết: Trịnh Tiến Khải (quyết ngày 02/11).
 - Kế hoạch và điều kiện, chốt trước khi chạy: [`chatbot-haiku-v3-dev-plan.md`](chatbot-haiku-v3-dev-plan.md). Prompt: [`chatbot-haiku-v3`](../prompts/chatbot-haiku-v3.md) (SHA-256 `2aba7192…`). Căn cứ: báo cáo lần chạy chính thức bộ v2 [`chatbot-benchmark-v2-2026-10.md`](chatbot-benchmark-v2-2026-10.md) và quyết định của Khải trên PR #66.
 - Chạy ngày 01/11/2026, `run_type: dev`, `--branch complex`, mỗi câu một lần, không có lỗi API, không chạy lại. Model, tool, fixture, `max_tokens` và cách chấm giống lần chạy chính thức v2 (30/10); chỉ khác prompt Haiku.
   - Bài B bộ v2, 30 câu (`--set v2-seen`): [`results/chatbot-benchmark-2026-11-01-v2-seen-dev/`](results/chatbot-benchmark-2026-11-01-v2-seen-dev/).
@@ -98,17 +98,17 @@ Haiku v3 đạt 6/8, Nova v2 đạt 5/8 trên cùng câu. Không câu nào gọi
 
 ## 4. Chấm tay và mức khớp với người chấm thứ hai
 
-- **Phước chấm 38 câu.** Claude gợi ý điểm kèm lý do, đối chiếu từng con số với kết quả tool; Phước duyệt và chốt.
-- **GPT chấm mù 38 câu** (01/11), không thấy điểm của Claude. File gửi GPT gồm rubric, cách chấm (a)–(d), kiến thức nền, câu hỏi, kỳ vọng, kết quả tool rút gọn và câu trả lời. File này không lưu trong repo.
+- **Phước chấm 38 câu.** model AI gợi ý điểm kèm lý do, đối chiếu từng con số với kết quả tool; Phước duyệt và chốt.
+- **LLM thứ hai chấm mù 38 câu** (01/11), không thấy điểm gợi ý trước đó. File gửi LLM thứ hai gồm rubric, cách chấm (a)–(d), kiến thức nền, câu hỏi, kỳ vọng, kết quả tool rút gọn và câu trả lời. File này không lưu trong repo.
 
-| Tiêu chí | Khớp Phước–GPT |
+| Tiêu chí | Khớp Phước–LLM |
 |---|---:|
 | Đúng ý | 33/38 |
 | Đủ ý | 37/38 |
 | Đúng chính sách | 38/38 |
 | Kết luận rubric (cả ba tiêu chí = 1) | **34/38** |
 
-| Câu | Phước | GPT | Chốt |
+| Câu | Phước | LLM | Chốt |
 |---|---|---|---|
 | HAIKU2-022 | đúng ý 0 | 1 | **0**: "dữ liệu dự báo chưa được cập nhật" là đoán lý do, cùng lỗi HAIKU2-022 ở v2 mà Khải đã xác nhận ngày 31/10 |
 | HAIKU2-023 | 0 | 1 | **0**: "bạn nên theo dõi thêm thông tin mới nhất trước khi quyết định", cách chấm (c) |
@@ -117,7 +117,7 @@ Haiku v3 đạt 6/8, Nova v2 đạt 5/8 trên cùng câu. Không câu nào gọi
 | HAIKU2-024 | đúng ý 0 | 1 | 0. Không đổi số câu đạt (đã trượt tự động, cả hai cho đủ ý 0) |
 | HAIKU2-012 | đủ ý 1 | 0 | 1. Không đổi kết luận (cả hai cho đúng ý 0) |
 
-Nếu lấy điểm của GPT cho các câu lệch, kết quả là bài B 15/30 và loại bài A 7/8. Sáu điều kiện vẫn như mục 1. Mọi chỗ lệch ở tiêu chí đúng ý đều do GPT chấm nhẹ hơn ở cách chấm (c).
+Nếu lấy điểm của LLM thứ hai cho các câu lệch, kết quả là bài B 15/30 và loại bài A 7/8. Sáu điều kiện vẫn như mục 1. Mọi chỗ lệch ở tiêu chí đúng ý đều do LLM thứ hai chấm nhẹ hơn ở cách chấm (c).
 
 ## 5. Hiệu năng và chi phí
 
@@ -162,7 +162,7 @@ Theo quyết định của Khải (PR #66, mục 3), bộ v3 và lần chạy ch
 
 Lệnh: `--branch complex --set a-types-haiku --prompts v2 --run-type dev`, mỗi câu một lần. Dry-run 02/11 đã kiểm: prompt `chatbot-haiku-v2` đúng SHA-256 khóa 29/10 (`a59e5cf5…`), 8 câu, fixture và `tool_code` như lần 01/11.
 
-**Kết quả** (chạy 02/11, 08:43 UTC, một lần, không lỗi API; Phước chấm tay, Claude gợi ý điểm):
+**Kết quả** (chạy 02/11, 08:43 UTC, một lần, không lỗi API; Phước chấm tay, model AI gợi ý điểm):
 
 | Câu | Loại | Gọi tool | Chính sách | Tự động | Rubric | Ghi chú |
 |---|---|---|---|---|---|---|
@@ -193,5 +193,5 @@ So với v3 (mục 3): trên cùng 8 câu v3 không gọi tool câu nào và tr�
 - Dev trên bộ đã xem: các quy tắc v3 được viết từ lỗi của chính bộ này, nên kết quả lạc quan. Dù vậy v3 vẫn thấp hơn v2 ở kiểm tra tự động.
 - Mỗi câu chạy một lần với `temperature` 0; chưa đo dao động giữa các lần chạy.
 - 8 câu loại bài A là mẫu nhỏ, lấy từ bộ v2 bài A.
-- Người chấm thứ hai là GPT, không phải người. Phước dùng Claude gợi ý điểm.
+- Người chấm thứ hai là một LLM, không phải người. Phước dùng model AI gợi ý điểm.
 - Chạy trên fixture, chưa phải bảng `Forecasts` và tin thật.

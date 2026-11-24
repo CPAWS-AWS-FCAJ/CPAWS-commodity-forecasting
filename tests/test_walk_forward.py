@@ -1,5 +1,3 @@
-"""Validation2019 orchestration: synthetic edge cases and opt-in real artifact integration."""
-
 import json
 import os
 from dataclasses import FrozenInstanceError, replace

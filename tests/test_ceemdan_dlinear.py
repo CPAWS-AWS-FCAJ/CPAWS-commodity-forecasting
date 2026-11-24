@@ -1,5 +1,3 @@
-"""CEEMDAN-DLinear K3: neo vào mốc 252 phiên, phân vị tăng dần, parity torch–NumPy, artifact."""
-
 import json
 
 import numpy as np

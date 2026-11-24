@@ -1,5 +1,3 @@
-"""Hằng dùng chung giữa các stack, để tên tài nguyên và lịch không bị lệch nhau."""
-
 from aws_cdk import Stack
 from aws_cdk import aws_iam as iam
 

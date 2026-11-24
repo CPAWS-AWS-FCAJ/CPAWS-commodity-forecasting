@@ -1,21 +1,3 @@
-"""Probe K3: cache IMF CEEMDAN có dùng được cho mô hình chính không (chỉ đọc, chỉ in thống kê).
-
-Chạy:
-  python scripts/k3_ceemdan_probe.py [--lake-dir data/lake] [--processes 8]
-
-Đọc bản clean (cắt tại 2019-12-31 ngay khi đọc, bằng filter của pyarrow) và cache
-features/ceemdan (ADR-0007), in 6 mục dạng Markdown:
-1. cfg_hash, phiên bản thư viện, độ phủ cache, price_hash so với bản clean (lệch thì dừng)
-2. phiên lịch bị thiếu trong cửa sổ decompose (theo dòng) và trong đoạn seq_len cuối
-3. phân phối n_imf, đề xuất K
-4. thang giá trị sau chuẩn hóa chia cho giá tại t (chỉ train 2014–2018)
-5. số ngày gốc hợp lệ train/validation theo tài sản × độ dài cửa sổ × seq_len, so với DLinear MVP
-6. chống rò rỉ: decompose lại cửa sổ kết thúc tại t từ chuỗi cắt tại t, so với cache (atol 1e-10)
-
-Không train, không ghi file, không dựng lại cache. Cấu hình: configs/k3_probe.py (tham số CEEMDAN
-lấy từ configs/ceemdan_cache.py). Thoát mã 2 khi gặp điều kiện dừng ở mục 1.
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -559,7 +541,9 @@ def step6(assets, caches, ks, processes: int) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap = argparse.ArgumentParser(
+        description="Probe K3: cache IMF CEEMDAN có dùng được cho mô hình chính không (chỉ đọc, chỉ in thống kê)"
+    )
     ap.add_argument("--lake-dir", default=str(ROOT / "data" / "lake"))
     ap.add_argument("--processes", type=int, default=C.PROCESSES)
     args = ap.parse_args(argv)

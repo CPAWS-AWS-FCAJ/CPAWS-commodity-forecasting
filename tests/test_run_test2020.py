@@ -1,5 +1,3 @@
-"""Offline PR75 regression suite. All prices are generated here, never downloaded."""
-
 import copy
 import importlib
 import json

@@ -1,5 +1,3 @@
-"""Pipeline ingest đầu-cuối với nguồn giả: spike VND, ghi local hai lần cho cùng kết quả, tăng dần."""
-
 import json
 
 import pandas as pd

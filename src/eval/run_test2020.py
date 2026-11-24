@@ -1,17 +1,3 @@
-"""PR75 one-time evaluation; import and synthetic API never claim or read a lake.
-
-Official usage (only Long after review/merge):
- python -m src.eval.run_test2020 --mode official --metadata <locked.json> \
-     --clean-dir <clean/prices/dt=DT> --output-root <outside-repository>
-Metadata schema is REQUIRED_METADATA in configs/test2020.py. snapshot_sha256 maps
-all three SNAPSHOT_FILES to raw-file SHA256. lineage contains source='yfinance',
-symbols={asset: target}, data_commit=<40 hex>, reference=<reviewed audit ref>.
-config_hash is protocol_hash(commit) computed/reviewed BEFORE opening test data.
-No retry/resume command. Once claim succeeds any failure consumes the attempt.
-Synthetic API takes in-memory frames; its results are labelled synthetic and never
-written to official storage. Internal report schema v1 is not Accuracy/public API.
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -823,7 +809,9 @@ def run_official(meta, clean_dir, output_root, *, s3=None):
 
 
 def main(argv=None, *, synthetic_frames=None):
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(
+        description="PR75 one-time evaluation; import and synthetic API never claim or read a lake"
+    )
     parser.add_argument("--mode", choices=["synthetic", "official"], required=True)
     parser.add_argument("--metadata", type=Path)
     parser.add_argument("--clean-dir", type=Path)

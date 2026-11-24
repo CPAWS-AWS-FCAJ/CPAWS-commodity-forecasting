@@ -347,7 +347,7 @@ Các câu ở mục 8 của kịch bản 8/11 vẫn dùng được. Thêm các c
 
 ## 8. Lệnh thử trên AWS (Phước tự chạy)
 
-Claude không gọi Bedrock và không chạy lệnh `aws`. Muốn thử một câu qua API mà không dùng web, Phước dùng `curl` với ID token của **tài khoản tập dượt** (lấy từ web sau khi đăng nhập; không dán token vào chat hay commit). `API_URL` là URL stage của API, không có dấu `/` ở cuối.
+Muốn thử một câu qua API mà không dùng web, Phước dùng `curl` với ID token của **tài khoản tập dượt** (lấy từ web sau khi đăng nhập; không dán token vào chat hay commit). `API_URL` là URL stage của API, không có dấu `/` ở cuối.
 
 ```bash
 export API_URL="<URL stage API>"

@@ -1,9 +1,3 @@
-"""Cấu hình K3: lưới CEEMDAN + DLinear đã chốt trước khi train (docs/experiments/k3-ceemdan-plan.md).
-
-Không thêm cấu hình, không đổi siêu tham số sau khi đã thấy kết quả 2019 (kế hoạch, phần trạng
-thái). Tham số CEEMDAN (trials, epsilon, seed, keep_last) lấy từ configs/ceemdan_cache.py.
-"""
-
 ASSETS = ["gold", "silver", "brent", "wti"]
 HORIZONS = list(range(1, 8))
 

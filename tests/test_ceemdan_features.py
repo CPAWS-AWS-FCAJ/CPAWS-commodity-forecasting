@@ -1,5 +1,3 @@
-"""K3 CEEMDAN features: no leakage, rule A for missing sessions, normalization identity."""
-
 import numpy as np
 import pandas as pd
 import pytest

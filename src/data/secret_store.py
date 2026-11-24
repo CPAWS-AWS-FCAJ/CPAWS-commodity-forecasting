@@ -1,18 +1,3 @@
-"""Lấy secret cho pipeline. Mọi chỗ cần EIA key đều gọi get_eia_api_key(); không in key ra log.
-
-Thứ tự trong get_eia_api_key():
-1. EIA_API_KEY: chạy local (.env, CLI gọi load_dotenv) hoặc biến môi trường.
-2. EIA_SECRET_ID: trên AWS. Key lưu ở SSM Parameter Store, SecureString, tier standard, khóa mặc
-   định aws/ssm. EIA_SECRET_ID là tên parameter (ví dụ /cpaws/dev/eia-api-key) hoặc ARN của nó.
-   Đọc một lần mỗi tiến trình (mỗi cold start của Lambda), cache theo EIA_SECRET_ID.
-3. Không có cả hai → SecretUnavailable.
-Không đặt key thật vào biến môi trường của Lambda.
-
-Quyền IAM của Lambda: ssm:GetParameter trên đúng ARN parameter
-(arn:aws:ssm:<region>:<account>:parameter/cpaws/dev/eia-api-key). Với khóa mặc định aws/ssm thường
-không cần thêm kms:Decrypt vào identity policy; nếu đổi sang CMK thì cần kms:Decrypt trên CMK đó.
-"""
-
 from __future__ import annotations
 
 import os

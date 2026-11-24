@@ -1,19 +1,3 @@
-"""Lõi xử lý `POST /chat` (hợp đồng: `docs/api/contract.md`, mục `POST /chat`, PR #41).
-
-Khung theo phương án A của hợp đồng (REST API, trả một lần): kiểm tra request, chọn nhánh, gọi
-Bedrock Converse với vòng gọi tool tối đa MAX_TOOL_ROUNDS, dựng response.
-- Hạn chót: Lambda truyền `budget_s` (giây còn lại, tính từ `requestTimeEpoch` của API Gateway);
-  chỉ bắt đầu một lần gọi model khi còn đủ MIN_CALL_S để lần gọi đó xong trước hạn.
-- Giới hạn lượt hỏi: `QuotaGate`; Lambda dùng `quota.DynamoQuotaGate`, test dùng `NoQuota`.
-- Ngày giờ hiện tại (v1.0.1): khối system thứ hai do code tạo (`current_time_block`), đặt sau
-  prompt đã khóa SHA-256; prompt giữ nguyên từng byte. Đồng hồ tiêm qua `ChatDeps.now`.
-Phần còn chờ chốt trong PR #41:
-- router (mục 9): `choose_branch`, mặc định mọi câu đi `complex`;
-- Guardrails: chỉ gắn `guardrailConfig` khi có cấu hình.
-
-Module không import boto3: Lambda truyền client vào, test truyền client giả.
-"""
-
 from __future__ import annotations
 
 import datetime as dt

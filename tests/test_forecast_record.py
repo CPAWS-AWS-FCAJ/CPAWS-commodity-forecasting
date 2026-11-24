@@ -1,5 +1,3 @@
-"""Bản ghi Forecasts theo docs/api/contract.md, với số liệu mẫu WTI trong contract."""
-
 from datetime import UTC, datetime
 from decimal import Decimal
 

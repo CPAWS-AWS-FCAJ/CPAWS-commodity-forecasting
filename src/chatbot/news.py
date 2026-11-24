@@ -1,17 +1,3 @@
-"""Tool `get_news` cho chatbot CPAWS (Bedrock Converse tool use).
-
-Trả tin đã gắn nhãn của một tài sản trong khoảng ngày, lọc theo `impact_score` tối thiểu. Chỉ trả
-tiêu đề, tóm tắt, link, nguồn, thời điểm đăng, điểm và hướng tác động (quy tắc tin tức: không lưu
-toàn văn). Nội dung tin là dữ liệu không tin cậy: chỉ đưa cho model dưới dạng kết quả tool.
-
-Nguồn tin (ADR-0003): MVP không cần Knowledge Base; nhãn tin nằm ở bảng DynamoDB `NewsLabels`
-(đề xuất ở mục 6, chờ Tuấn chốt). Các bộ đọc:
-- `DynamoNewsRepository`: bảng NewsLabels (Lambda chat khi có `NEWS_TABLE_NAME`);
-- `JsonFileNewsRepository`: file JSON mỗi tài sản một file, cho demo khi bảng chưa có dữ liệu;
-- `StaticNewsRepository`: danh sách trong bộ nhớ, cho test.
-Module chỉ dùng thư viện chuẩn (boto3 nạp khi cần).
-"""
-
 from __future__ import annotations
 
 import datetime as dt

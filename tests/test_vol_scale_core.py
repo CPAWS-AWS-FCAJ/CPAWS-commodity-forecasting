@@ -1,6 +1,3 @@
-"""vol_scale_core (S1a dùng chung K3b và Lambda predict): giống từng bit K3b, hằng số bằng
-configs/k3b.py, không rò rỉ, không kéo PyEMD/configs (docs/experiments/s1a-shadow-plan.md mục 10)."""
-
 import subprocess
 import sys
 import textwrap

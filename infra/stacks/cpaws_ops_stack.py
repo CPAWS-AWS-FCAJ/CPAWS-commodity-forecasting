@@ -1,6 +1,3 @@
-"""Stack CpawsOps: alarm cho Lambda ingest, predict (cả shadow S1a), job accuracy và /chat, gửi
-email qua SNS."""
-
 from typing import Any
 
 from aws_cdk import CfnOutput, Duration, Stack

@@ -1,9 +1,3 @@
-"""labeling-v3: prompt, quy tắc evidence, dựng bộ case, chấm case đặc biệt; không gọi mạng.
-
-Bộ case thật (tests/labeling/real_cases_v3.json) chưa có cho đến khi Phước gắn nhãn xong, nên
-các test ở đây dùng vài dòng nhãn dựng sẵn trên danh sách ứng viên thật.
-"""
-
 import copy
 import csv
 import hashlib

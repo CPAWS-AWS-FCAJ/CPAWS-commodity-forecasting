@@ -1,5 +1,3 @@
-"""Injected boto3 adapters. Reads only named S3 objects and DynamoDB Query, never Scan."""
-
 from __future__ import annotations
 
 import hashlib

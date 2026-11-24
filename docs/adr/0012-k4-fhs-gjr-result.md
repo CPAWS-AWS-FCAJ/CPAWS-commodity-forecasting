@@ -2,7 +2,7 @@
 
 - Ngày: 2026-10-30
 - Trạng thái: Đề xuất
-- Người viết: Trịnh Tiến Khải (bản nháp do Claude soạn); người duyệt: Nguyễn Tiến Long
+- Người viết: Trịnh Tiến Khải; người duyệt: Nguyễn Tiến Long
 
 ## Bối cảnh
 

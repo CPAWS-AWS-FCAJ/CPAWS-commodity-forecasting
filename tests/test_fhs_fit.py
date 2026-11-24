@@ -1,6 +1,3 @@
-"""K4 fhs_fit trên return GIẢ: fit arch khớp đệ quy NumPy, refit chỉ dùng return trước đầu tháng,
-dùng lại tháng trước khi fit lỗi, dừng khi lần refit đầu lỗi, không đổi khi nối thêm tương lai."""
-
 import dataclasses
 
 import numpy as np

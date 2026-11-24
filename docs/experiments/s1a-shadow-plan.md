@@ -1,7 +1,7 @@
 # S1a chạy song song (shadow) trong Lambda predict: kế hoạch (chốt trước khi viết code)
 
 - Ngày: 28/10/2026
-- Người viết: Khải (bản nháp do Claude soạn); người review: Tiến (predict, CDK), Tuấn (IAM), Long (dữ liệu cho `rolling_8w`)
+- Người viết: Khải; người review: Tiến (predict, CDK), Tuấn (IAM), Long (dữ liệu cho `rolling_8w`)
 - Trạng thái: **Chốt trước khi viết code.** Commit file này trước PR code. Thay đổi sau đó ghi thành mục mới có ngày và lý do.
 - Căn cứ: ADR-0010 (S1a là challenger), ADR-0011 (chấm champion/challenger hằng tuần thay cho retrain), ADR-0008 (target, phân vị, `normalize_quantiles()` đúng một lần), RFC #45 (`rolling_8w`).
 

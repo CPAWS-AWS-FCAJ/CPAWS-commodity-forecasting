@@ -1,12 +1,3 @@
-"""Đo thời gian và bộ nhớ đỉnh của ingest (để đặt memory/timeout cho Lambda). Gọi mạng thật.
-
-Chạy (mỗi chế độ một tiến trình riêng để số bộ nhớ không lẫn nhau):
-  python scripts/measure_ingest.py --mode daily --lake-dir <thư mục tạm có sẵn bản clean cũ>
-  python scripts/measure_ingest.py --mode full  --lake-dir <thư mục tạm rỗng>
-In JSON: wall_s, rss_after_import_mb, peak_rss_mb (Windows: peak working set; Linux: ru_maxrss).
-Không ghi vào data/lake thật nếu --lake-dir trỏ ra thư mục tạm.
-"""
-
 from __future__ import annotations
 
 import argparse

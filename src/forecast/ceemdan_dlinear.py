@@ -1,9 +1,3 @@
-"""CEEMDAN-DLinear K3 (torch, chỉ để train): tuyến tính, chia sẻ trọng số giữa các cột, đầu ra neo
-vào mốc 252 phiên (docs/experiments/k3-ceemdan-plan.md mục 3).
-
-Runtime NumPy tương đương: src/forecast/ceemdan_dlinear_numpy.py (cùng công thức, có test parity).
-"""
-
 import torch
 from torch import nn
 

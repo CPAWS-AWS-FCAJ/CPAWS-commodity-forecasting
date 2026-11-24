@@ -1,16 +1,3 @@
-"""Tạo cache IMF CEEMDAN theo khoảng ngày, chạy n tiến trình, tiếp tục được khi bị ngắt.
-
-Chạy:
-  python scripts/build_ceemdan_cache.py --assets gold --windows 252 504 \
-      --start 2014-01-01 --end 2014-03-31 --processes 8
-  python scripts/build_ceemdan_cache.py --verify ...   # kiểm lại price_hash của mọi cửa sổ
-
-Đọc bản clean mới nhất trong data/lake (chuỗi cắt tại --end), ghi vào
-data/lake/features/ceemdan/... (layout trong src/features/ceemdan_cache.py). Cấu hình CEEMDAN:
-configs/ceemdan_cache.py. Từ chối --end sau 2019-12-31 cho tới khi khóa tham số (K3), trừ khi có
---allow-after-2019.
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -32,7 +19,9 @@ from src.forecast.decomposition import CeemdanConfig
 
 
 def main(argv: list[str] | None = None) -> None:
-    ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap = argparse.ArgumentParser(
+        description="Tạo cache IMF CEEMDAN theo khoảng ngày, chạy n tiến trình, tiếp tục được khi bị ngắt"
+    )
     ap.add_argument("--assets", nargs="+", default=C.ASSETS)
     ap.add_argument("--windows", nargs="+", type=int, default=C.WINDOWS)
     ap.add_argument("--start", default=C.DEFAULT_START)

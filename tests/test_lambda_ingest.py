@@ -1,5 +1,3 @@
-"""Ghi lên S3 (moto, không gọi AWS thật), Lambda handler, dry_run, lấy EIA key."""
-
 import functools
 import importlib.util
 import json

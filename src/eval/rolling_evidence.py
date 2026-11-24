@@ -1,5 +1,3 @@
-"""Offline, read-only candidate evidence tooling; never grants release approval."""
-
 from __future__ import annotations
 
 import argparse
@@ -269,7 +267,9 @@ def candidates(records, claims, sources, *, asset, start, end, full_items):
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(
+        description="Offline, read-only candidate evidence tooling; never grants release approval"
+    )
     parser.add_argument("--asset", choices=ASSET_NAMES, required=True)
     parser.add_argument("--from", dest="start", required=True)
     parser.add_argument("--to", dest="end", required=True)

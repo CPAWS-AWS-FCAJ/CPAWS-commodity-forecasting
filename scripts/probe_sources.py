@@ -1,13 +1,3 @@
-"""Bước 0 – probe nguồn giá: yfinance (5 mã) và EIA (RBRTE, RWTC) từ 2012-01-01.
-
-Chạy:  python scripts/probe_sources.py [--start 2012-01-01]
-- Lưu phản hồi thô vào data/lake/raw/<source>/dt=<hôm nay>/ (cùng layout S3, đã gitignore).
-- Ghi báo cáo vào data/lake/probe/dt=<hôm nay>/probe_report.json và in tóm tắt ra màn hình.
-- EIA: dùng API v2 nếu có EIA_API_KEY (từ .env hoặc biến môi trường); nếu không có thì
-  dùng file lịch sử XLS công khai của EIA (cùng series). Key không bao giờ được in ra log.
-Đây là script khảo sát một lần, không phải pipeline.
-"""
-
 from __future__ import annotations
 
 import argparse

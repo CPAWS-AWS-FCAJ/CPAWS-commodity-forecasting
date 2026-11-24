@@ -1,8 +1,3 @@
-"""scripts/export_price_history.py: snapshot clean → serving/price-history/<asset>.json.
-
-Dữ liệu giả nhỏ (phiên 2019, không đụng dữ liệu 2020 → nay), S3 bằng moto; không gọi mạng.
-"""
-
 import importlib.util
 import json
 import logging

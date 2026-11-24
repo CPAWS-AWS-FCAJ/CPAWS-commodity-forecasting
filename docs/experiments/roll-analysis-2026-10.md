@@ -1,6 +1,6 @@
 # Roll của CL=F, BZ=F và đợt WTI lệch RWTC 9–10/2026
 
-- Người làm: Trịnh Tiến Khải (script và bản nháp do Claude Code soạn), 12/10/2026. Người đọc: Nguyễn Tiến Long (buổi chốt target, hạn 16/10).
+- Người làm: Trịnh Tiến Khải, 12/10/2026. Người đọc: Nguyễn Tiến Long (buổi chốt target, hạn 16/10).
 - Script: `scripts/roll_analysis.py` (chỉ đọc dữ liệu). Đầu vào: bản clean `dt=2026-10-09` (giá tới 08/10/2026; RWTC, RBRTE tới 06/10/2026) và file thô yfinance `raw/yfinance/dt=2026-10-08` (lấy volume).
 - Return là log return ngày, tính theo **dòng giá liên tiếp của từng tài sản**, đơn vị %. CL=F và BZ=F cùng chốt lúc 14:30 ET.
 - Phần 1 dùng dữ liệu 2026, chỉ để kiểm tra chất lượng dữ liệu. Phần 2 **chỉ dùng 2014–2019**: dữ liệu được cắt tại 31/12/2019 ngay khi đọc. Riêng phần kiểm chứng ngày chuyển giá (mục 2.1) có dẫn thêm hai lần roll năm 2026, chỉ để kiểm tra chất lượng dữ liệu.

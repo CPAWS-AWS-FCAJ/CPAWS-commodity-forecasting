@@ -11,7 +11,7 @@
 - Nhóm 5 người cần một môi trường AWS chung ở `ap-southeast-1` trong 7 tuần xây dựng và 2 tuần bảo vệ (12/10–13/12/2026).
 - Credit thực có khoảng 200 USD (Free Tier và Explore AWS credits), thấp hơn mức 200–400 USD dự kiến trong proposal.
 - Chatbot dùng model Anthropic trên Amazon Bedrock. Theo điều khoản credit của AWS, credit không áp cho phí AWS Marketplace trừ khi AWS cho phép; gói Free của AWS cũng giới hạn một số sản phẩm Marketplace.
-- Thay đổi IAM và hạ tầng phải có Tuấn (IA) review (CLAUDE.md).
+- Thay đổi IAM và hạ tầng phải có Tuấn (IA) review (quy ước nhóm).
 
 ## Các phương án
 

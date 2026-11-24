@@ -1,5 +1,3 @@
-"""Lịch phiên, chuẩn hóa, các flag và kiểm tra chất lượng (không gọi mạng)."""
-
 import pandas as pd
 import pytest
 

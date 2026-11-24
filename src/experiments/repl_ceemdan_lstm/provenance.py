@@ -1,10 +1,3 @@
-"""Kiểm tra nguồn gốc bản tách CEEMDAN và trạng thái git của lần chạy (review Long, #83).
-
-artifacts_sha256.json nằm cạnh manifest.json: SHA-256 của 8 file bản tách, recorded_at (UTC) và
-recorded_after_run (true khi ghi bằng --record-digests, tức sau khi bản tách đã có sẵn). Mọi kiểm
-tra đều fail-closed: thiếu trường, sai kiểu, thiếu khóa hay thiếu file đều báo lỗi, không bỏ qua.
-"""
-
 from __future__ import annotations
 
 import json

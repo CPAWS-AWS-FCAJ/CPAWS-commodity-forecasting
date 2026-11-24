@@ -1,18 +1,3 @@
-"""K4 FHS: fit GJR-GARCH(1,1) Student-t bằng arch và lịch refit hằng tháng (k4-plan mục 3, 8).
-
-Chỉ dùng offline (arch nằm trong requirements-dev.txt, không có trong image predict).
-- fit_window(): 1000 return hợp lệ gần nhất × 100, arch_model(mean Zero, GJR o = 1, dist t,
-  rescale=False). Lấy ω, α, γ, β, ν và backcast; đệ quy NumPy (fhs_numpy.variance_path) phải khớp
-  conditional_volatility của arch; phần dư chuẩn hóa z tính từ chính đệ quy đó.
-- monthly_fits(): refit đầu mỗi tháng, chỉ dùng return có ngày < ngày đầu tháng. Chưa đủ 1000
-  return: tháng đó không có mô hình (FHS không hợp lệ, mục 8). Fit lỗi hoặc không hội tụ: dùng lại
-  mô hình tháng trước (tham số, backcast, cửa sổ, z) và ghi log; lần refit đầu lỗi thì dừng.
-- fhs_forecasts(): tại ngày gốc t trong tháng m, σ² đi theo đệ quy với tham số của tháng m qua
-  mọi return hợp lệ từ đầu cửa sổ fit tới t, rồi mô phỏng FHS với seed theo (asset, t).
-
-Mọi thống kê tại t chỉ dùng return có ngày ≤ t, nên không đổi khi nối thêm dữ liệu sau t (có test).
-"""
-
 from __future__ import annotations
 
 import time

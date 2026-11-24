@@ -1,15 +1,3 @@
-"""Mốc so sánh nhân quả theo ADR-0008 mục 4 (dùng cho pinball_skill, coverage, brier_skill).
-
-Đầu vào là chuỗi target r_h đã căn theo lịch giao dịch: kết quả của
-returns.horizon_log_returns(prices, h, calendar=...) (pd.Series, mỗi phiên một dòng, NaN khi
-không hợp lệ). Tại phiên t, mốc chỉ dùng các r_h(s) với s thuộc 252 phiên gần nhất tính tới t
-(s ≤ t) và đã hoàn tất (s + h ≤ t), tức vị trí lịch s ∈ [t − 251, t − h]. Cần ít nhất 200 return
-hợp lệ, nếu không trả NaN (điểm đánh giá đó bị bỏ cho mọi chỉ số dùng mốc này).
-
-Hàm công khai dùng chung với metrics/backtest (Long) và Lambda predict (Tiến): giữ tên và kiểu.
-Quantile252Model bọc quantile_baseline để predict ghi mốc này như một model ("baseline-q252").
-"""
-
 from __future__ import annotations
 
 from collections.abc import Sequence

@@ -1,15 +1,3 @@
-"""Lưu trữ cùng layout cho local (data/lake/) và S3 (s3://cpaws-<env>-lake/).
-
-  raw/<source>/dt=YYYY-MM-DD/<file>                 phản hồi gốc
-  clean/prices/dt=YYYY-MM-DD/prices.parquet         bản chụp toàn bộ lịch sử (dạng dài)
-  clean/prices/dt=YYYY-MM-DD/rejected.parquet       các dòng bị loại kèm flag
-  clean/prices/dt=YYYY-MM-DD/quality.json
-  clean/reference_prices/dt=YYYY-MM-DD/reference.parquet
-  clean/display_factors/dt=YYYY-MM-DD/display_factors.parquet
-  clean/display_fx/dt=YYYY-MM-DD/display_fx.parquet  tỷ giá cho hiển thị (có thể pending_confirm)
-Ghi đè theo khóa: chạy lại cùng ngày ghi đè đúng các file đó.
-"""
-
 from __future__ import annotations
 
 import io

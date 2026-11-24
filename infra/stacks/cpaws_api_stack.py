@@ -1,5 +1,3 @@
-"""CDK stack for the CPAWS REST API: forecasts, accuracy and chatbot endpoints."""
-
 import json
 from pathlib import Path
 from typing import Any

@@ -1,5 +1,3 @@
-"""Immutable Accuracy writer with resumable, conditional lifecycle and monotonic pointer."""
-
 from __future__ import annotations
 
 from copy import deepcopy

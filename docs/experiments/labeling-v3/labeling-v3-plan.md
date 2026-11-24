@@ -1,6 +1,6 @@
 # Kế hoạch kiểm labeling-v3 trên thông cáo Fed/EIA thật
 
-- Người làm: Phan Tấn Phước (prompt, script và bản nháp do Claude Code soạn). Người duyệt: Trịnh Tiến Khải.
+- Người làm: Phan Tấn Phước. Người duyệt: Trịnh Tiến Khải.
 - Căn cứ: hướng v3 Khải chốt ngày 24/10/2026 (comment ở PR #30) và mục "Việc tiếp theo" trong [`news-labeling-2026-10.md`](../news-labeling-2026-10.md).
 - Trạng thái (28/10/2026): Khải đã duyệt prompt v3 và cách chọn dòng (50 dòng, sau đó loại E22 còn 49), đã chốt ngưỡng và trả lời các câu hỏi (mục "Quyết định của Khải"). Đã gắn nhãn bản nháp (mục "Gắn nhãn"); **chờ Phước soát và Khải duyệt, chưa chốt.** Chưa gọi model.
 
@@ -26,7 +26,7 @@ Bản v2 (`news-labeling-v2.md`, `synthetic_cases.json` draft-4, schema) giữ n
 
 ## Chọn 49 dòng
 
-Claude Code chọn 50 dòng theo ủy quyền của Phước ngày 28/10/2026, chỉ dựa trên tiêu đề, tóm tắt và `coverage_tag`, trước khi có nhãn và trước khi gọi model. Cột `selected` trong `labels-v3.csv` đánh `x` cho các dòng này.
+Model AI chọn 50 dòng theo ủy quyền của Phước ngày 28/10/2026, chỉ dựa trên tiêu đề, tóm tắt và `coverage_tag`, trước khi có nhãn và trước khi gọi model. Cột `selected` trong `labels-v3.csv` đánh `x` cho các dòng này.
 
 **Khải loại E22 ngày 28/10/2026** khi duyệt đáp án: bài mơ hồ giữa `inventory` (báo cáo tồn kho) và `other` (sự cố hành chính) theo mục 9 của prompt, chấm kiểu nào cũng 50/50. Dòng vẫn còn trong `labels-v3.csv`, chỉ bỏ `x` ở cột `selected`. Bộ còn **49 dòng thật**.
 
@@ -59,7 +59,7 @@ Cơ cấu 49 dòng theo `coverage_tag`: `mixed` 11, `clear_oil` 10, `clear_gold_
 
 ## Gắn nhãn
 
-Claude Code gắn nhãn bản nháp theo ủy quyền của Phước ngày 28/10/2026, theo mục "Cách điền" bên dưới. Nhãn chỉ dựa vào tiêu đề và `summary_vi`, không dùng giá sau ngày công bố. Phước soát lại từng dòng; Khải duyệt đáp án trong PR trước khi chốt.
+Model AI gắn nhãn bản nháp theo ủy quyền của Phước ngày 28/10/2026, theo mục "Cách điền" bên dưới. Nhãn chỉ dựa vào tiêu đề và `summary_vi`, không dùng giá sau ngày công bố. Phước soát lại từng dòng; Khải duyệt đáp án trong PR trước khi chốt.
 
 Quy ước dùng để chấm cho thống nhất (ngoài quy tắc của prompt):
 
@@ -101,7 +101,7 @@ Khải duyệt 28/10/2026 (review PR #54, kiểm 53 dòng, 6 điểm kiểm đ�
 - E22: loại khỏi bộ (mục "Chọn 49 dòng").
 - Giữ nguyên: F23 (`mixed`, impact 2, không sửa `summary_vi`), F11 và E14 (`mixed` theo mục 6.3).
 
-Soát lại (Claude Code theo ủy quyền của Phước, 28/10/2026, trước khi Khải duyệt): đọc lại cả 53 dòng, đối chiếu từng tóm tắt với các mục 3, 5, 6.2, 6.3, 8 của prompt và so các dòng cùng loại. Người soát cũng là người gắn nhãn, nên vẫn cần Khải duyệt độc lập trong PR. Đã sửa 5 dòng:
+Soát lại (model AI theo ủy quyền của Phước, 28/10/2026, trước khi Khải duyệt): đọc lại cả 53 dòng, đối chiếu từng tóm tắt với các mục 3, 5, 6.2, 6.3, 8 của prompt và so các dòng cùng loại. Người soát cũng là người gắn nhãn, nên vẫn cần Khải duyệt độc lập trong PR. Đã sửa 5 dòng:
 
 | Dòng | Vấn đề | Sửa |
 |---|---|---|

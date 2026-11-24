@@ -1,5 +1,3 @@
-"""src/features/build.py: đặc trưng theo lịch, cửa sổ input, không rò rỉ (ADR-0008 mục 1, 8)."""
-
 import math
 import subprocess
 import sys

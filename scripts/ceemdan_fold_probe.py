@@ -1,13 +1,3 @@
-"""Probe: CEEMDAN với max_imf=K có giống lần chạy đầy đủ rồi gộp phần đuôi vào residue không?
-
-(a) CEEMDAN(max_imf=K)                    → IMF1..K + residue
-(b) CEEMDAN đầy đủ (max_imf=-1)           → giữ IMF1..K, residue_b = residue + tổng IMF(K+1..)
-K = số IMF nhỏ nhất quan sát được trên mẫu. Cùng seed (seed + origin như decompose_window),
-parallel=False. Chỉ dùng GLD tới 2019; 10 ngày gốc trải đều trong 2014–2019.
-
-Chạy: python scripts/ceemdan_fold_probe.py
-"""
-
 from __future__ import annotations
 
 import json

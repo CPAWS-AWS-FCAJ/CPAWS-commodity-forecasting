@@ -1,11 +1,3 @@
-"""Đóng gói asset Lambda `POST /chat` bằng bundling cục bộ của CDK (không cần Docker).
-
-Mỗi file chỉ có một bản nguồn trong repo; lúc synth, CDK gọi `ChatAssetBundling.try_bundle` để
-chép đúng danh sách dưới đây vào thư mục asset. Asset chỉ có stdlib + boto3 (có sẵn trong runtime
-Python 3.12 của Lambda) nên không `pip install`. Thiếu một file nguồn → synth lỗi ngay, thay vì
-Lambda lỗi import lúc chạy (nhánh `except ImportError` của handler sẽ che mất lỗi gốc).
-"""
-
 from __future__ import annotations
 
 import shutil

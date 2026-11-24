@@ -1,5 +1,3 @@
-"""CDK stack for the CPAWS serving DynamoDB tables."""
-
 from typing import Any
 
 from aws_cdk import (
