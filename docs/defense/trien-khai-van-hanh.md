@@ -1,6 +1,6 @@
 # Triển khai và vận hành CPAWS
 
-> Bản nháp chương Triển khai và vận hành cho báo cáo cuối kỳ (nộp cùng workshop lên portal FCAJ; mentor xác nhận 13/11 không có buổi trình bày), cập nhật ngày 06/11/2026, bổ sung ngày 13/11/2026 (Rolling Accuracy, web). Trạng thái triển khai là tại ngày viết; cấu hình lấy từ code trong `infra/`, số đo lấy từ log CloudWatch của các lượt chạy thật. Phần nào là kế hoạch thì ghi rõ.
+> Bản nháp chương Triển khai và vận hành cho báo cáo cuối kỳ (nộp cùng workshop lên portal FCAJ; mentor xác nhận 13/11 không có buổi trình bày), cập nhật ngày 06/11/2026, bổ sung ngày 13/11/2026 (Rolling Accuracy, web), 23/11/2026 (deploy v1.0.0) và 24–25/11/2026 (deploy v1.0.1, giám sát tự đăng ký). Trạng thái triển khai là tại ngày viết; cấu hình lấy từ code trong `infra/`, số đo lấy từ log CloudWatch của các lượt chạy thật. Phần nào là kế hoạch thì ghi rõ.
 
 ## 1. Mục tiêu và phạm vi
 
@@ -21,7 +21,7 @@ Phạm vi chương: các stack, luồng chạy hằng ngày, quy trình deploy, 
 |---|---|---|
 | `CpawsData` | S3 `cpaws-dev-lake`; ECR `cpaws-dev-ingest`, `cpaws-dev-predict`; Lambda `cpaws-dev-ingest`, `cpaws-dev-predict`, `cpaws-dev-accuracy-job`; EventBridge Scheduler (ingest 19:15, job accuracy 20:45); metric filter cho shadow | Bucket bật versioning, phiên bản cũ giữ 30 ngày, `RETAIN`, chặn public, bắt buộc SSL. ECR giữ 5 image mới nhất. Ingest: container, 1.024 MB, 300 giây, retry bất đồng bộ 1 lần. Predict: container x86_64, 1.024 MB, 120 giây, retry 0. Job accuracy: container từ image predict, 1.024 MB, 300 giây, retry 0 (mục 9). Không Lambda nào chạy trong VPC (không cần NAT Gateway) |
 | `CpawsServing` | DynamoDB `cpaws-dev-forecasts`, `cpaws-dev-news-labels`, `cpaws-dev-chat-usage`, `cpaws-dev-accuracy` | On-demand. `forecasts` và `news-labels` là `RETAIN`. `chat-usage` chỉ lưu bộ đếm lượt hỏi nên là `DESTROY` |
-| `CpawsAuth` | Cognito User Pool `cpaws-dev-users`, app client cho SPA | Mở tự đăng ký tạm thời trong thời gian chấm theo ADR-0014 (deploy 22/11/2026, 21:07, từ `v1.0.0`), yêu cầu xác minh email và chính sách mật khẩu; phải đóng lại sau khi chấm. Tài khoản grader được tạo riêng và bàn giao qua kênh riêng. `RETAIN` |
+| `CpawsAuth` | Cognito User Pool `cpaws-dev-users`, app client cho SPA | Mở tự đăng ký tạm thời trong thời gian chấm theo ADR-0014 (deploy 22/11/2026, 21:07, từ `v1.0.0`), yêu cầu xác minh email và chính sách mật khẩu; phải đóng lại sau khi chấm. Từ 23/11 giữ mở có thời hạn theo phương án 2 của bản sửa ADR-0014 (#148), chậm nhất 10/12/2026; không tạo tài khoản grader riêng. v1.0.1 không đổi stack này. `RETAIN` |
 | `CpawsApi` | REST API stage `dev`; Lambda `cpaws-dev-forecasts-api` (256 MB, 10 giây) và `cpaws-dev-chat-api` (512 MB, 28 giây), `cpaws-dev-accuracy-api` (chỉ đọc bảng `cpaws-dev-accuracy`) | Cognito authorizer cho mọi route trừ `/health`. Throttling 10 request/giây, burst 20. CORS chỉ một origin (mục 7). Tin demo đóng gói trong Lambda chat ([ADR-0013](../adr/0013-manual-news-labels-until-defense.md)) |
 | `CpawsOps` | SNS `cpaws-dev-alarms`, 6 CloudWatch alarm | Email nhận cảnh báo truyền lúc deploy, không ghi vào repo (mục 6) |
 
@@ -67,7 +67,7 @@ Lượt predict tự động đầu tiên chạy ngày 27/10/2026. Từ 04/11, i
 
 ### 4.1. Nguyên tắc
 
-- **Chỉ deploy commit đã merge, và chạy `cdk diff` trước.** Đến 17/11 deploy từ `developer`; với bản nộp, deploy từ nhánh `production` sau PR release và tag (`v1.0.0` ngày 22/11); sửa lỗi vào `developer` rồi release bản tiếp theo. Thay đổi về IAM và hạ tầng do Tuấn review ngay trong PR, trước khi merge.
+- **Chỉ deploy commit đã merge, và chạy `cdk diff` trước.** Đến 17/11 deploy từ `developer`; với bản nộp, deploy từ nhánh `production` sau PR release và tag (`v1.0.0` ngày 22/11, `v1.0.1` ngày 23/11); sửa lỗi vào `developer` rồi release bản tiếp theo. Trước khi deploy, kiểm `production` trên máy có đúng merge commit của PR release (`git log -1`, `git merge-base --is-ancestor <commit> HEAD`), không chỉ dựa vào tag: tag `v1.0.1` lúc đầu gắn nhầm vào commit của v1.0.0 và được gắn lại (xóa tag trên remote, xóa bản local, gắn lại trên `origin/production`) trước khi deploy. Thay đổi về IAM và hạ tầng do Tuấn review ngay trong PR, trước khi merge.
 - **Mỗi lệnh deploy một stack.** Mỗi lần chỉ một người deploy, và báo nhóm trước.
 - **Không deploy `CpawsData` trong khung 19:05–19:35**, để không chồng lên lượt ingest/predict lúc 19:15. Lần deploy release còn tránh 20:40–21:00 (lượt job accuracy 20:45).
 - **Tham số `-c` không được lưu lại.** Lần deploy sau không truyền thì giá trị quay về mặc định trong `app.py`. Có hai tham số phải truyền ở **mọi** lần deploy:
@@ -113,6 +113,8 @@ Log `citation_link_mismatch` của Lambda chat (câu trả lời có URL không 
 
 Ngoài alarm, nhóm **kiểm tay sau mỗi lượt 19:15** (lệnh ở Phụ lục A.3): log `PREDICT_DONE` (`written`, `already_published`), `Duration`, số object shadow trên S3, và trạng thái alarm. Về chi phí, nhóm theo dõi bằng AWS Budgets (mục 2.2). Không có tài nguyên nào tính tiền theo giờ: không endpoint, không NAT Gateway, không OpenSearch.
 
+**Giám sát tự đăng ký** (ADR-0014 bản sửa #148): mỗi ngày một lần lúc 21:00, chỉ đọc, từ CloudTrail (sự kiện `SignUp`, `ResendConfirmationCode` của `cognito-idp`), `ListUsers` và bảng `cpaws-dev-chat-usage`. Lần kiểm ngày D xét cửa sổ từ 21:00 ngày D−1 tới trước 21:00 ngày D, chỉ đếm tài khoản `CONFIRMED`, đối chiếu email với danh sách được phép; mỗi tài khoản chỉ tính một lần (sổ đã xét theo `sub`), tài khoản `UNCONFIRMED` vào danh sách chờ xác minh và được kiểm lại ở lần sau. Danh sách được phép, sổ đã xét và danh sách chờ giữ trên máy người giám sát, ngoài repo, xóa khi đóng đăng ký. Ngưỡng theo bảng giám sát trong ADR. Kết quả lên kênh nhóm chỉ gồm số lượng. Tiến kiểm theo cách này từ 25/11 (kiểm bù cửa sổ 23/11 và 24/11): tới lượt 21:00 ngày 25/11 có 2 tài khoản tự đăng ký, đều của thành viên; chatbot cao nhất 10/100 lượt/ngày; không chạm ngưỡng nào. Không có alarm tự động cho việc này (ADR ghi không làm trigger *Post confirmation*).
+
 ## 7. Web trên Amplify Hosting và CORS
 
 **Web:** app `cpaws-dev-web`, nhánh `dev`, domain mặc định của Amplify. App được tạo tay ngày 04/11. Mỗi lần cập nhật, web được build từ nhánh đang deploy (`developer`; từ 22/11 là `production`) (`npm run build`), nén `web/dist` thành zip rồi upload ở console. Có rewrite để mọi đường dẫn của SPA trả về `index.html`. Các biến `VITE_*` (region, User Pool ID, client ID, URL API, `VITE_SHOW_METAL_PRICES`, `VITE_ACCURACY_API`, `VITE_ALLOW_SIGNUP`) được đọc **lúc build**, nên muốn đổi cờ thì build lại, không cần deploy API. Web không chứa bí mật: ID của User Pool và app client là giá trị công khai của SPA. Việc nối Amplify với GitHub để tự build để sau 08/11, vì nối GitHub sẽ tạo app và domain mới.
@@ -127,10 +129,15 @@ Vì zip upload tay không gắn với commit, bản đang chạy được ghi l�
 | 08/11 | `2e7d3fa` | `true` | `false` |
 | 13/11 | `26399d0` | `true` | `true` |
 | 22/11 (v1.0.0) | `ba3d9f4` (`production`, tag `v1.0.0`) | `true` | `true` (thêm `VITE_ALLOW_SIGNUP=true`) |
+| 23/11 (v1.0.1) | `ddfbfb3` (`production`, tag `v1.0.1`) | `true` | `true` (`VITE_ALLOW_SIGNUP=true` giữ nguyên) |
 
 Bản 13/11 (Amplify Deployment 5, 13:27) bật `VITE_ACCURACY_API` vì route `/accuracy/{asset}` đã deploy từ 10/11 (mục 9), và lần đầu đưa khối quy đổi khoảng dự báo ra số tiền ([#117](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/117), ADR-0005) lên web. Kiểm tra trên domain: cả 4 tài sản gọi `/accuracy/{asset}` trả 200, khối "Độ tin cậy" hiện "Đang thu thập (9/20)", khối quy đổi hiện dưới 7 thẻ kỳ hạn, console không có lỗi CORS. Muốn quay lại thì build lại với `VITE_ACCURACY_API=false` và upload, không cần deploy API.
 
 Bản 22/11 (Amplify Deployment 6, 21:27) là bản nộp v1.0.0: build từ `production` @ `ba3d9f4`, thêm `VITE_ALLOW_SIGNUP=true` (tự đăng ký, ADR-0014), gồm giao diện mới, trang giới thiệu công khai và lịch sử giá 2 năm ([#143](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/143)). Trước khi upload: 223 test web đạt và cờ trong gói zip được kiểm lại. Kiểm sau deploy (22–23/11): chưa đăng nhập thì `/overview`, `/asset/gold`, `/accuracy` chuyển về trang đăng nhập; trang giới thiệu không có số giá và không gọi API dự báo; sáng/tối và menu trên điện thoại dùng được; trang tài sản mốc 2 năm gọi `history=520`; đăng ký thử một tài khoản có Họ tên thành công (nhận mã email, menu hiện Họ tên, đăng xuất về trang giới thiệu); chatbot trả lời câu tin vàng bằng biên bản FOMC 18/11 (Phước kiểm). Zip của bản này được giữ lại trên máy người deploy để rollback web bằng một lần upload.
+
+Bản 23/11 (Amplify Deployment 7, 22:07) là v1.0.1: build từ `production` @ `ddfbfb3` với cờ như v1.0.0, gồm [#145](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/145): menu dạng ngăn kéo trên điện thoại cho cả trang công khai, sidebar thu gọn trên máy tính, `/guide` cần đăng nhập và được viết lại, hội thoại chat giữ trong phiên (`sessionStorage`, xóa khi đăng xuất), form đăng ký chặn tên đăng nhập có khoảng trắng và dịch lỗi Cognito. Trước khi upload: 265 test web đạt; cờ, URL API, User Pool ID và client ID trong gói zip được kiểm lại. Kiểm sau deploy (chưa đăng nhập): domain tải gói JS mới; trang giới thiệu có nút "Tạo tài khoản" và menu ngăn kéo, không gọi API dự báo; `/guide` chuyển tới `/dang-nhap?next=%2Fguide`. Zip v1.0.0 và v1.0.1 đều được giữ lại để rollback web.
+
+Release [#152](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/152) (24/11, `production` @ `ac1a31a`) chỉ gồm tài liệu và việc bỏ docstring, không gắn tag mới, không deploy API hay web; Amplify vẫn chạy Deployment 7 (`ddfbfb3`). Lần deploy sau từ `production`, `cdk diff` sẽ có gói code mới của 3 Lambda API chỉ vì docstring.
 
 **CORS:** `CpawsApi` nhận **một** origin qua `-c allowed_origin`, mặc định `http://localhost:5173`. Giá trị này được dùng ở ba chỗ: preflight `OPTIONS` của API Gateway, header của Lambda `forecasts-api` và `chat-api` (biến `ALLOWED_ORIGIN`), và `GatewayResponse` 4xx/5xx (để trình duyệt vẫn đọc được mã lỗi 401, 429, 504).
 
@@ -140,11 +147,12 @@ Bản 22/11 (Amplify Deployment 6, 21:27) là bản nộp v1.0.0: build từ `pr
 | Từ 07/11 | Domain Amplify nhánh `dev` | Deploy `CpawsApi` từ `09dd1d4`; lần deploy này cũng đưa bộ tin demo mới (#92) lên Lambda chat. Kiểm tra trên Amplify: preflight trả đúng origin, trang dự báo không lỗi CORS, `POST /chat` trả 200 và `get_news` trả tin |
 | Dự phòng | `http://localhost:5173` | Nếu tập dượt trên Amplify còn lỗi lúc 19:00 ngày 07/11, deploy lại origin localhost (khoảng 3 phút) và chạy thử bằng localhost |
 
-Sau 07/11, `CpawsApi` được deploy lại ba lần, origin vẫn là domain Amplify:
+Sau 07/11, `CpawsApi` được deploy lại bốn lần, origin vẫn là domain Amplify:
 
 - **10/11**, từ `f1ff01f`: thêm route `/accuracy/{asset}` (mục 9); lần này cũng đưa log `citation_link_mismatch` (PR [#104](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/104)) lên Lambda chat.
 - **13/11 15:57**, từ `b616185`: chỉ đổi gói code Lambda chat để đưa bộ tin STEO 10/11 và WPSR 12/11 (PR [#123](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/123)) lên; `cdk diff` chỉ có `Code.S3Key` của `ChatApiHandler`. Kiểm tra trên Amplify: `POST /chat` trả 200; hỏi tin WTI từ 10/11 với `min_impact = 1` ra đúng hai tin EIA mới, link đúng; hỏi mặc định (mức 2) thì chatbot trả lời không có tin đáng kể, đúng như ghi chú ở [`demo-news.md`](../api/demo-news.md).
 - **22/11 21:13**, từ `production` @ `ba3d9f4` (tag `v1.0.0`), ngay sau `CpawsAuth` (21:07): Lambda `forecasts-api` thêm statement `PriceHistoryRead` (`s3:GetObject` đúng `cpaws-dev-lake/serving/price-history/*`), 2 biến môi trường `PRICE_HISTORY_BUCKET`/`PRICE_HISTORY_PREFIX` và gói code mới (`?history=`); Lambda chat đổi gói code cho bộ tin [#142](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/142). `cdk diff` 5 stack trước đó chỉ có `CpawsAuth` và `CpawsApi`. Ngay sau deploy chạy `scripts/export_price_history.py` (thử ra máy, rồi ghi S3): 520 phiên × 4 tài sản, tới phiên 20/11. Log `forecasts-api` 14 giờ sau deploy không có `PRICE_HISTORY_FILE_UNAVAILABLE` hay lỗi.
+- **23/11 21:39**, từ `production` @ `ddfbfb3` (tag `v1.0.1`): chỉ đổi `Code.S3Key` của `ChatApiHandler` cho [#146](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/146) (Lambda gửi thêm một khối `system` nêu ngày giờ hiện tại theo giờ Việt Nam; prompt v2 không đổi). `cdk diff` 5 stack trước đó chỉ có thay đổi này, không đổi IAM. Kiểm tra: hỏi thử trên Production ngày 24/11 (Phước), câu "năm bao nhiêu" trả đúng thứ Ba 24/11/2026, câu "từ 9/11 đến 20/11 năm nay" tìm đúng tin năm 2026 (biên bản FOMC 18/11).
 
 Vì chỉ có một origin, tại mỗi thời điểm chỉ Amplify **hoặc** localhost gọi được API. Hỗ trợ nhiều origin để sau 08/11.
 
@@ -194,6 +202,7 @@ Job có ghi cảnh báo `prob_up_mismatch` (xác suất tăng đã lưu lệch v
 - **Amplify deploy zip thủ công.** Không có lịch sử build gắn với commit, nên commit nào đang chạy phải ghi lại bằng tay.
 - **ECR giữ 5 image**, nên image rollback có thể bị xóa nếu không theo dõi (mục 5).
 - **Lịch sử giá là tệp xuất tay.** Từ v1.0.0 ([#143](https://github.com/CPAWS-AWS-FCAJ/CPAWS-commodity-forecasting/pull/143)) web vẽ lịch sử giá tới 2 năm; phần cũ hơn dữ liệu của bảng dự báo được đọc từ tệp `serving/price-history/<asset>.json` trên S3, do `scripts/export_price_history.py` xuất tay (bản 22/11, tới phiên 20/11). Không có lịch tự chạy. Dừng hiển thị theo [ADR-0005](../adr/0005-price-data-sources.md) bằng cách xóa prefix này. Hiển thị chuỗi Yahoo 2 năm có rủi ro điều khoản; Tuấn đã chấp nhận rủi ro này trong review #143.
+- **Hạn mức email xác minh.** User Pool gửi email bằng chức năng mặc định của Cognito (`COGNITO_DEFAULT`): tối đa 50 email/ngày cho cả tài khoản AWS, đặt lại lúc 09:00 UTC (16:00 giờ Việt Nam), không xin tăng được ([Quotas in Amazon Cognito](https://docs.aws.amazon.com/cognito/latest/developerguide/limits.html)). Mã đăng ký, gửi lại mã và quên mật khẩu đều tính. Muốn nhiều hơn phải cấu hình Amazon SES.
 - Guardrails của chatbot chưa gắn vào Lambda, và Haiku gọi qua global inference profile ([chương chatbot](chatbot.md), mục 8).
 
 ## 11. Tóm tắt
